@@ -1,0 +1,241 @@
+{
+  "domains": [
+    {
+      "id": 1,
+      "name": "Agentic Architecture & Orchestration",
+      "weight": 27
+    },
+    {
+      "id": 2,
+      "name": "Tool Design & MCP Integration",
+      "weight": 18
+    },
+    {
+      "id": 3,
+      "name": "Claude Code Configuration & Workflows",
+      "weight": 20
+    },
+    {
+      "id": 4,
+      "name": "Prompt Engineering & Structured Output",
+      "weight": 20
+    },
+    {
+      "id": 5,
+      "name": "Context Management & Reliability",
+      "weight": 15
+    }
+  ],
+  "lessons": [
+    {
+      "id": "1-1_agentic-loops",
+      "file": "1-1_agentic-loops.md",
+      "domain": 1,
+      "code": "1.1",
+      "title": "Agentic Loops"
+    },
+    {
+      "id": "1-2_multi-agent-orchestration",
+      "file": "1-2_multi-agent-orchestration.md",
+      "domain": 1,
+      "code": "1.2",
+      "title": "Multi-Agent Orchestration"
+    },
+    {
+      "id": "1-3_subagent-invocation-and-context-passing",
+      "file": "1-3_subagent-invocation-and-context-passing.md",
+      "domain": 1,
+      "code": "1.3",
+      "title": "Subagent Invocation and Context Passing"
+    },
+    {
+      "id": "1-4_workflow-enforcement-and-handoff",
+      "file": "1-4_workflow-enforcement-and-handoff.md",
+      "domain": 1,
+      "code": "1.4",
+      "title": "Workflow Enforcement and Handoff"
+    },
+    {
+      "id": "1-5_agent-sdk-hooks",
+      "file": "1-5_agent-sdk-hooks.md",
+      "domain": 1,
+      "code": "1.5",
+      "title": "Agent SDK Hooks"
+    },
+    {
+      "id": "1-6_task-decomposition-strategies",
+      "file": "1-6_task-decomposition-strategies.md",
+      "domain": 1,
+      "code": "1.6",
+      "title": "Task Decomposition Strategies"
+    },
+    {
+      "id": "1-7_session-state-and-resumption",
+      "file": "1-7_session-state-and-resumption.md",
+      "domain": 1,
+      "code": "1.7",
+      "title": "Session State and Resumption"
+    },
+    {
+      "id": "2-1_tool-interface-design",
+      "file": "2-1_tool-interface-design.md",
+      "domain": 2,
+      "code": "2.1",
+      "title": "Tool Interface Design"
+    },
+    {
+      "id": "2-2_structured-error-responses",
+      "file": "2-2_structured-error-responses.md",
+      "domain": 2,
+      "code": "2.2",
+      "title": "Structured Error Responses"
+    },
+    {
+      "id": "2-3_tool-distribution-tool-choice",
+      "file": "2-3_tool-distribution-tool-choice.md",
+      "domain": 2,
+      "code": "2.3",
+      "title": "Tool Distribution & Tool Choice"
+    },
+    {
+      "id": "2-4_mcp-server-integration",
+      "file": "2-4_mcp-server-integration.md",
+      "domain": 2,
+      "code": "2.4",
+      "title": "MCP Server Integration"
+    },
+    {
+      "id": "2-5_built-in-tools",
+      "file": "2-5_built-in-tools.md",
+      "domain": 2,
+      "code": "2.5",
+      "title": "Built-in Tools"
+    },
+    {
+      "id": "3-1_claude-md-hierarchy-scoping-and-modular-organisation",
+      "file": "3-1_claude-md-hierarchy-scoping-and-modular-organisation.md",
+      "domain": 3,
+      "code": "3.1",
+      "title": "CLAUDE.md Hierarchy, Scoping, and Modular Organisation"
+    },
+    {
+      "id": "3-2_custom-slash-commands-and-skills",
+      "file": "3-2_custom-slash-commands-and-skills.md",
+      "domain": 3,
+      "code": "3.2",
+      "title": "Custom Slash Commands and Skills"
+    },
+    {
+      "id": "3-3_path-specific-rules-for-conditional-convention-loading",
+      "file": "3-3_path-specific-rules-for-conditional-convention-loading.md",
+      "domain": 3,
+      "code": "3.3",
+      "title": "Path-Specific Rules for Conditional Convention Loading"
+    },
+    {
+      "id": "3-4_plan-mode-vs-direct-execution",
+      "file": "3-4_plan-mode-vs-direct-execution.md",
+      "domain": 3,
+      "code": "3.4",
+      "title": "Plan Mode vs Direct Execution"
+    },
+    {
+      "id": "3-5_iterative-refinement-techniques",
+      "file": "3-5_iterative-refinement-techniques.md",
+      "domain": 3,
+      "code": "3.5",
+      "title": "Iterative Refinement Techniques"
+    },
+    {
+      "id": "3-6_ci-cd-integration",
+      "file": "3-6_ci-cd-integration.md",
+      "domain": 3,
+      "code": "3.6",
+      "title": "CI/CD Integration"
+    },
+    {
+      "id": "4-1_system-prompts-with-explicit-criteria",
+      "file": "4-1_system-prompts-with-explicit-criteria.md",
+      "domain": 4,
+      "code": "4.1",
+      "title": "System Prompts with Explicit Criteria"
+    },
+    {
+      "id": "4-2_few-shot-prompting",
+      "file": "4-2_few-shot-prompting.md",
+      "domain": 4,
+      "code": "4.2",
+      "title": "Few-Shot Prompting"
+    },
+    {
+      "id": "4-3_structured-output-with-tool-use",
+      "file": "4-3_structured-output-with-tool-use.md",
+      "domain": 4,
+      "code": "4.3",
+      "title": "Structured Output with Tool Use"
+    },
+    {
+      "id": "4-4_validation-retry-and-feedback-loops",
+      "file": "4-4_validation-retry-and-feedback-loops.md",
+      "domain": 4,
+      "code": "4.4",
+      "title": "Validation, Retry, and Feedback Loops"
+    },
+    {
+      "id": "4-5_batch-processing-strategies",
+      "file": "4-5_batch-processing-strategies.md",
+      "domain": 4,
+      "code": "4.5",
+      "title": "Batch Processing Strategies"
+    },
+    {
+      "id": "4-6_multi-instance-and-multi-pass-review",
+      "file": "4-6_multi-instance-and-multi-pass-review.md",
+      "domain": 4,
+      "code": "4.6",
+      "title": "Multi-Instance and Multi-Pass Review"
+    },
+    {
+      "id": "5-1_context-window-management",
+      "file": "5-1_context-window-management.md",
+      "domain": 5,
+      "code": "5.1",
+      "title": "Context Window Management"
+    },
+    {
+      "id": "5-2_escalation-ambiguity-resolution",
+      "file": "5-2_escalation-ambiguity-resolution.md",
+      "domain": 5,
+      "code": "5.2",
+      "title": "Escalation & Ambiguity Resolution"
+    },
+    {
+      "id": "5-3_error-propagation-in-multi-agent-systems",
+      "file": "5-3_error-propagation-in-multi-agent-systems.md",
+      "domain": 5,
+      "code": "5.3",
+      "title": "Error Propagation in Multi-Agent Systems"
+    },
+    {
+      "id": "5-4_codebase-exploration-context-degradation",
+      "file": "5-4_codebase-exploration-context-degradation.md",
+      "domain": 5,
+      "code": "5.4",
+      "title": "Codebase Exploration & Context Degradation"
+    },
+    {
+      "id": "5-5_human-review-confidence-calibration",
+      "file": "5-5_human-review-confidence-calibration.md",
+      "domain": 5,
+      "code": "5.5",
+      "title": "Human Review & Confidence Calibration"
+    },
+    {
+      "id": "5-6_information-provenance-multi-source-synthesis",
+      "file": "5-6_information-provenance-multi-source-synthesis.md",
+      "domain": 5,
+      "code": "5.6",
+      "title": "Information Provenance & Multi-Source Synthesis"
+    }
+  ]
+}

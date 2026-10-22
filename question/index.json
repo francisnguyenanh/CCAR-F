@@ -1,0 +1,163 @@
+{
+  "passingScore": 720,
+  "scoreScale": 1000,
+  "domains": [
+    {
+      "id": 1,
+      "name": "Agentic Architecture & Orchestration",
+      "weight": 27
+    },
+    {
+      "id": 2,
+      "name": "Tool Design & MCP Integration",
+      "weight": 18
+    },
+    {
+      "id": 3,
+      "name": "Claude Code Configuration & Workflows",
+      "weight": 20
+    },
+    {
+      "id": 4,
+      "name": "Prompt Engineering & Structured Output",
+      "weight": 20
+    },
+    {
+      "id": 5,
+      "name": "Context Management & Reliability",
+      "weight": 15
+    }
+  ],
+  "exams": [
+    {
+      "examId": "mock-01",
+      "title": "CCAR-F Mock Exam 01",
+      "file": "mock-01.json",
+      "totalQuestions": 60,
+      "durationMinutes": 120,
+      "scenarios": [
+        "Customer Support Resolution Agent",
+        "Code Generation with Claude Code",
+        "Multi-Agent Research System",
+        "Structured Data Extraction"
+      ]
+    },
+    {
+      "examId": "mock-02",
+      "title": "CCAR-F Mock Exam 02",
+      "file": "mock-02.json",
+      "totalQuestions": 60,
+      "durationMinutes": 120,
+      "scenarios": [
+        "Customer Support Resolution Agent",
+        "Developer Productivity with Claude",
+        "Claude Code for Continuous Integration",
+        "Structured Data Extraction"
+      ]
+    },
+    {
+      "examId": "mock-03",
+      "title": "CCAR-F Mock Exam 03",
+      "file": "mock-03.json",
+      "totalQuestions": 60,
+      "durationMinutes": 120,
+      "scenarios": [
+        "Code Generation with Claude Code",
+        "Multi-Agent Research System",
+        "Developer Productivity with Claude",
+        "Claude Code for Continuous Integration"
+      ]
+    },
+    {
+      "examId": "mock-04",
+      "title": "CCAR-F Mock Exam 04",
+      "file": "mock-04.json",
+      "totalQuestions": 60,
+      "durationMinutes": 120,
+      "scenarios": [
+        "Customer Support Resolution Agent",
+        "Multi-Agent Research System",
+        "Claude Code for Continuous Integration",
+        "Structured Data Extraction"
+      ]
+    },
+    {
+      "examId": "mock-05",
+      "title": "CCAR-F Mock Exam 05",
+      "file": "mock-05.json",
+      "totalQuestions": 60,
+      "durationMinutes": 120,
+      "scenarios": [
+        "Code Generation with Claude Code",
+        "Developer Productivity with Claude",
+        "Claude Code for Continuous Integration",
+        "Structured Data Extraction"
+      ]
+    },
+    {
+      "examId": "mock-06",
+      "title": "CCAR-F Mock Exam 06",
+      "file": "mock-06.json",
+      "totalQuestions": 60,
+      "durationMinutes": 120,
+      "scenarios": [
+        "Customer Support Resolution Agent",
+        "Code Generation with Claude Code",
+        "Multi-Agent Research System",
+        "Developer Productivity with Claude"
+      ]
+    },
+    {
+      "examId": "mock-07",
+      "title": "CCAR-F Mock Exam 07",
+      "file": "mock-07.json",
+      "totalQuestions": 60,
+      "durationMinutes": 120,
+      "scenarios": [
+        "Customer Support Resolution Agent",
+        "Multi-Agent Research System",
+        "Developer Productivity with Claude",
+        "Structured Data Extraction"
+      ]
+    },
+    {
+      "examId": "mock-08",
+      "title": "CCAR-F Mock Exam 08",
+      "file": "mock-08.json",
+      "totalQuestions": 60,
+      "durationMinutes": 120,
+      "scenarios": [
+        "Code Generation with Claude Code",
+        "Multi-Agent Research System",
+        "Claude Code for Continuous Integration",
+        "Structured Data Extraction"
+      ]
+    },
+    {
+      "examId": "mock-09",
+      "title": "CCAR-F Mock Exam 09",
+      "file": "mock-09.json",
+      "totalQuestions": 60,
+      "durationMinutes": 120,
+      "scenarios": [
+        "Customer Support Resolution Agent",
+        "Code Generation with Claude Code",
+        "Developer Productivity with Claude",
+        "Claude Code for Continuous Integration"
+      ]
+    },
+    {
+      "examId": "mock-10",
+      "title": "CCAR-F Mock Exam 10",
+      "file": "mock-10.json",
+      "totalQuestions": 60,
+      "durationMinutes": 120,
+      "scenarios": [
+        "Multi-Agent Research System",
+        "Developer Productivity with Claude",
+        "Claude Code for Continuous Integration",
+        "Structured Data Extraction"
+      ]
+    }
+  ]
+}

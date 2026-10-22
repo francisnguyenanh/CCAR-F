@@ -1,0 +1,2379 @@
+{
+  "examId": "mock-08",
+  "title": "CCAR-F Mock Exam 08",
+  "durationMinutes": 120,
+  "passingScore": 720,
+  "scoreScale": 1000,
+  "totalQuestions": 60,
+  "domainDistribution": {
+    "1": 16,
+    "2": 11,
+    "3": 12,
+    "4": 12,
+    "5": 9
+  },
+  "scenarios": [
+    {
+      "id": "S2",
+      "title": "Code Generation with Claude Code",
+      "description": "Lumen Logistics' engineering team uses Claude Code on a TypeScript monorepo (packages/api, packages/web, packages/shared, infra/terraform) to generate features, refactor legacy modules and fix bugs. The team shares conventions through CLAUDE.md, .claude/rules, and project skills, and uses Plan mode for larger changes."
+    },
+    {
+      "id": "S3",
+      "title": "Multi-Agent Research System",
+      "description": "Atlas Research is an Agent SDK system in which a coordinator delegates to web-search, document-analysis and synthesis subagents to produce market and regulatory research reports. Every claim in the final report must be traceable to a cited source."
+    },
+    {
+      "id": "S5",
+      "title": "Claude Code for Continuous Integration",
+      "description": "Kestrel's platform team runs claude -p inside GitHub Actions to review pull requests, post inline comments, auto-fix lint issues and run nightly audits. Outputs must be machine-readable, and automation must run with least-privilege permissions."
+    },
+    {
+      "id": "S6",
+      "title": "Structured Data Extraction",
+      "description": "Northwind's accounts-payable pipeline extracts invoices, credit notes and contracts into JSON using tool_use with typed schemas, validates the results, and posts them to the ERP. Uncertain or high-risk records are routed to a human review queue."
+    }
+  ],
+  "questions": [
+    {
+      "id": "mock-08-q01",
+      "number": 1,
+      "scenarioId": "S2",
+      "domain": 3,
+      "domainName": "Claude Code Configuration & Workflows",
+      "taskStatement": "3.1",
+      "lesson": "3-1_claude-md-hierarchy-scoping-and-modular-organisation",
+      "concept": "Personal and project guidance",
+      "difficulty": "easy",
+      "question": "The tech lead at Lumen Logistics wrote the team's testing conventions (Vitest, factories in test/factories, no network calls in unit tests) into ~/.claude/CLAUDE.md on her laptop. Teammates report that Claude Code ignores these conventions in their sessions. What is the BEST fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Ask every developer to copy the same conventions into their own ~/.claude/CLAUDE.md file and keep it updated"
+        },
+        {
+          "key": "B",
+          "text": "Move the conventions into the repository's CLAUDE.md (root or .claude/CLAUDE.md) and commit it"
+        },
+        {
+          "key": "C",
+          "text": "Add the conventions to the lead's ~/.claude/settings.json so they sync to teammates"
+        },
+        {
+          "key": "D",
+          "text": "Paste the conventions as the opening prompt at the start of every new session"
+        }
+      ],
+      "answer": "B",
+      "explanation": "~/.claude/CLAUDE.md là file hướng dẫn cá nhân, chỉ áp dụng trên máy của người đó. Quy ước chung của team phải nằm trong CLAUDE.md của project (root hoặc .claude/CLAUDE.md) và được commit để mọi người cùng nhận.",
+      "optionExplanations": {
+        "A": "Sai — copy thủ công dễ lệch phiên bản, không có nguồn chân lý chung được version control.",
+        "B": "Đúng — CLAUDE.md của project được commit, mọi thành viên clone repo đều tự động load.",
+        "C": "Sai — settings.json cá nhân không đồng bộ sang người khác và không phải nơi chứa hướng dẫn dạng memory.",
+        "D": "Sai — phụ thuộc thói quen từng người, dễ quên và không bền vững."
+      },
+      "keyTakeaway": "Quy ước team → CLAUDE.md của project, commit vào repo; ~/.claude/CLAUDE.md chỉ dành cho sở thích cá nhân."
+    },
+    {
+      "id": "mock-08-q02",
+      "number": 2,
+      "scenarioId": "S2",
+      "domain": 3,
+      "domainName": "Claude Code Configuration & Workflows",
+      "taskStatement": "3.1",
+      "lesson": "3-1_claude-md-hierarchy-scoping-and-modular-organisation",
+      "concept": "No guaranteed precedence",
+      "difficulty": "hard",
+      "question": "A developer's ~/.claude/CLAUDE.md says \"Commit directly to main once tests pass.\" The repository CLAUDE.md says \"Never commit to main; always create a feature branch.\" Claude Code sometimes commits to main anyway. What is the MOST appropriate resolution?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Nothing is wrong with the files; the project CLAUDE.md always overrides the user file, so reinstall Claude Code"
+        },
+        {
+          "key": "B",
+          "text": "Copy the branch rule into a nested packages/CLAUDE.md so that the most specific file wins deterministically"
+        },
+        {
+          "key": "C",
+          "text": "Restate the branch rule in capital letters with NEVER so it outranks the wording in the personal file"
+        },
+        {
+          "key": "D",
+          "text": "Remove the contradiction between the files and enforce the branch rule with a permission deny rule or hook"
+        }
+      ],
+      "answer": "D",
+      "explanation": "Các file CLAUDE.md được load và ghép lại với nhau, không có cơ chế override xác định khi chúng mâu thuẫn. Cần loại bỏ mâu thuẫn, và với bất biến quan trọng (không commit vào main) thì enforce bằng settings (permission deny) hoặc hook thay vì chỉ dựa vào văn bản.",
+      "optionExplanations": {
+        "A": "Sai — không có quy tắc 'project luôn thắng'; mâu thuẫn khiến hành vi không xác định.",
+        "B": "Sai — file cụ thể hơn không được đảm bảo thắng; vẫn là nội dung ghép chung.",
+        "C": "Sai — nhấn mạnh bằng chữ hoa vẫn là xác suất, không giải quyết gốc mâu thuẫn.",
+        "D": "Đúng — xử lý mâu thuẫn và enforce bất biến bằng cơ chế tất định (deny rule/hook)."
+      },
+      "keyTakeaway": "CLAUDE.md không có precedence đảm bảo — mâu thuẫn phải được gỡ, bất biến phải enforce bằng settings/hook."
+    },
+    {
+      "id": "mock-08-q03",
+      "number": 3,
+      "scenarioId": "S2",
+      "domain": 3,
+      "domainName": "Claude Code Configuration & Workflows",
+      "taskStatement": "3.2",
+      "lesson": "3-2_custom-slash-commands-and-skills",
+      "concept": "Forked skill context",
+      "difficulty": "easy",
+      "question": "The team's /audit-deps skill reads hundreds of package.json and lockfile excerpts. After running it, the main conversation is so full of raw output that later coding tasks degrade. What is the MOST effective change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add context: fork to the skill's SKILL.md frontmatter so it runs isolated and returns a concise summary"
+        },
+        {
+          "key": "B",
+          "text": "Run /compact immediately after every /audit-deps invocation so that the excerpts it added are summarized away"
+        },
+        {
+          "key": "C",
+          "text": "Convert the skill into a legacy .claude/commands/audit-deps.md file so its output is shorter"
+        },
+        {
+          "key": "D",
+          "text": "Switch the session to a model with a larger context window before running the audit skill"
+        }
+      ],
+      "answer": "A",
+      "explanation": "context: fork chạy skill trong ngữ cảnh subagent tách biệt; toàn bộ output dài dòng nằm ở đó và chỉ bản tóm tắt quay về hội thoại chính. Đây là cách bảo vệ context chính khỏi việc khám phá verbose.",
+      "optionExplanations": {
+        "A": "Đúng — fork cô lập phần việc verbose, chỉ trả về kết luận ngắn gọn.",
+        "B": "Sai — /compact xử lý sau khi context đã bị ô nhiễm và có thể làm mất chi tiết quan trọng.",
+        "C": "Sai — commands là alias legacy, không thay đổi lượng output hay cô lập context.",
+        "D": "Sai — tăng context window không ngăn ô nhiễm và suy giảm chú ý."
+      },
+      "keyTakeaway": "Skill sinh output lớn → context: fork để cô lập và chỉ trả về tóm tắt."
+    },
+    {
+      "id": "mock-08-q04",
+      "number": 4,
+      "scenarioId": "S2",
+      "domain": 3,
+      "domainName": "Claude Code Configuration & Workflows",
+      "taskStatement": "3.2",
+      "lesson": "3-2_custom-slash-commands-and-skills",
+      "concept": "allowed-tools nuance",
+      "difficulty": "hard",
+      "question": "A skill's frontmatter is:\n---\nname: triage-bug\ndescription: Investigate a reported bug and locate the faulty code\nallowed-tools: Read, Grep, Glob\n---\nDuring a run, Claude requests permission to execute Bash (npm test). A teammate files a bug saying Bash should be impossible inside this skill. Which statement is correct?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The teammate is right: allowed-tools acts as an allowlist that removes every unlisted tool while the skill runs"
+        },
+        {
+          "key": "B",
+          "text": "Bash appeared because allowed-tools is only honored for subagents defined in .claude/agents, not for skills"
+        },
+        {
+          "key": "C",
+          "text": "allowed-tools pre-approves the listed tools; unlisted tools like Bash remain subject to normal permission rules"
+        },
+        {
+          "key": "D",
+          "text": "The frontmatter must be malformed, since a valid allowed-tools field makes unlisted tool calls fail with an error"
+        }
+      ],
+      "answer": "C",
+      "explanation": "allowed-tools trong skill chỉ pre-approve (không cần hỏi quyền) cho các tool được liệt kê; nó không phải denylist tuyệt đối. Tool không liệt kê vẫn có thể dùng theo cơ chế permission bình thường, vì vậy Claude hỏi quyền chạy Bash là hành vi đúng.",
+      "optionExplanations": {
+        "A": "Sai — đây là hiểu lầm phổ biến: allowed-tools không chặn các tool khác.",
+        "B": "Sai — allowed-tools là field hợp lệ của skill.",
+        "C": "Đúng — pre-approve tool liệt kê; tool khác vẫn đi qua permission check thông thường.",
+        "D": "Sai — frontmatter hợp lệ; hành vi hỏi quyền là đúng thiết kế."
+      },
+      "keyTakeaway": "allowed-tools = pre-approve, không phải danh sách cấm; muốn cấm thì dùng permission deny."
+    },
+    {
+      "id": "mock-08-q05",
+      "number": 5,
+      "scenarioId": "S2",
+      "domain": 3,
+      "domainName": "Claude Code Configuration & Workflows",
+      "taskStatement": "3.3",
+      "lesson": "3-3_path-specific-rules-for-conditional-convention-loading",
+      "concept": "paths glob frontmatter",
+      "difficulty": "easy",
+      "question": "Lumen's monorepo has *.test.ts files spread across about 30 folders in packages/api, packages/web and packages/shared. The team wants the same test conventions applied whenever Claude edits any of these files, without loading them for other work. Which approach is BEST?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Create .claude/rules/testing.md with frontmatter paths: [\"**/*.test.ts\"] containing the conventions"
+        },
+        {
+          "key": "B",
+          "text": "Add an identical CLAUDE.md file containing the conventions to each of the 30 test folders"
+        },
+        {
+          "key": "C",
+          "text": "Put the conventions in the root CLAUDE.md under a clearly labelled Testing heading so every session sees them"
+        },
+        {
+          "key": "D",
+          "text": "Create a testing skill and ask developers to invoke it manually before editing any test"
+        }
+      ],
+      "answer": "A",
+      "explanation": "Rule trong .claude/rules/ với frontmatter paths dạng glob chỉ được kích hoạt khi Claude làm việc với file khớp mẫu, bất kể nằm ở thư mục nào. Đây là cách áp dụng quy ước cho một 'lớp file' phân tán mà không tốn context cho việc khác.",
+      "optionExplanations": {
+        "A": "Đúng — glob **/*.test.ts bao phủ mọi thư mục và chỉ load khi cần.",
+        "B": "Sai — nhân bản 30 lần, khó bảo trì và dễ lệch.",
+        "C": "Sai — root CLAUDE.md luôn được load, tốn context cho công việc không liên quan.",
+        "D": "Sai — phụ thuộc thao tác thủ công, dễ bị quên."
+      },
+      "keyTakeaway": "Quy ước cho loại file phân tán → .claude/rules/*.md với paths glob."
+    },
+    {
+      "id": "mock-08-q06",
+      "number": 6,
+      "scenarioId": "S2",
+      "domain": 3,
+      "domainName": "Claude Code Configuration & Workflows",
+      "taskStatement": "3.3",
+      "lesson": "3-3_path-specific-rules-for-conditional-convention-loading",
+      "concept": "Rule versus enforcement",
+      "difficulty": "medium",
+      "question": "A rule in .claude/rules/migrations.md (paths: [\"db/migrations/**\"]) states that every migration must include a down() function and pass scripts/sql-safety-check.sh. Last week a migration without down() was merged. What should the team do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move the rule into the root CLAUDE.md so that it is always loaded instead of only on matching paths"
+        },
+        {
+          "key": "B",
+          "text": "Keep the rule as guidance, and enforce the check with a hook and a required CI job that runs the script"
+        },
+        {
+          "key": "C",
+          "text": "Rewrite the rule with stronger MUST/NEVER wording and add two annotated examples of fully compliant migrations"
+        },
+        {
+          "key": "D",
+          "text": "Broaden the paths glob to \"**/*\" so that the migration rule is active for every file Claude edits"
+        }
+      ],
+      "answer": "B",
+      "explanation": "Rule chỉ hướng dẫn việc sinh code, mang tính xác suất. Chính sách bắt buộc như kiểm tra an toàn migration cần cơ chế tất định: hook trong Claude Code và bước CI bắt buộc chạy script; rule vẫn giữ để Claude viết đúng ngay từ đầu.",
+      "optionExplanations": {
+        "A": "Sai — luôn load cũng không biến hướng dẫn thành cổng kiểm soát.",
+        "B": "Đúng — rule cho quy ước, hook/CI cho enforcement bắt buộc.",
+        "C": "Sai — từ ngữ mạnh hơn vẫn không đảm bảo tuân thủ.",
+        "D": "Sai — tốn context mà vẫn không enforce được gì."
+      },
+      "keyTakeaway": "Rule hướng dẫn; bất biến bắt buộc cần hook/CI/test."
+    },
+    {
+      "id": "mock-08-q07",
+      "number": 7,
+      "scenarioId": "S2",
+      "domain": 3,
+      "domainName": "Claude Code Configuration & Workflows",
+      "taskStatement": "3.4",
+      "lesson": "3-4_plan-mode-vs-direct-execution",
+      "concept": "Plan for ambiguity and breadth",
+      "difficulty": "medium",
+      "question": "A developer asks Claude Code to replace Lumen's homegrown event bus with Kafka across about 40 modules in packages/api. There are at least two viable designs (transactional outbox versus direct publishing), and module dependencies are poorly documented. What is the BEST way to start?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Begin direct execution in the first module and let a consistent pattern emerge while editing"
+        },
+        {
+          "key": "B",
+          "text": "Ask Claude to edit all 40 modules in one pass, then fix whatever tests fail afterward"
+        },
+        {
+          "key": "C",
+          "text": "Run the edits inside a forked skill so the main conversation stays clean during the change"
+        },
+        {
+          "key": "D",
+          "text": "Use Plan mode to explore dependencies, compare the two designs, and agree a plan before editing"
+        }
+      ],
+      "answer": "D",
+      "explanation": "Thay đổi kiến trúc trên nhiều module với nhiều phương án khả thi và phụ thuộc chưa rõ là trường hợp điển hình cho Plan mode: khám phá read-only, so sánh phương án, thống nhất kế hoạch rồi mới sửa code.",
+      "optionExplanations": {
+        "A": "Sai — bắt đầu sửa ngay khi chưa chọn thiết kế dễ dẫn tới làm lại.",
+        "B": "Sai — thay đổi lớn không kế hoạch, rủi ro cao và khó review.",
+        "C": "Sai — cô lập context không thay thế được bước lập kế hoạch và chọn thiết kế.",
+        "D": "Đúng — phạm vi rộng + mơ hồ → plan trước khi viết."
+      },
+      "keyTakeaway": "Phạm vi rộng, nhiều thiết kế khả thi → Plan mode trước, thực thi sau."
+    },
+    {
+      "id": "mock-08-q08",
+      "number": 8,
+      "scenarioId": "S2",
+      "domain": 3,
+      "domainName": "Claude Code Configuration & Workflows",
+      "taskStatement": "3.4",
+      "lesson": "3-4_plan-mode-vs-direct-execution",
+      "concept": "Execute for well-defined changes",
+      "difficulty": "easy",
+      "question": "formatEta() in packages/web/src/utils/eta.ts throws when route.stops is undefined. The stack trace points to line 42 and the fix is an obvious null guard. What is the MOST efficient approach?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Enter Plan mode and produce an architecture review of the utils package before changing anything"
+        },
+        {
+          "key": "B",
+          "text": "Launch an Explore subagent to map every caller of formatEta across the whole monorepo first"
+        },
+        {
+          "key": "C",
+          "text": "Apply the null guard directly in formatEta, add a regression test, and run the test suite"
+        },
+        {
+          "key": "D",
+          "text": "Ask Claude to write a short design doc comparing defensive programming strategies first"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Lỗi đã rõ, vị trí đã biết, cách sửa đơn giản — thực thi trực tiếp là phù hợp. Lập kế hoạch hay khám phá rộng ở đây chỉ tốn thời gian mà không giảm rủi ro.",
+      "optionExplanations": {
+        "A": "Sai — Plan mode là thừa cho một sửa lỗi cục bộ đã rõ.",
+        "B": "Sai — việc thêm null guard không đổi hợp đồng hàm, không cần map toàn bộ caller.",
+        "C": "Đúng — sửa chính xác, thêm test, chạy test.",
+        "D": "Sai — tài liệu thiết kế không cần cho thay đổi một dòng."
+      },
+      "keyTakeaway": "Thay đổi nhỏ, rõ ràng, vị trí đã biết → thực thi trực tiếp và test."
+    },
+    {
+      "id": "mock-08-q09",
+      "number": 9,
+      "scenarioId": "S2",
+      "domain": 3,
+      "domainName": "Claude Code Configuration & Workflows",
+      "taskStatement": "3.5",
+      "lesson": "3-5_iterative-refinement-techniques",
+      "concept": "Test-driven feedback",
+      "difficulty": "medium",
+      "question": "Claude migrated Lumen's date parser to a new library. Invalid inputs like \"31/02/2026\" now silently become 1970-01-01 instead of raising ParseError. You have already asked Claude twice to \"be careful with edge cases.\" What is the MOST effective next step?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Ask Claude to re-read the entire module and think harder about which edge cases the migration might have affected"
+        },
+        {
+          "key": "B",
+          "text": "Add a line saying \"edge cases are very important\" to the project CLAUDE.md for future sessions"
+        },
+        {
+          "key": "C",
+          "text": "Write failing tests that pin the expected ParseError behavior and have Claude iterate until they pass"
+        },
+        {
+          "key": "D",
+          "text": "Revert the migration and ask Claude to regenerate the parser from scratch using the same prompt"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Test có thể fail cho Claude một mục tiêu hành vi chính xác và phản hồi khách quan (expected vs actual). Đây là kỹ thuật tinh chỉnh lặp hiệu quả hơn nhiều so với lời nhắc chung chung kiểu 'cẩn thận hơn'.",
+      "optionExplanations": {
+        "A": "Sai — 'nghĩ kỹ hơn' không cung cấp tiêu chí cụ thể; đã thất bại hai lần.",
+        "B": "Sai — câu chung chung không định nghĩa hành vi mong đợi.",
+        "C": "Đúng — failing test xác định rõ đúng/sai và cho vòng lặp phản hồi chính xác.",
+        "D": "Sai — cùng prompt sẽ cho kết quả tương tự."
+      },
+      "keyTakeaway": "Muốn hành vi chính xác → đưa failing test, không phải lời nhắc 'cẩn thận'."
+    },
+    {
+      "id": "mock-08-q10",
+      "number": 10,
+      "scenarioId": "S2",
+      "domain": 3,
+      "domainName": "Claude Code Configuration & Workflows",
+      "taskStatement": "3.5",
+      "lesson": "3-5_iterative-refinement-techniques",
+      "concept": "Interview unfamiliar domain",
+      "difficulty": "medium",
+      "question": "A developer new to the pricing domain asks Claude Code to \"add caching to PricingService.\" Prices change when an ERP feed arrives a few times per day, and nobody has stated how stale a price may be. What is the BEST way to proceed?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Have Claude interview the developer on staleness tolerance, invalidation triggers and consistency needs first"
+        },
+        {
+          "key": "B",
+          "text": "Ask Claude to implement a standard five-minute TTL cache and adjust it later if complaints arise"
+        },
+        {
+          "key": "C",
+          "text": "Ask Claude to implement three caching strategies in separate branches and then keep whichever one passes all tests"
+        },
+        {
+          "key": "D",
+          "text": "Give Claude the full ERP documentation and let it choose a caching strategy autonomously"
+        }
+      ],
+      "answer": "A",
+      "explanation": "Khi yêu cầu nghiệp vụ chưa rõ (độ trễ chấp nhận được, cơ chế invalidation), để Claude phỏng vấn làm rõ trước giúp tránh code dựa trên yêu cầu tự bịa. Test pass không chứng minh đáp ứng yêu cầu chưa được nêu.",
+      "optionExplanations": {
+        "A": "Đúng — làm rõ yêu cầu domain trước khi implement.",
+        "B": "Sai — TTL tùy ý là yêu cầu tự bịa, có thể sai nghiệp vụ.",
+        "C": "Sai — test không mã hóa yêu cầu chưa biết, nên 'pass' không có nghĩa là đúng.",
+        "D": "Sai — tài liệu ERP không chứa quyết định nghiệp vụ về độ tươi của giá."
+      },
+      "keyTakeaway": "Domain lạ, yêu cầu mơ hồ → cho Claude phỏng vấn làm rõ trước khi code."
+    },
+    {
+      "id": "mock-08-q11",
+      "number": 11,
+      "scenarioId": "S2",
+      "domain": 1,
+      "domainName": "Agentic Architecture & Orchestration",
+      "taskStatement": "1.7",
+      "lesson": "1-7_session-state-and-resumption",
+      "concept": "Resume unchanged work",
+      "difficulty": "easy",
+      "question": "Yesterday a developer spent the afternoon in a named Claude Code session, billing-audit, analyzing the invoicing module. No commits have landed on the repository since then. She wants to continue today. What is the BEST option?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Start a new session and rerun the analysis so Claude works from completely fresh context"
+        },
+        {
+          "key": "B",
+          "text": "Continue the existing session with claude --resume billing-audit to keep the prior analysis"
+        },
+        {
+          "key": "C",
+          "text": "Start a new session and paste yesterday's final assistant message in as the first prompt"
+        },
+        {
+          "key": "D",
+          "text": "Start a new session in Plan mode so Claude re-explores the invoicing module read-only"
+        }
+      ],
+      "answer": "B",
+      "explanation": "Khi code không thay đổi, kết quả tool và phân tích trước đó vẫn hợp lệ; resume session giữ nguyên toàn bộ lịch sử đó. Khởi động lại chỉ lãng phí công sức và mất chi tiết.",
+      "optionExplanations": {
+        "A": "Sai — làm lại phân tích vẫn còn hợp lệ là lãng phí.",
+        "B": "Đúng — --resume tiếp tục đúng session với ngữ cảnh còn giá trị.",
+        "C": "Sai — chỉ một tin nhắn cuối làm mất các kết quả tool chi tiết.",
+        "D": "Sai — khám phá lại từ đầu không cần thiết khi không có thay đổi."
+      },
+      "keyTakeaway": "Code không đổi → --resume để tiếp tục với ngữ cảnh còn hợp lệ."
+    },
+    {
+      "id": "mock-08-q12",
+      "number": 12,
+      "scenarioId": "S2",
+      "domain": 1,
+      "domainName": "Agentic Architecture & Orchestration",
+      "taskStatement": "1.7",
+      "lesson": "1-7_session-state-and-resumption",
+      "concept": "Stale context remediation",
+      "difficulty": "hard",
+      "question": "Two days ago a session analyzed the architecture of packages/api. Since then a teammate merged a PR that changed router.ts, auth/middleware.ts and db/pool.ts. The developer now wants to continue the refactor planned in that session. What is the MOST reliable approach?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Resume the old session as-is; Claude will notice the changes when it next edits those files"
+        },
+        {
+          "key": "B",
+          "text": "Resume the old session and instruct Claude to re-read every file in packages/api before continuing"
+        },
+        {
+          "key": "C",
+          "text": "Fork the old session so the outdated tool results stay isolated in the original branch"
+        },
+        {
+          "key": "D",
+          "text": "Start a fresh session with a curated summary and have Claude re-read only the three changed files"
+        }
+      ],
+      "answer": "D",
+      "explanation": "Kết quả tool cũ về các file đã thay đổi trở nên không đáng tin, nhưng resume vẫn mang chúng theo trong context. Phiên mới + bản tóm tắt chọn lọc + đọc lại có mục tiêu các file thay đổi vừa loại bỏ dữ liệu cũ vừa tiết kiệm context.",
+      "optionExplanations": {
+        "A": "Sai — đoạn trích cũ trong history có thể khiến Claude dựa vào code đã lỗi thời.",
+        "B": "Sai — đọc lại toàn bộ là lãng phí và context vẫn chứa bản cũ mâu thuẫn.",
+        "C": "Sai — fork vẫn kế thừa nguyên dữ liệu cũ.",
+        "D": "Đúng — fresh session + summary + re-read có mục tiêu."
+      },
+      "keyTakeaway": "Code đã đổi → phiên mới với summary và đọc lại đúng file thay đổi, không resume mù quáng."
+    },
+    {
+      "id": "mock-08-q13",
+      "number": 13,
+      "scenarioId": "S2",
+      "domain": 2,
+      "domainName": "Tool Design & MCP Integration",
+      "taskStatement": "2.5",
+      "lesson": "2-5_built-in-tools",
+      "concept": "Indirect function usage",
+      "difficulty": "hard",
+      "question": "Claude renamed calcShippingFee to computeShippingFee after a Grep for calcShippingFee found 4 call sites. The build now fails in 6 other files that import a function named shippingFee. What is the MOST likely cause?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Grep is case-insensitive by default, so it merged mixed-case usages and under-reported the real matches"
+        },
+        {
+          "key": "B",
+          "text": "Glob should have been used instead of Grep, because Glob also matches identifiers inside files"
+        },
+        {
+          "key": "C",
+          "text": "The Edit tool silently skipped files where the old_string occurred more than once in the file"
+        },
+        {
+          "key": "D",
+          "text": "A barrel file re-exports the helper under an alias, so those consumers never use the original name"
+        }
+      ],
+      "answer": "D",
+      "explanation": "Re-export và alias (vd: export { calcShippingFee as shippingFee }) khiến một lần grep tên gốc bỏ sót consumer. Cần truy vết nhiều bước: tên gốc → các điểm re-export/alias → consumer của alias.",
+      "optionExplanations": {
+        "A": "Sai — Grep mặc định phân biệt hoa thường; và lỗi ở đây không do hoa thường.",
+        "B": "Sai — Glob chỉ khớp đường dẫn file, không tìm nội dung.",
+        "C": "Sai — Edit báo lỗi khi old_string không duy nhất, không âm thầm bỏ qua.",
+        "D": "Đúng — alias qua index.ts che giấu cách dùng gián tiếp."
+      },
+      "keyTakeaway": "Đổi tên symbol → truy vết cả re-export và alias, một lần grep tên gốc là chưa đủ."
+    },
+    {
+      "id": "mock-08-q14",
+      "number": 14,
+      "scenarioId": "S2",
+      "domain": 5,
+      "domainName": "Context Management & Reliability",
+      "taskStatement": "5.4",
+      "lesson": "5-4_codebase-exploration-context-degradation",
+      "concept": "Context degradation symptoms",
+      "difficulty": "medium",
+      "question": "After about three hours of exploration in one session, Claude starts referring to \"the repository class\" and proposes calling getById, although earlier it had established that the correct method is ShipmentRepository.findByTrackingId. What is the BEST response?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Ask Claude to think harder and recall the exact method name and signature it found earlier in this conversation"
+        },
+        {
+          "key": "B",
+          "text": "Switch to a model with a larger context window and continue in the same session as before"
+        },
+        {
+          "key": "C",
+          "text": "Treat it as context degradation: restore exact facts from a scratchpad file and re-read target files"
+        },
+        {
+          "key": "D",
+          "text": "Discard everything and repeat the full three-hour exploration from scratch in a new session"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Việc tên cụ thể bị thay bằng mô tả chung chung là triệu chứng suy giảm context trong phiên dài. Giải pháp là khôi phục dữ kiện chính xác từ nguồn bền vững (scratchpad, đọc lại file có mục tiêu), không phải yêu cầu 'nhớ lại'.",
+      "optionExplanations": {
+        "A": "Sai — không có bằng chứng mới, 'nghĩ kỹ hơn' không khôi phục được thông tin đã mờ.",
+        "B": "Sai — context lớn hơn không chữa được việc thông tin bị pha loãng.",
+        "C": "Đúng — khôi phục dữ kiện chính xác từ scratchpad và tham chiếu có mục tiêu.",
+        "D": "Sai — làm lại toàn bộ là lãng phí khi đã có phát hiện có thể ghi lại."
+      },
+      "keyTakeaway": "Tên cụ thể biến thành mô tả chung → suy giảm context; khôi phục từ scratchpad, đừng bảo 'nghĩ kỹ hơn'."
+    },
+    {
+      "id": "mock-08-q15",
+      "number": 15,
+      "scenarioId": "S2",
+      "domain": 5,
+      "domainName": "Context Management & Reliability",
+      "taskStatement": "5.4",
+      "lesson": "5-4_codebase-exploration-context-degradation",
+      "concept": "External scratchpad",
+      "difficulty": "medium",
+      "question": "A multi-day refactor of Lumen's routing engine spans several Claude Code sessions. Each new session wastes the first hour rediscovering the same dependency chains and class responsibilities. What is the MOST effective practice?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Have Claude keep a structured notes file of classes, paths, dependency chains and decisions, reread each phase"
+        },
+        {
+          "key": "B",
+          "text": "Keep a single session open all week so the original tool results remain available in context"
+        },
+        {
+          "key": "C",
+          "text": "Rely on automatic compaction to carry the important exploration details across the sessions"
+        },
+        {
+          "key": "D",
+          "text": "Paste the complete exploration transcript into CLAUDE.md so that every new session automatically loads all of it"
+        }
+      ],
+      "answer": "A",
+      "explanation": "Scratchpad bên ngoài (file ghi chú có cấu trúc) lưu dữ kiện ổn định như class, đường dẫn, chuỗi phụ thuộc và quyết định, rồi được đọc lại trước mỗi giai đoạn. Nó bền vững hơn trí nhớ ngầm của context.",
+      "optionExplanations": {
+        "A": "Đúng — ghi chú có cấu trúc, đọc lại trước khi ra quyết định.",
+        "B": "Sai — phiên quá dài sẽ suy giảm context và vẫn mất chi tiết.",
+        "C": "Sai — compaction tóm tắt có thể làm mất chi tiết chính xác và không vượt ranh giới session.",
+        "D": "Sai — transcript thô làm phình CLAUDE.md, tốn context mỗi phiên."
+      },
+      "keyTakeaway": "Công việc nhiều ngày → scratchpad có cấu trúc ngoài context, đọc lại mỗi phase."
+    },
+    {
+      "id": "mock-08-q16",
+      "number": 16,
+      "scenarioId": "S3",
+      "domain": 1,
+      "domainName": "Agentic Architecture & Orchestration",
+      "taskStatement": "1.1",
+      "lesson": "1-1_agentic-loops",
+      "concept": "Safety iteration caps",
+      "difficulty": "medium",
+      "question": "Atlas Research's coordinator loop looks like this:\nfor i in range(10):\n    resp = client.messages.create(...)\n    if resp.stop_reason == \"end_turn\":\n        break\n    messages += run_tools(resp)\nmark_report_complete()\nDeep topics sometimes need 14 tool rounds, and those reports ship with half-finished sections. What is the BEST fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Raise the loop limit from 10 to 50 so that complex topics always have room to finish inside the loop"
+        },
+        {
+          "key": "B",
+          "text": "Treat end_turn as completion; keep a cap only as a runaway guard and mark capped runs incomplete"
+        },
+        {
+          "key": "C",
+          "text": "Tell the coordinator in its system prompt to finish every topic within ten tool rounds"
+        },
+        {
+          "key": "D",
+          "text": "Mark the report complete as soon as the latest response contains any text block"
+        }
+      ],
+      "answer": "B",
+      "explanation": "stop_reason == end_turn mới là tín hiệu hoàn thành; giới hạn vòng lặp chỉ là chốt an toàn chống chạy vô hạn. Khi chạm cap, phải coi là chưa hoàn thành chứ không được gọi mark_report_complete().",
+      "optionExplanations": {
+        "A": "Sai — vẫn coi việc hết vòng lặp là hoàn thành; chỉ dời lỗi đi chỗ khác.",
+        "B": "Đúng — dừng theo end_turn, cap chỉ là safety bound và xử lý riêng khi chạm cap.",
+        "C": "Sai — ép giới hạn nhân tạo làm giảm chất lượng nghiên cứu hợp lệ.",
+        "D": "Sai — text block có thể đi kèm tool_use, không phải tín hiệu hoàn thành."
+      },
+      "keyTakeaway": "Hoàn thành = end_turn; iteration cap chỉ chống runaway, chạm cap là chưa xong."
+    },
+    {
+      "id": "mock-08-q17",
+      "number": 17,
+      "scenarioId": "S3",
+      "domain": 1,
+      "domainName": "Agentic Architecture & Orchestration",
+      "taskStatement": "1.2",
+      "lesson": "1-2_multi-agent-orchestration",
+      "concept": "Hub-and-spoke coordinator",
+      "difficulty": "easy",
+      "question": "In Atlas Research, the document-analysis subagent and the web-search subagent sometimes need each other's findings. An engineer proposes letting them message each other directly over a shared queue. What is the BEST design?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Allow direct peer messaging, since it lowers latency and saves coordinator tokens"
+        },
+        {
+          "key": "B",
+          "text": "Route findings through the coordinator, which decides what to forward and logs provenance"
+        },
+        {
+          "key": "C",
+          "text": "Merge the two subagents into one agent that holds both the search and analysis toolsets"
+        },
+        {
+          "key": "D",
+          "text": "Have both subagents write to a shared scratch file that each of them polls continuously"
+        }
+      ],
+      "answer": "B",
+      "explanation": "Mô hình hub-and-spoke: coordinator phân rã, giao việc, định tuyến và tổng hợp. Định tuyến qua coordinator giữ được khả năng truy vết, kiểm soát và quan sát luồng thông tin.",
+      "optionExplanations": {
+        "A": "Sai — giao tiếp trực tiếp không được ghi log, khó truy vết và debug.",
+        "B": "Đúng — coordinator là trung tâm định tuyến có traceability.",
+        "C": "Sai — gộp agent làm mất chuyên môn hóa và tăng số tool mỗi agent.",
+        "D": "Sai — kênh ngầm qua file chung vẫn bỏ qua coordinator, thiếu kiểm soát."
+      },
+      "keyTakeaway": "Subagent trao đổi qua coordinator, không nói chuyện trực tiếp không log."
+    },
+    {
+      "id": "mock-08-q18",
+      "number": 18,
+      "scenarioId": "S3",
+      "domain": 1,
+      "domainName": "Agentic Architecture & Orchestration",
+      "taskStatement": "1.2",
+      "lesson": "1-2_multi-agent-orchestration",
+      "concept": "Coverage decomposition",
+      "difficulty": "hard",
+      "question": "A report on \"grid-scale battery storage technologies\" covered lithium-ion and flow batteries thoroughly but never mentioned solid-state or sodium-ion. Logs show every subagent completed its assigned tasks successfully with good sources. What is the root cause and the BEST fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The coordinator decomposed the topic too narrowly; revise the breakdown with a subtopic coverage checklist"
+        },
+        {
+          "key": "B",
+          "text": "The search subagents' queries were too shallow; raise the maximum number of results returned for each query"
+        },
+        {
+          "key": "C",
+          "text": "The synthesis agent dropped content while writing; give it a larger max_tokens budget for the report"
+        },
+        {
+          "key": "D",
+          "text": "Too few workers were used; double the number of search subagents working on the same assignments"
+        }
+      ],
+      "answer": "A",
+      "explanation": "Khi mọi subagent đều làm tốt phần được giao mà báo cáo vẫn thiếu mảng, lỗ hổng nằm ở upstream — bước phân rã của coordinator. Cần sửa decomposition và kiểm tra coverage theo checklist.",
+      "optionExplanations": {
+        "A": "Đúng — lỗ hổng phạm vi phát sinh từ task breakdown của coordinator.",
+        "B": "Sai — subagent chưa bao giờ được giao solid-state/sodium-ion, tìm sâu hơn cũng không ra.",
+        "C": "Sai — nội dung chưa từng được nghiên cứu, không phải bị cắt.",
+        "D": "Sai — thêm worker cho cùng nhiệm vụ hẹp không mở rộng phạm vi."
+      },
+      "keyTakeaway": "Thiếu coverage dù worker hoàn thành tốt → sửa decomposition của coordinator."
+    },
+    {
+      "id": "mock-08-q19",
+      "number": 19,
+      "scenarioId": "S3",
+      "domain": 1,
+      "domainName": "Agentic Architecture & Orchestration",
+      "taskStatement": "1.2",
+      "lesson": "1-2_multi-agent-orchestration",
+      "concept": "Dynamic selection and refinement",
+      "difficulty": "medium",
+      "question": "A user asks Atlas Research, \"What year was Northvolt founded?\" The pipeline launches search, document analysis, synthesis, fact-check and formatting subagents and takes four minutes. What is the BEST improvement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the full chain for every query, since consistent processing matters more than latency"
+        },
+        {
+          "key": "B",
+          "text": "Run all five subagents in parallel instead of sequentially to cut the overall latency"
+        },
+        {
+          "key": "C",
+          "text": "Let the coordinator pick only the specialists a query needs, re-delegating only if gaps remain"
+        },
+        {
+          "key": "D",
+          "text": "Add a cache of earlier answers so that repeated simple questions can skip the whole multi-agent pipeline"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Coordinator nên chọn động tập subagent tối thiểu cần thiết cho từng yêu cầu và chỉ giao lại khi còn thiếu. Câu hỏi dữ kiện đơn giản không cần chạy toàn bộ chuỗi.",
+      "optionExplanations": {
+        "A": "Sai — luôn chạy full chain lãng phí chi phí và thời gian.",
+        "B": "Sai — vẫn chạy 5 agent không cần thiết, chỉ giảm độ trễ một phần.",
+        "C": "Đúng — chọn tối thiểu, kiểm tra coverage, tinh chỉnh khi cần.",
+        "D": "Sai — cache chỉ giúp câu hỏi lặp lại, không sửa logic điều phối."
+      },
+      "keyTakeaway": "Chỉ gọi specialist cần thiết; không chạy full pipeline cho mọi câu hỏi."
+    },
+    {
+      "id": "mock-08-q20",
+      "number": 20,
+      "scenarioId": "S3",
+      "domain": 1,
+      "domainName": "Agentic Architecture & Orchestration",
+      "taskStatement": "1.3",
+      "lesson": "1-3_subagent-invocation-and-context-passing",
+      "concept": "Task/Agent spawning permission",
+      "difficulty": "easy",
+      "question": "Atlas Research defines researcher and analyst subagents in the Agent SDK agents option, each with a detailed description. However, the coordinator never spawns them and instead tries to do all the work itself. Logs show no Agent tool calls at all. What is the MOST likely cause?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The subagent descriptions are not persuasive enough for the coordinator to select them"
+        },
+        {
+          "key": "B",
+          "text": "Subagents only work when they are exposed through a separate MCP server in .mcp.json"
+        },
+        {
+          "key": "C",
+          "text": "The coordinator's temperature is too low for it to explore delegating work to others"
+        },
+        {
+          "key": "D",
+          "text": "The coordinator's allowedTools does not include the Agent (Task) tool needed for spawning"
+        }
+      ],
+      "answer": "D",
+      "explanation": "Coordinator chỉ có thể spawn subagent khi tool Agent (trước đây là Task) có trong allowedTools. Không có lời gọi Agent nào trong log là dấu hiệu thiếu quyền, không phải mô tả kém.",
+      "optionExplanations": {
+        "A": "Sai — cải thiện mô tả không giúp nếu tool Agent không khả dụng.",
+        "B": "Sai — subagent không cần MCP server.",
+        "C": "Sai — temperature không quyết định khả năng gọi tool không tồn tại.",
+        "D": "Đúng — thiếu Agent/Task trong allowedTools nên không thể spawn."
+      },
+      "keyTakeaway": "Coordinator muốn spawn subagent phải có Agent/Task trong allowedTools."
+    },
+    {
+      "id": "mock-08-q21",
+      "number": 21,
+      "scenarioId": "S3",
+      "domain": 1,
+      "domainName": "Agentic Architecture & Orchestration",
+      "taskStatement": "1.3",
+      "lesson": "1-3_subagent-invocation-and-context-passing",
+      "concept": "Structured evidence handoff",
+      "difficulty": "medium",
+      "question": "Atlas Research's synthesis subagent produces accurate reports, but almost none of its claims carry citations. The coordinator currently delegates with a message like \"Here is a summary of the research so far: ...\" written in polished prose. What is the BEST fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Pass findings as structured records with claim, URL, document title, page, excerpt and confidence"
+        },
+        {
+          "key": "B",
+          "text": "Add \"always include a citation for every single claim in the report\" to the synthesis agent's system prompt"
+        },
+        {
+          "key": "C",
+          "text": "Give the synthesis agent web search so it can locate the original sources again on its own"
+        },
+        {
+          "key": "D",
+          "text": "Ask the search agents to write longer and more detailed prose summaries for the coordinator"
+        }
+      ],
+      "answer": "A",
+      "explanation": "Subagent không kế thừa context của coordinator; nếu chỉ nhận văn xuôi đã đánh bóng thì metadata nguồn đã mất trước khi tới synthesis. Cần truyền bằng chứng có cấu trúc kèm provenance cho từng phát hiện.",
+      "optionExplanations": {
+        "A": "Đúng — giữ metadata nguồn đi cùng từng claim.",
+        "B": "Sai — agent không thể trích dẫn nguồn mà nó không nhận được.",
+        "C": "Sai — tìm lại nguồn tốn kém và có thể gán sai nguồn.",
+        "D": "Sai — văn xuôi dài hơn vẫn thiếu cấu trúc provenance."
+      },
+      "keyTakeaway": "Handoff giữa agent phải mang claim + nguồn có cấu trúc, không chỉ văn xuôi."
+    },
+    {
+      "id": "mock-08-q22",
+      "number": 22,
+      "scenarioId": "S3",
+      "domain": 2,
+      "domainName": "Tool Design & MCP Integration",
+      "taskStatement": "2.4",
+      "lesson": "2-4_mcp-server-integration",
+      "concept": "MCP resources versus tools",
+      "difficulty": "easy",
+      "question": "Atlas Research queries an internal market-data warehouse through an MCP server. Before almost every query, the agent calls list_tables and then describe_table several times, consuming many turns. The schema rarely changes. What is the BEST improvement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a system prompt instruction telling the agent never to call list_tables"
+        },
+        {
+          "key": "B",
+          "text": "Merge list_tables and describe_table into one tool that also returns every table's rows"
+        },
+        {
+          "key": "C",
+          "text": "Raise the iteration cap so the discovery calls no longer exhaust the turn budget"
+        },
+        {
+          "key": "D",
+          "text": "Expose the warehouse schema as an MCP resource the agent can read as context up front"
+        }
+      ],
+      "answer": "D",
+      "explanation": "MCP resource dùng để cung cấp ngữ cảnh đọc được (như schema), còn tool dùng để thực hiện hành động. Đưa schema thành resource giúp agent có sẵn thông tin, giảm các lời gọi khám phá lặp lại.",
+      "optionExplanations": {
+        "A": "Sai — cấm khám phá mà không cung cấp schema khiến agent viết query sai.",
+        "B": "Sai — trả về toàn bộ rows làm phình context nghiêm trọng.",
+        "C": "Sai — che giấu lãng phí thay vì loại bỏ nó.",
+        "D": "Đúng — schema là ngữ cảnh đọc → MCP resource."
+      },
+      "keyTakeaway": "Ngữ cảnh đọc được (schema, tài liệu) → MCP resource; hành động → MCP tool."
+    },
+    {
+      "id": "mock-08-q23",
+      "number": 23,
+      "scenarioId": "S3",
+      "domain": 1,
+      "domainName": "Agentic Architecture & Orchestration",
+      "taskStatement": "1.4",
+      "lesson": "1-4_workflow-enforcement-and-handoff",
+      "concept": "Subagent lifecycle",
+      "difficulty": "hard",
+      "question": "A compliance rule requires every Atlas Research subagent spawn to include a client_id for tenant isolation, and spawns missing it must be rejected before the subagent does any work. The team added a SubagentStart hook that logs an error, but such subagents still run. What is the BEST fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Make the SubagentStart hook exit with a non-zero code so the spawn is cancelled"
+        },
+        {
+          "key": "B",
+          "text": "Add a PreToolUse hook matched on the Agent tool that denies calls missing client_id"
+        },
+        {
+          "key": "C",
+          "text": "Add a SubagentStop hook that discards the output of subagents without a client_id"
+        },
+        {
+          "key": "D",
+          "text": "Add \"always include client_id when delegating\" to the coordinator's system prompt"
+        }
+      ],
+      "answer": "B",
+      "explanation": "SubagentStart chỉ dùng để quan sát khi subagent đã bắt đầu; SubagentStop có thể chặn hoàn tất; còn chặn việc spawn phải làm ở PreToolUse trên tool Agent — trước khi lời gọi được thực thi.",
+      "optionExplanations": {
+        "A": "Sai — SubagentStart không phải điểm hủy spawn; subagent đã khởi chạy.",
+        "B": "Đúng — PreToolUse trên Agent chặn trước khi spawn.",
+        "C": "Sai — subagent đã chạy và có thể đã truy cập dữ liệu tenant khác.",
+        "D": "Sai — prompt mang tính xác suất, không đáp ứng yêu cầu compliance."
+      },
+      "keyTakeaway": "Muốn chặn spawn → PreToolUse trên tool Agent; SubagentStart chỉ quan sát."
+    },
+    {
+      "id": "mock-08-q24",
+      "number": 24,
+      "scenarioId": "S3",
+      "domain": 1,
+      "domainName": "Agentic Architecture & Orchestration",
+      "taskStatement": "1.6",
+      "lesson": "1-6_task-decomposition-strategies",
+      "concept": "Adaptive task decomposition",
+      "difficulty": "medium",
+      "question": "Atlas Research is investigating how a payments regulation affects fintech startups. Midway, the document-analysis subagent discovers that a 2025 amendment substantially changes the regulation's scope, which affects several planned subtasks. The coordinator keeps following its original plan. What is the BEST behavior?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Finish the original plan first, and then launch a separate follow-up research job covering the amendment"
+        },
+        {
+          "key": "B",
+          "text": "Ignore the amendment, since it was not mentioned in the user's original research request"
+        },
+        {
+          "key": "C",
+          "text": "Update the task plan: add investigation of the amendment and re-scope the dependent subtasks"
+        },
+        {
+          "key": "D",
+          "text": "Abort and restart the entire research job with a brand-new fixed plan written upfront"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Nhiệm vụ mở với phạm vi chưa biết cần phân rã thích ứng: cập nhật đồ thị nhiệm vụ khi có phát hiện mới. Tiếp tục kế hoạch cũ sẽ tạo báo cáo dựa trên quy định đã lỗi thời.",
+      "optionExplanations": {
+        "A": "Sai — kết quả kế hoạch cũ có thể sai do sửa đổi, phải làm lại.",
+        "B": "Sai — sửa đổi ảnh hưởng trực tiếp đến câu trả lời người dùng cần.",
+        "C": "Đúng — điều chỉnh kế hoạch theo phát hiện mới.",
+        "D": "Sai — bỏ phí kết quả còn hợp lệ và kế hoạch cố định mới vẫn có thể lỗi thời."
+      },
+      "keyTakeaway": "Phát hiện mới làm đổi phạm vi → cập nhật task graph, không đi theo kế hoạch cũ mù quáng."
+    },
+    {
+      "id": "mock-08-q25",
+      "number": 25,
+      "scenarioId": "S3",
+      "domain": 5,
+      "domainName": "Context Management & Reliability",
+      "taskStatement": "5.3",
+      "lesson": "5-3_error-propagation-in-multi-agent-systems",
+      "concept": "Structured failure context",
+      "difficulty": "medium",
+      "question": "An Atlas Research search subagent times out after retrieving 3 of the 5 sources it was asked to find. It currently returns {\"status\": \"success\", \"results\": []}. What should it return instead?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Return the empty list so the coordinator concludes that no relevant sources exist"
+        },
+        {
+          "key": "B",
+          "text": "Keep retrying internally without limit until all five sources have been retrieved"
+        },
+        {
+          "key": "C",
+          "text": "An error with category timeout, the queries attempted, the 3 partial results and suggested alternatives"
+        },
+        {
+          "key": "D",
+          "text": "Raise an exception that terminates the entire research workflow so that no partial report is ever produced"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Lỗi phải được báo có cấu trúc: loại lỗi, hành động đã thử, kết quả một phần và phương án thay thế. Như vậy coordinator có thể quyết định retry có mục tiêu thay vì mất dữ liệu hoặc hiểu sai.",
+      "optionExplanations": {
+        "A": "Sai — báo thành công rỗng che giấu lỗi và vứt bỏ 3 nguồn đã tìm được.",
+        "B": "Sai — retry vô hạn làm treo pipeline và không cho coordinator quyết định.",
+        "C": "Đúng — failure context có cấu trúc kèm partial results.",
+        "D": "Sai — làm sập toàn bộ workflow vì một lỗi cục bộ."
+      },
+      "keyTakeaway": "Subagent lỗi → trả về loại lỗi, việc đã thử, kết quả một phần, phương án thay thế."
+    },
+    {
+      "id": "mock-08-q26",
+      "number": 26,
+      "scenarioId": "S3",
+      "domain": 5,
+      "domainName": "Context Management & Reliability",
+      "taskStatement": "5.3",
+      "lesson": "5-3_error-propagation-in-multi-agent-systems",
+      "concept": "Coverage annotation",
+      "difficulty": "medium",
+      "question": "One of four regional Atlas Research subagents (APAC) failed because its key sources were paywalled; North America, EMEA and LATAM succeeded with solid sources. How should the final report handle this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Omit APAC silently, since the report should contain only fully verified content"
+        },
+        {
+          "key": "B",
+          "text": "Publish the three regions and clearly mark APAC coverage incomplete, with the reason and attempts made"
+        },
+        {
+          "key": "C",
+          "text": "Have the synthesis agent estimate APAC figures from global averages so that the report still covers all regions"
+        },
+        {
+          "key": "D",
+          "text": "Fail the entire report and rerun all four regional subagents from the beginning"
+        }
+      ],
+      "answer": "B",
+      "explanation": "Coordinator nên giữ các nhánh thành công và báo cáo tổng hợp phải công khai phần bằng chứng bị thiếu cùng lý do. Người đọc cần biết phạm vi nào đã được xác minh.",
+      "optionExplanations": {
+        "A": "Sai — im lặng bỏ qua khiến người đọc tưởng báo cáo đầy đủ.",
+        "B": "Đúng — chú thích coverage chưa đầy đủ kèm lý do.",
+        "C": "Sai — bịa số liệu không có nguồn.",
+        "D": "Sai — vứt bỏ công việc hợp lệ của ba vùng."
+      },
+      "keyTakeaway": "Thiếu bằng chứng phải được công khai trong báo cáo, không giấu và không bịa."
+    },
+    {
+      "id": "mock-08-q27",
+      "number": 27,
+      "scenarioId": "S3",
+      "domain": 5,
+      "domainName": "Context Management & Reliability",
+      "taskStatement": "5.6",
+      "lesson": "5-6_information-provenance-multi-source-synthesis",
+      "concept": "Conflicting credible sources",
+      "difficulty": "hard",
+      "question": "For the same year (2024), an industry association survey estimates that a market grew 14%, while national statistics report 9%. Both sources are credible but use different methodologies. Atlas Research's synthesis agent currently outputs \"growth of about 11.5%.\" What is the BEST behavior?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the 11.5% average in the text but add a footnote that lists both underlying sources and their figures"
+        },
+        {
+          "key": "B",
+          "text": "Report only the government figure because official statistics are more authoritative"
+        },
+        {
+          "key": "C",
+          "text": "Choose the estimate based on the larger sample and drop the other from the report"
+        },
+        {
+          "key": "D",
+          "text": "Present both estimates with their sources, methodologies and dates, and note the discrepancy"
+        }
+      ],
+      "answer": "D",
+      "explanation": "Khi hai nguồn đáng tin mâu thuẫn, báo cáo nên trình bày cả hai kèm provenance và phương pháp thay vì chọn tùy ý hoặc lấy trung bình không có căn cứ. Người đọc tự đánh giá dựa trên thông tin đầy đủ.",
+      "optionExplanations": {
+        "A": "Sai — trung bình tạo ra con số không nguồn nào báo cáo.",
+        "B": "Sai — chọn tùy ý làm mất thông tin quan trọng từ nguồn đáng tin khác.",
+        "C": "Sai — cỡ mẫu không tự động quyết định độ đúng, vẫn là lựa chọn tùy ý.",
+        "D": "Đúng — giữ cả hai với nguồn, phương pháp, thời điểm."
+      },
+      "keyTakeaway": "Nguồn đáng tin mâu thuẫn → trình bày cả hai có provenance, không trung bình hóa."
+    },
+    {
+      "id": "mock-08-q28",
+      "number": 28,
+      "scenarioId": "S3",
+      "domain": 2,
+      "domainName": "Tool Design & MCP Integration",
+      "taskStatement": "2.3",
+      "lesson": "2-3_tool-distribution-tool-choice",
+      "concept": "Scoped cross-role capabilities",
+      "difficulty": "hard",
+      "question": "Atlas Research's synthesis agent frequently needs quick factual checks (e.g., confirming a company's headquarters city). Each check currently round-trips through the coordinator and a search subagent, adding minutes per report. What is the BEST change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Give synthesis a narrow verify_fact tool for simple lookups; complex research still routes via the coordinator"
+        },
+        {
+          "key": "B",
+          "text": "Give the synthesis agent the complete web-search and document-analysis toolsets so it never has to wait on anyone"
+        },
+        {
+          "key": "C",
+          "text": "Remove the synthesis agent entirely and let the coordinator write every report on its own"
+        },
+        {
+          "key": "D",
+          "text": "Let the synthesis agent skip verification for any fact that appears in only a single source"
+        }
+      ],
+      "answer": "A",
+      "explanation": "Cung cấp một năng lực hẹp, an toàn cho nhu cầu phổ biến (verify_fact) giảm độ trễ mà vẫn giữ phân vai; việc phức tạp vẫn đi qua coordinator. Trao toàn bộ toolset gây quá tải tool và phá vỡ ranh giới vai trò.",
+      "optionExplanations": {
+        "A": "Đúng — tool hẹp cho kiểm tra đơn giản, việc phức tạp vẫn định tuyến trung tâm.",
+        "B": "Sai — quá nhiều tool làm giảm chất lượng chọn tool và phá phân vai.",
+        "C": "Sai — làm coordinator quá tải và mất chuyên môn hóa.",
+        "D": "Sai — hạ chuẩn xác minh, ngược với mục tiêu báo cáo có căn cứ."
+      },
+      "keyTakeaway": "Nhu cầu kiểm tra phổ biến → cấp tool hẹp, an toàn; việc khó vẫn qua coordinator."
+    },
+    {
+      "id": "mock-08-q29",
+      "number": 29,
+      "scenarioId": "S3",
+      "domain": 2,
+      "domainName": "Tool Design & MCP Integration",
+      "taskStatement": "2.1",
+      "lesson": "2-1_tool-interface-design",
+      "concept": "Specific action granularity",
+      "difficulty": "medium",
+      "question": "The document-analysis subagent has a single tool, analyze_document(doc_id, instructions), used for summarizing, extracting tables and verifying claims. When asked to verify whether a PDF supports a specific claim, the model often returns a general summary instead. What is the BEST fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Expand the instructions parameter description so it lists every single task the tool is able to perform"
+        },
+        {
+          "key": "B",
+          "text": "Add few-shot examples to the system prompt showing analyze_document used for verification"
+        },
+        {
+          "key": "C",
+          "text": "Add a free-text mode parameter that the model fills with the kind of analysis it wants"
+        },
+        {
+          "key": "D",
+          "text": "Split it into purpose-specific tools such as summarize_document, extract_tables and verify_claim"
+        }
+      ],
+      "answer": "D",
+      "explanation": "Một tool chung chung che giấu nhiều ý định khác nhau khiến model dễ chọn hành vi mặc định. Tách thành các tool hẹp với mục đích rõ ràng giúp mỗi lời gọi thể hiện đúng ý định và có schema đầu vào/đầu ra phù hợp.",
+      "optionExplanations": {
+        "A": "Sai — vẫn là một tool mơ hồ, model vẫn phải tự suy ra hành vi.",
+        "B": "Sai — few-shot chỉ vá triệu chứng của thiết kế tool kém.",
+        "C": "Sai — tham số free-text vẫn mơ hồ, khó validate.",
+        "D": "Đúng — tool theo mục đích cụ thể, ranh giới rõ ràng."
+      },
+      "keyTakeaway": "Một tool làm nhiều việc mơ hồ → tách thành các tool có mục đích cụ thể."
+    },
+    {
+      "id": "mock-08-q30",
+      "number": 30,
+      "scenarioId": "S3",
+      "domain": 2,
+      "domainName": "Tool Design & MCP Integration",
+      "taskStatement": "2.2",
+      "lesson": "2-2_structured-error-responses",
+      "concept": "Successful empty versus failed access",
+      "difficulty": "medium",
+      "question": "Atlas Research's search_patents MCP tool returns [] both when a query executes and finds no patents and when the patent database is unreachable. The coordinator has started reporting \"no prior art exists\" during database outages. What is the BEST tool response design?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Return success with resultCount 0 for a zero-match query, and isError with a retryable category for outages"
+        },
+        {
+          "key": "B",
+          "text": "Return an error whenever the result list is empty, so that the agent always retries the search a few more times"
+        },
+        {
+          "key": "C",
+          "text": "Keep returning [] but add a sentence to the tool description warning about possible outages"
+        },
+        {
+          "key": "D",
+          "text": "Return a placeholder record saying \"no data\" so the list is never empty in either case"
+        }
+      ],
+      "answer": "A",
+      "explanation": "Truy vấn chạy thành công nhưng 0 kết quả là thông tin hợp lệ (không nên retry); không truy cập được nguồn là lỗi cần đánh dấu isError kèm loại lỗi và khả năng retry. Gộp hai trường hợp khiến agent kết luận sai.",
+      "optionExplanations": {
+        "A": "Đúng — phân biệt rõ empty-success và access-failure.",
+        "B": "Sai — biến kết quả rỗng hợp lệ thành lỗi, gây retry vô ích.",
+        "C": "Sai — model vẫn không phân biệt được hai trường hợp ở runtime.",
+        "D": "Sai — vẫn mập mờ, và còn chèn bản ghi giả."
+      },
+      "keyTakeaway": "Rỗng thành công ≠ truy cập thất bại; lỗi phải có isError và metadata."
+    },
+    {
+      "id": "mock-08-q31",
+      "number": 31,
+      "scenarioId": "S5",
+      "domain": 3,
+      "domainName": "Claude Code Configuration & Workflows",
+      "taskStatement": "3.6",
+      "lesson": "3-6_ci-cd-integration",
+      "concept": "Noninteractive print -p",
+      "difficulty": "easy",
+      "question": "Kestrel's GitHub Actions job runs claude \"Review the diff in pr.diff and list problems\" and hangs until the 30-minute job timeout. What is the correct fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Set the environment variable CLAUDE_HEADLESS=1 before invoking the claude command"
+        },
+        {
+          "key": "B",
+          "text": "Pipe the output of the yes command into claude so that any interactive prompts are answered automatically"
+        },
+        {
+          "key": "C",
+          "text": "Invoke claude -p \"Review the diff in pr.diff and list problems\" so it runs non-interactively"
+        },
+        {
+          "key": "D",
+          "text": "Add the --verbose flag so the job emits progress output and the runner does not time out"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Không có -p, Claude Code khởi động phiên tương tác và chờ input từ terminal. claude -p (print mode) chạy prompt, in kết quả và thoát — đúng cho CI.",
+      "optionExplanations": {
+        "A": "Sai — CLAUDE_HEADLESS là biến không có thật.",
+        "B": "Sai — mẹo shell không biến phiên tương tác thành chế độ non-interactive đúng nghĩa.",
+        "C": "Đúng — -p là chế độ non-interactive.",
+        "D": "Sai — --verbose chỉ tăng log, không ngăn chờ input."
+      },
+      "keyTakeaway": "CI → claude -p; không có flag 'headless' bịa đặt."
+    },
+    {
+      "id": "mock-08-q32",
+      "number": 32,
+      "scenarioId": "S5",
+      "domain": 3,
+      "domainName": "Claude Code Configuration & Workflows",
+      "taskStatement": "3.6",
+      "lesson": "3-6_ci-cd-integration",
+      "concept": "Machine-readable result",
+      "difficulty": "medium",
+      "question": "Kestrel's CI step must post inline PR comments, so it needs file, line, severity and message for every finding. The current script applies regular expressions to Claude's prose output and breaks whenever the wording changes. What is the MOST robust approach?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Ask in the prompt to \"respond only in valid JSON\" and then run JSON.parse on the raw stdout of the job"
+        },
+        {
+          "key": "B",
+          "text": "Use --output-format json with --json-schema and read structured_output from the result envelope"
+        },
+        {
+          "key": "C",
+          "text": "Use --output-format stream-json and concatenate the text deltas into one final report"
+        },
+        {
+          "key": "D",
+          "text": "Keep the regex parser but add few-shot examples that fix the exact prose format to use"
+        }
+      ],
+      "answer": "B",
+      "explanation": "--output-format json trả về một envelope có metadata; khi kèm --json-schema, kết quả đã được validate theo schema nằm trong trường structured_output. CI parse envelope thay vì đoán từ văn xuôi.",
+      "optionExplanations": {
+        "A": "Sai — chỉ dặn trong prompt không đảm bảo, stdout có thể lẫn văn bản.",
+        "B": "Đúng — schema-validated structured_output trong envelope JSON.",
+        "C": "Sai — ghép text delta vẫn là văn xuôi, không có cấu trúc.",
+        "D": "Sai — regex trên văn xuôi vẫn mong manh."
+      },
+      "keyTakeaway": "CI cần dữ liệu có cấu trúc → --output-format json + --json-schema, đọc structured_output."
+    },
+    {
+      "id": "mock-08-q33",
+      "number": 33,
+      "scenarioId": "S5",
+      "domain": 4,
+      "domainName": "Prompt Engineering & Structured Output",
+      "taskStatement": "4.1",
+      "lesson": "4-1_system-prompts-with-explicit-criteria",
+      "concept": "Explicit categorical standards",
+      "difficulty": "medium",
+      "question": "Kestrel's PR reviewer prompt says \"Be conservative and only report important issues.\" It still marks import ordering and variable naming as critical, burying real defects. What is the MOST effective prompt change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Change the wording to \"only report issues you are highly confident about\""
+        },
+        {
+          "key": "B",
+          "text": "Define report categories (bugs, security, data loss) with concrete triggers and explicitly skip style"
+        },
+        {
+          "key": "C",
+          "text": "Lower the sampling temperature to 0 so that the reviewer's severity judgments become fully deterministic"
+        },
+        {
+          "key": "D",
+          "text": "Post-filter findings so anything the model scores below 0.9 confidence is discarded"
+        }
+      ],
+      "answer": "B",
+      "explanation": "'Bảo thủ' hay 'quan trọng' là tiêu chí mơ hồ. Định nghĩa rõ loại cần báo (bug logic, bảo mật, mất dữ liệu) với trigger cụ thể và loại cần bỏ qua (style do linter xử lý) cho kết quả nhất quán.",
+      "optionExplanations": {
+        "A": "Sai — confidence tự đánh giá không thay thế tiêu chí phân loại.",
+        "B": "Đúng — tiêu chí phân loại tường minh report/skip.",
+        "C": "Sai — giảm temperature làm nhất quán hơn nhưng vẫn theo tiêu chí sai.",
+        "D": "Sai — điểm tự tin chưa hiệu chuẩn, không lọc đúng loại."
+      },
+      "keyTakeaway": "Thay 'hãy thận trọng' bằng danh mục report/skip cụ thể có trigger rõ ràng."
+    },
+    {
+      "id": "mock-08-q34",
+      "number": 34,
+      "scenarioId": "S5",
+      "domain": 4,
+      "domainName": "Prompt Engineering & Structured Output",
+      "taskStatement": "4.1",
+      "lesson": "4-1_system-prompts-with-explicit-criteria",
+      "concept": "False positive trust",
+      "difficulty": "hard",
+      "question": "Kestrel's reviewer has a \"documentation mismatch\" category with roughly 70% false positives. Developers have started dismissing all bot comments without reading, including two real SQL injection findings last month. What is the BEST immediate action?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep every category enabled for completeness and add a disclaimer to each bot comment"
+        },
+        {
+          "key": "B",
+          "text": "Raise the severity label on security findings so that they stand out from the others"
+        },
+        {
+          "key": "C",
+          "text": "Temporarily disable the noisy documentation category while refining its criteria"
+        },
+        {
+          "key": "D",
+          "text": "Require developers to reply to every bot comment before the PR is allowed to merge"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Một loại finding nhiễu làm xói mòn niềm tin vào toàn bộ bot, kể cả loại giá trị cao. Tạm tắt loại nhiễu để khôi phục niềm tin, rồi tinh chỉnh tiêu chí trước khi bật lại.",
+      "optionExplanations": {
+        "A": "Sai — giữ nhiễu tiếp tục làm developer bỏ qua mọi thứ.",
+        "B": "Sai — nhãn nổi bật không giải quyết sự mệt mỏi do false positive.",
+        "C": "Đúng — tắt loại nhiễu, tinh chỉnh tiêu chí, bảo vệ niềm tin.",
+        "D": "Sai — tăng gánh nặng, developer sẽ trả lời qua loa."
+      },
+      "keyTakeaway": "False positive cao ở một loại làm mất niềm tin toàn hệ thống → tạm tắt và tinh chỉnh."
+    },
+    {
+      "id": "mock-08-q35",
+      "number": 35,
+      "scenarioId": "S5",
+      "domain": 4,
+      "domainName": "Prompt Engineering & Structured Output",
+      "taskStatement": "4.6",
+      "lesson": "4-6_multi-instance-and-multi-pass-review",
+      "concept": "Independent reviewer",
+      "difficulty": "medium",
+      "question": "In Kestrel's pipeline, one claude -p session generates a fix for a failing test, and then, in the same session, is asked \"Review your change for bugs.\" It approves its own changes almost every time, including some that later fail in production. What is the BEST change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Run a separate, fresh claude -p reviewer invocation that receives only the diff and review criteria"
+        },
+        {
+          "key": "B",
+          "text": "Add \"be highly critical and skeptical of your own work\" to the review prompt within the same session"
+        },
+        {
+          "key": "C",
+          "text": "Ask the same session to review its change twice and approve only when both reviews pass"
+        },
+        {
+          "key": "D",
+          "text": "Increase the maximum number of turns so the session has more time to review itself"
+        }
+      ],
+      "answer": "A",
+      "explanation": "Cùng session mang theo lập luận lúc sinh code nên bị anchoring/confirmation bias. Một reviewer độc lập ở phiên mới, chỉ nhận diff và tiêu chí, đánh giá khách quan hơn.",
+      "optionExplanations": {
+        "A": "Đúng — reviewer độc lập, không thừa hưởng lập luận của generator.",
+        "B": "Sai — lời nhắc không xóa được thiên kiến từ context sẵn có.",
+        "C": "Sai — review hai lần trong cùng context vẫn cùng thiên kiến.",
+        "D": "Sai — thêm lượt không thay đổi bản chất tự đánh giá."
+      },
+      "keyTakeaway": "Generator không nên tự review — dùng phiên reviewer độc lập."
+    },
+    {
+      "id": "mock-08-q36",
+      "number": 36,
+      "scenarioId": "S5",
+      "domain": 4,
+      "domainName": "Prompt Engineering & Structured Output",
+      "taskStatement": "4.6",
+      "lesson": "4-6_multi-instance-and-multi-pass-review",
+      "concept": "Cross-pass contradiction",
+      "difficulty": "hard",
+      "question": "Kestrel reviews each changed file in a separate parallel pass. In one PR, the same raw SQL string concatenation pattern is flagged as critical injection risk in orders.ts but accepted as fine in reports.ts. Both results are posted as-is. What is the BEST improvement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Post both results unchanged, because each per-file reviewer had valid local context"
+        },
+        {
+          "key": "B",
+          "text": "Drop the orders.ts finding so the bot's verdict stays consistent with what the majority of per-file reviewers decided"
+        },
+        {
+          "key": "C",
+          "text": "Re-run each per-file review at a higher temperature to sample several more opinions"
+        },
+        {
+          "key": "D",
+          "text": "Add an aggregation pass that detects contradictory verdicts and adjudicates them on evidence"
+        }
+      ],
+      "answer": "D",
+      "explanation": "Review song song theo file có thể đưa ra phán quyết mâu thuẫn cho cùng một pattern. Cần bước tích hợp để phát hiện mâu thuẫn và phân xử dựa trên bằng chứng (vd: input có đến từ người dùng không) trước khi công bố.",
+      "optionExplanations": {
+        "A": "Sai — công bố mâu thuẫn làm developer mất niềm tin và không biết đâu đúng.",
+        "B": "Sai — chọn theo đa số không dựa trên bằng chứng, có thể bỏ lỗ hổng thật.",
+        "C": "Sai — tăng ngẫu nhiên không giải quyết việc thiếu đối chiếu.",
+        "D": "Đúng — adjudication pass so sánh bằng chứng giữa các file."
+      },
+      "keyTakeaway": "Kết quả các pass mâu thuẫn → đối chiếu và phân xử trước khi công bố."
+    },
+    {
+      "id": "mock-08-q37",
+      "number": 37,
+      "scenarioId": "S5",
+      "domain": 1,
+      "domainName": "Agentic Architecture & Orchestration",
+      "taskStatement": "1.6",
+      "lesson": "1-6_task-decomposition-strategies",
+      "concept": "Attention dilution",
+      "difficulty": "medium",
+      "question": "A Kestrel PR touches 18 files, and the CI reviewer receives all of them in a single prompt. The first few files receive detailed, accurate comments, while the last ten receive only superficial remarks. What is the BEST redesign?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Review each file in its own focused pass, then run a separate cross-file integration pass"
+        },
+        {
+          "key": "B",
+          "text": "Use a model with a larger context window so all 18 files fit with plenty of room to spare"
+        },
+        {
+          "key": "C",
+          "text": "Reverse the file order on alternate runs so every file eventually gets detailed attention"
+        },
+        {
+          "key": "D",
+          "text": "Instruct the reviewer explicitly to \"give equal attention to every file in the diff\""
+        }
+      ],
+      "answer": "A",
+      "explanation": "Một lượt duy nhất trên nhiều mục gây loãng chú ý: các mục sau bị xem lướt. Tách thành pass tập trung cho từng file, cộng thêm một pass tích hợp xuyên file để bắt lỗi giữa các module.",
+      "optionExplanations": {
+        "A": "Đúng — per-file pass + integration pass.",
+        "B": "Sai — vừa context không có nghĩa là chú ý đều.",
+        "C": "Sai — mỗi lần chạy vẫn có file bị xem lướt.",
+        "D": "Sai — lời nhắc không khắc phục giới hạn chú ý."
+      },
+      "keyTakeaway": "Nhiều file trong một lượt → loãng chú ý; tách per-file rồi tích hợp."
+    },
+    {
+      "id": "mock-08-q38",
+      "number": 38,
+      "scenarioId": "S5",
+      "domain": 1,
+      "domainName": "Agentic Architecture & Orchestration",
+      "taskStatement": "1.6",
+      "lesson": "1-6_task-decomposition-strategies",
+      "concept": "Cross-item integration",
+      "difficulty": "medium",
+      "question": "All per-file reviews of a Kestrel PR came back clean. After merge, orders-service started sending amount_cents (integer cents) while billing-service still expects amount (decimal dollars), causing overcharges. What was missing from the review process?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A stricter per-file prompt that checks every variable name for naming consistency"
+        },
+        {
+          "key": "B",
+          "text": "A larger batch of files given to each per-file reviewer so it sees more code at once"
+        },
+        {
+          "key": "C",
+          "text": "An integration pass reviewing interfaces and contracts across the changed services"
+        },
+        {
+          "key": "D",
+          "text": "A rule requiring each per-file reviewer to read the entire repository before commenting"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Pass cục bộ chỉ thấy từng file nên không phát hiện lệch hợp đồng giữa các service. Cần pass tích hợp riêng xem xét interface/contract dựa trên kết quả cục bộ và các định nghĩa API.",
+      "optionExplanations": {
+        "A": "Sai — mỗi file tự nó nhất quán; vấn đề nằm ở giao diện giữa chúng.",
+        "B": "Sai — gộp file lại gây loãng chú ý mà không có mục tiêu kiểm tra contract.",
+        "C": "Đúng — integration pass cho hợp đồng xuyên module.",
+        "D": "Sai — tốn kém và vẫn không có bước đối chiếu contract chuyên biệt."
+      },
+      "keyTakeaway": "File đúng riêng lẻ ≠ hệ thống nhất quán — cần integration pass cho contract."
+    },
+    {
+      "id": "mock-08-q39",
+      "number": 39,
+      "scenarioId": "S5",
+      "domain": 4,
+      "domainName": "Prompt Engineering & Structured Output",
+      "taskStatement": "4.5",
+      "lesson": "4-5_batch-processing-strategies",
+      "concept": "Latency fit",
+      "difficulty": "easy",
+      "question": "Kestrel's finance team proposes moving all Claude jobs to the Message Batches API for the cost discount, including the blocking pre-merge PR review that developers wait on. What is the BEST response?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move everything to batch, because in practice batch results normally arrive within a few minutes anyway"
+        },
+        {
+          "key": "B",
+          "text": "Move pre-merge reviews to batch and let developers merge while the results are pending"
+        },
+        {
+          "key": "C",
+          "text": "Keep everything synchronous, since the Batches API does not support the same models"
+        },
+        {
+          "key": "D",
+          "text": "Keep blocking pre-merge reviews synchronous and move non-blocking jobs like nightly audits to batch"
+        }
+      ],
+      "answer": "D",
+      "explanation": "Batch rẻ hơn nhưng có thể mất tới 24 giờ và không có SLA độ trễ. Việc chặn developer (pre-merge) cần đường đồng bộ; việc không gấp (audit hằng đêm, báo cáo nợ kỹ thuật) phù hợp với batch.",
+      "optionExplanations": {
+        "A": "Sai — không có đảm bảo độ trễ; developer có thể bị chặn hàng giờ.",
+        "B": "Sai — merge trước khi review xong làm mất ý nghĩa cổng kiểm tra.",
+        "C": "Sai — Batches API hỗ trợ các model; lý do loại bỏ sai.",
+        "D": "Đúng — chọn theo yêu cầu độ trễ của từng loại việc."
+      },
+      "keyTakeaway": "Việc chặn người dùng → synchronous; việc không gấp → Message Batches."
+    },
+    {
+      "id": "mock-08-q40",
+      "number": 40,
+      "scenarioId": "S5",
+      "domain": 2,
+      "domainName": "Tool Design & MCP Integration",
+      "taskStatement": "2.4",
+      "lesson": "2-4_mcp-server-integration",
+      "concept": "Secrets via environment variables",
+      "difficulty": "easy",
+      "question": "Both Kestrel's CI reviewer and every developer need the same internal Jira MCP server, but each must authenticate with their own token. Which configuration is BEST?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Each developer adds the server to ~/.claude.json with their personal token, and CI does the same"
+        },
+        {
+          "key": "B",
+          "text": "Commit a project .mcp.json referencing ${JIRA_TOKEN}, supplied per developer or from a CI secret"
+        },
+        {
+          "key": "C",
+          "text": "Commit .mcp.json with one shared service-account token embedded so setup takes a single step for everyone"
+        },
+        {
+          "key": "D",
+          "text": "Describe the server URL and token location in CLAUDE.md so Claude knows how to connect"
+        }
+      ],
+      "answer": "B",
+      "explanation": ".mcp.json ở project được commit để cả team (và CI) dùng chung cấu hình; token tham chiếu qua biến môi trường ${JIRA_TOKEN} nên không lộ secret và mỗi người dùng token riêng.",
+      "optionExplanations": {
+        "A": "Sai — cấu hình cá nhân phân tán, không có nguồn chung cho team.",
+        "B": "Đúng — .mcp.json chung + env interpolation cho secret.",
+        "C": "Sai — commit token literal là lỗ hổng bảo mật.",
+        "D": "Sai — CLAUDE.md không cấu hình MCP server."
+      },
+      "keyTakeaway": "MCP dùng chung → .mcp.json commit + ${TOKEN}, không commit secret."
+    },
+    {
+      "id": "mock-08-q41",
+      "number": 41,
+      "scenarioId": "S5",
+      "domain": 2,
+      "domainName": "Tool Design & MCP Integration",
+      "taskStatement": "2.5",
+      "lesson": "2-5_built-in-tools",
+      "concept": "Grep versus Glob",
+      "difficulty": "easy",
+      "question": "A Kestrel audit job must (1) list every file named *.spec.ts under src/ and (2) find every call to the deprecated function legacyAuth(. Which use of built-in tools is MOST appropriate?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Grep for both, using \"spec.ts\" and \"legacyAuth\\(\" as content patterns"
+        },
+        {
+          "key": "B",
+          "text": "Glob for both, using \"**/*legacyAuth*\" to locate the function calls"
+        },
+        {
+          "key": "C",
+          "text": "Read every file under src/ and then search for both of the patterns within the loaded context"
+        },
+        {
+          "key": "D",
+          "text": "Glob \"src/**/*.spec.ts\" for the file list, and Grep \"legacyAuth\\(\" for call sites"
+        }
+      ],
+      "answer": "D",
+      "explanation": "Glob khớp đường dẫn/tên file; Grep tìm trong nội dung file. Danh sách file theo mẫu tên dùng Glob, tìm lời gọi hàm dùng Grep.",
+      "optionExplanations": {
+        "A": "Sai — grep 'spec.ts' tìm nội dung chứa chuỗi đó, không liệt kê file theo tên.",
+        "B": "Sai — Glob không tìm trong nội dung file.",
+        "C": "Sai — đọc toàn bộ file tốn context không cần thiết.",
+        "D": "Đúng — Glob cho tên file, Grep cho nội dung."
+      },
+      "keyTakeaway": "Glob = tên/đường dẫn file; Grep = nội dung file."
+    },
+    {
+      "id": "mock-08-q42",
+      "number": 42,
+      "scenarioId": "S5",
+      "domain": 1,
+      "domainName": "Agentic Architecture & Orchestration",
+      "taskStatement": "1.5",
+      "lesson": "1-5_agent-sdk-hooks",
+      "concept": "PreToolUse policy gate",
+      "difficulty": "hard",
+      "question": "Kestrel's Agent SDK auto-fix bot must never modify files under infra/prod/. Today a PostToolUse hook detects such edits and runs git checkout to revert them, but occasionally a later step commits the change before the revert completes. What is the BEST fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the PostToolUse hook but run git checkout after every tool call, not only after edits"
+        },
+        {
+          "key": "B",
+          "text": "Add a PreToolUse hook on Edit and Write that denies any file_path under infra/prod/"
+        },
+        {
+          "key": "C",
+          "text": "State \"never edit infra/prod/\" in both the system prompt and the repository CLAUDE.md"
+        },
+        {
+          "key": "D",
+          "text": "Increase the maximum number of turns so the revert step always has time to complete"
+        }
+      ],
+      "answer": "B",
+      "explanation": "PostToolUse chạy sau khi side effect đã xảy ra nên chỉ có thể sửa chữa, không ngăn được. Chính sách cấm phải đặt ở PreToolUse để từ chối lời gọi trước khi tool thực thi.",
+      "optionExplanations": {
+        "A": "Sai — vẫn là hoàn tác sau sự việc, còn race condition.",
+        "B": "Đúng — chặn trước khi thực thi bằng PreToolUse.",
+        "C": "Sai — prompt mang tính xác suất, không đảm bảo bất biến.",
+        "D": "Sai — không liên quan đến việc ngăn chỉnh sửa."
+      },
+      "keyTakeaway": "Muốn ngăn hành động → PreToolUse; PostToolUse không hủy được side effect đã xảy ra."
+    },
+    {
+      "id": "mock-08-q43",
+      "number": 43,
+      "scenarioId": "S5",
+      "domain": 4,
+      "domainName": "Prompt Engineering & Structured Output",
+      "taskStatement": "4.4",
+      "lesson": "4-4_validation-retry-and-feedback-loops",
+      "concept": "Track disagreement patterns",
+      "difficulty": "medium",
+      "question": "Developers frequently dismiss Kestrel bot comments about \"unused variables in destructuring assignments,\" while other categories are usually accepted. The team wants the reviewer to improve over time. What is the BEST approach?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Record each finding's detected_pattern and dismissals, then refine criteria for high-dismissal patterns"
+        },
+        {
+          "key": "B",
+          "text": "Automatically delete dismissed comments so that the PR history looks cleaner to reviewers"
+        },
+        {
+          "key": "C",
+          "text": "Raise the global confidence threshold so the bot posts fewer comments in every category"
+        },
+        {
+          "key": "D",
+          "text": "Require developers to write a short justification before they are allowed to dismiss any of the bot's comments"
+        }
+      ],
+      "answer": "A",
+      "explanation": "Ghi lại pattern và lịch sử bị từ chối giúp xác định chính xác loại finding nào gây nhiễu, từ đó tinh chỉnh tiêu chí và ví dụ cho đúng loại đó thay vì thay đổi toàn cục.",
+      "optionExplanations": {
+        "A": "Đúng — dữ liệu dismissal theo pattern dẫn dắt việc tinh chỉnh.",
+        "B": "Sai — xóa lịch sử làm mất tín hiệu để cải thiện.",
+        "C": "Sai — thay đổi toàn cục làm mất cả finding giá trị.",
+        "D": "Sai — tăng ma sát mà không cải thiện reviewer."
+      },
+      "keyTakeaway": "Theo dõi detected_pattern + dismissal để tinh chỉnh tiêu chí có mục tiêu."
+    },
+    {
+      "id": "mock-08-q44",
+      "number": 44,
+      "scenarioId": "S5",
+      "domain": 2,
+      "domainName": "Tool Design & MCP Integration",
+      "taskStatement": "2.1",
+      "lesson": "2-1_tool-interface-design",
+      "concept": "Overlap diagnosis",
+      "difficulty": "medium",
+      "question": "Kestrel's CI agent has five tools. Two of them, get_pr_diff and get_file_at_ref, both have the description \"Get code from the repository.\" The agent often downloads full files when it only needs the diff. What is the BEST first step?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Build a keyword-based router that chooses between the two tools before calling Claude"
+        },
+        {
+          "key": "B",
+          "text": "Merge both tools into one generic get_code tool with an optional mode argument"
+        },
+        {
+          "key": "C",
+          "text": "Rewrite both descriptions to state inputs, outputs, when to use each and when to prefer the other"
+        },
+        {
+          "key": "D",
+          "text": "Add eight few-shot examples demonstrating correct tool selection between the two tools to the system prompt"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Với số tool ít, nhầm lẫn thường do mô tả trùng lặp. Bước đầu hiệu quả nhất là viết lại ranh giới: đầu vào, đầu ra, khi nào dùng và khi nào dùng tool kia.",
+      "optionExplanations": {
+        "A": "Sai — xây router ngoài là phức tạp hóa trước khi sửa nguyên nhân gốc.",
+        "B": "Sai — gộp tạo tool mơ hồ hơn với hai ý định khác nhau.",
+        "C": "Đúng — sửa mô tả để phân định rõ ranh giới.",
+        "D": "Sai — few-shot vá triệu chứng, mô tả vẫn mơ hồ."
+      },
+      "keyTakeaway": "Hai tool mô tả gần giống nhau → viết lại ranh giới mô tả trước khi làm gì khác."
+    },
+    {
+      "id": "mock-08-q45",
+      "number": 45,
+      "scenarioId": "S5",
+      "domain": 2,
+      "domainName": "Tool Design & MCP Integration",
+      "taskStatement": "2.3",
+      "lesson": "2-3_tool-distribution-tool-choice",
+      "concept": "Tool overload",
+      "difficulty": "medium",
+      "question": "Kestrel's CI review agent is connected to MCP servers exposing 25 tools (Jira, Slack, deployment, database admin, GitHub, metrics). It frequently picks irrelevant tools, such as querying metrics during a code review. What is the BEST fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Split the 25 tools across three separate MCP servers while still exposing all of the servers to the agent"
+        },
+        {
+          "key": "B",
+          "text": "List all 25 tools in the system prompt, ranked by how often each one should be used"
+        },
+        {
+          "key": "C",
+          "text": "Restrict the review agent to the few tools its role needs, giving other roles their own sets"
+        },
+        {
+          "key": "D",
+          "text": "Rename the tools with numeric prefixes so the model can order and scan them more easily"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Quá nhiều tool hiển thị làm giảm chất lượng chọn tool. Giới hạn tool theo vai trò (review chỉ cần diff, đọc file, comment) vừa tăng độ chính xác vừa theo nguyên tắc quyền tối thiểu.",
+      "optionExplanations": {
+        "A": "Sai — chia server nhưng vẫn lộ 25 tool cho agent, không giảm quá tải.",
+        "B": "Sai — model vẫn phải chọn trong 25 tool.",
+        "C": "Đúng — giới hạn tool theo vai trò.",
+        "D": "Sai — đổi tên không giảm số lựa chọn."
+      },
+      "keyTakeaway": "Agent thấy quá nhiều tool → giới hạn theo vai trò."
+    },
+    {
+      "id": "mock-08-q46",
+      "number": 46,
+      "scenarioId": "S6",
+      "domain": 4,
+      "domainName": "Prompt Engineering & Structured Output",
+      "taskStatement": "4.3",
+      "lesson": "4-3_structured-output-with-tool-use",
+      "concept": "Tool schema versus semantics",
+      "difficulty": "easy",
+      "question": "Northwind's accounts-payable pipeline extracts invoices through a tool with a strict JSON schema. Every output is schema-valid, but about 4% of invoices have a total that does not equal the sum of their line items. A manager argues the schema should already prevent this. What is the BEST fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Make total a required number field with a minimum of 0 in the tool's input schema"
+        },
+        {
+          "key": "B",
+          "text": "Add \"double-check your arithmetic before calling the tool\" to the extraction prompt"
+        },
+        {
+          "key": "C",
+          "text": "Enable strict tool mode so the model is constrained to compute the sums correctly"
+        },
+        {
+          "key": "D",
+          "text": "Add deterministic code that checks line items against the total and routes mismatches"
+        }
+      ],
+      "answer": "D",
+      "explanation": "Schema chỉ ràng buộc kiểu và cấu trúc, không đảm bảo tính đúng về số học hay dữ kiện. Kiểm tra tổng bằng code tất định là cách duy nhất chắc chắn bắt lỗi này.",
+      "optionExplanations": {
+        "A": "Sai — ràng buộc kiểu không kiểm tra quan hệ giữa các trường.",
+        "B": "Sai — lời nhắc vẫn mang tính xác suất.",
+        "C": "Sai — strict mode đảm bảo khớp schema, không đảm bảo số học đúng.",
+        "D": "Đúng — validator tất định cho quan hệ số học."
+      },
+      "keyTakeaway": "Schema-valid ≠ đúng; kiểm tra số học bằng code."
+    },
+    {
+      "id": "mock-08-q47",
+      "number": 47,
+      "scenarioId": "S6",
+      "domain": 4,
+      "domainName": "Prompt Engineering & Structured Output",
+      "taskStatement": "4.3",
+      "lesson": "4-3_structured-output-with-tool-use",
+      "concept": "Nullable optional fields",
+      "difficulty": "easy",
+      "question": "Northwind's contract extraction schema marks delivery_date as a required string. For contracts that never state a delivery date, the model outputs plausible-looking dates such as the signing date plus 30 days. What is the BEST fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a prompt rule saying \"never guess dates\" while keeping the field required"
+        },
+        {
+          "key": "B",
+          "text": "Make delivery_date nullable and instruct the model to return null when it is not stated"
+        },
+        {
+          "key": "C",
+          "text": "Keep the field required but add a strict YYYY-MM-DD regex pattern to the schema"
+        },
+        {
+          "key": "D",
+          "text": "Give the field a default value of 1900-01-01 that downstream systems interpret as a missing delivery date"
+        }
+      ],
+      "answer": "B",
+      "explanation": "Trường bắt buộc tạo áp lực buộc model bịa giá trị khi tài liệu không có. Cho phép null (hoặc optional) với ngữ nghĩa 'không có trong tài liệu' loại bỏ áp lực đó.",
+      "optionExplanations": {
+        "A": "Sai — schema vẫn ép phải có giá trị, mâu thuẫn với lời nhắc.",
+        "B": "Đúng — nullable với ngữ nghĩa thiếu dữ liệu rõ ràng.",
+        "C": "Sai — regex chỉ kiểm tra định dạng, ngày bịa vẫn hợp lệ.",
+        "D": "Sai — giá trị ma thuật dễ bị hệ thống downstream hiểu nhầm."
+      },
+      "keyTakeaway": "Dữ liệu có thể vắng mặt → cho phép null, đừng ép model bịa."
+    },
+    {
+      "id": "mock-08-q48",
+      "number": 48,
+      "scenarioId": "S6",
+      "domain": 2,
+      "domainName": "Tool Design & MCP Integration",
+      "taskStatement": "2.3",
+      "lesson": "2-3_tool-distribution-tool-choice",
+      "concept": "tool_choice semantics",
+      "difficulty": "medium",
+      "question": "Northwind's pipeline exposes three extractor tools: extract_invoice, extract_purchase_order and extract_credit_note. The document type is not known before the call. With tool_choice set to auto, about 6% of responses are prose such as \"This appears to be a credit note.\" What is the BEST change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Set tool_choice to {\"type\": \"any\"} so the model must call one of the extractor tools"
+        },
+        {
+          "key": "B",
+          "text": "Set tool_choice to force extract_invoice for every document and convert the types later in code"
+        },
+        {
+          "key": "C",
+          "text": "Keep auto and simply retry every response that does not contain a tool_use block"
+        },
+        {
+          "key": "D",
+          "text": "Add \"You must always call a tool\" to the system prompt and keep tool_choice auto"
+        }
+      ],
+      "answer": "A",
+      "explanation": "tool_choice auto cho phép trả lời bằng văn xuôi; any buộc model gọi một trong các tool có sẵn mà vẫn tự chọn tool phù hợp; named tool ép một tool cụ thể. Khi loại tài liệu chưa biết nhưng bắt buộc có output có cấu trúc, any là lựa chọn đúng.",
+      "optionExplanations": {
+        "A": "Đúng — any bắt buộc gọi tool, model chọn extractor phù hợp.",
+        "B": "Sai — ép extract_invoice cho credit note gây sai schema.",
+        "C": "Sai — retry tốn chi phí và không đảm bảo.",
+        "D": "Sai — lời nhắc không đảm bảo như tool_choice."
+      },
+      "keyTakeaway": "Loại chưa biết nhưng bắt buộc có output cấu trúc → tool_choice any."
+    },
+    {
+      "id": "mock-08-q49",
+      "number": 49,
+      "scenarioId": "S6",
+      "domain": 4,
+      "domainName": "Prompt Engineering & Structured Output",
+      "taskStatement": "4.3",
+      "lesson": "4-3_structured-output-with-tool-use",
+      "concept": "Ambiguity enums",
+      "difficulty": "medium",
+      "question": "Northwind's schema has document_type with enum [\"invoice\", \"receipt\"]. Pro-forma quotes are being forced into \"invoice\", and several were paid by mistake. What is the BEST schema change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add \"other\" (with a document_type_detail string) and \"unclear\" to the enum for non-fitting documents"
+        },
+        {
+          "key": "B",
+          "text": "Add few-shot examples showing pro-forma quotes classified as invoices, each accompanied by a warning flag"
+        },
+        {
+          "key": "C",
+          "text": "Change document_type into a free-text string so that any category name can be returned"
+        },
+        {
+          "key": "D",
+          "text": "Treat any extracted invoice with a total below a set threshold as a receipt in post-processing"
+        }
+      ],
+      "answer": "A",
+      "explanation": "Enum đóng ép model chọn giá trị gần nhất dù không phù hợp. Thêm 'other' kèm trường mô tả và 'unclear' cho phép biểu đạt sự không chắc chắn, để downstream xử lý đúng (vd: không thanh toán, chuyển review).",
+      "optionExplanations": {
+        "A": "Đúng — other + detail và unclear cho tài liệu không khớp.",
+        "B": "Sai — dạy model tiếp tục phân loại sai.",
+        "C": "Sai — mất kiểm soát giá trị, khó xử lý downstream.",
+        "D": "Sai — heuristic theo số tiền không liên quan đến loại tài liệu."
+      },
+      "keyTakeaway": "Enum cần lối thoát 'other'/'unclear' để không ép phân loại sai."
+    },
+    {
+      "id": "mock-08-q50",
+      "number": 50,
+      "scenarioId": "S6",
+      "domain": 4,
+      "domainName": "Prompt Engineering & Structured Output",
+      "taskStatement": "4.4",
+      "lesson": "4-4_validation-retry-and-feedback-loops",
+      "concept": "Feedback-aware retry",
+      "difficulty": "medium",
+      "question": "Northwind's validator detects that extracted line items sum to 450.00 while the stated total is 500.00. The current retry simply re-sends the original extraction prompt, and the same error recurs. What is the BEST retry design?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Retry up to five times, increasing the sampling temperature on each new attempt"
+        },
+        {
+          "key": "B",
+          "text": "Retry with the source document, the previous extraction and the exact validation error"
+        },
+        {
+          "key": "C",
+          "text": "Retry with only the validation error message in order to save input tokens"
+        },
+        {
+          "key": "D",
+          "text": "Route every retry to a larger model while keeping the original prompt unchanged"
+        }
+      ],
+      "answer": "B",
+      "explanation": "Retry hiệu quả cần phản hồi cụ thể: tài liệu gốc, kết quả trích xuất sai và lỗi validation chính xác (450 ≠ 500). Model có thể tìm lại dòng bị bỏ sót thay vì lặp lại cùng lỗi.",
+      "optionExplanations": {
+        "A": "Sai — ngẫu nhiên hơn không cung cấp thông tin sửa lỗi.",
+        "B": "Đúng — đủ ba thành phần: nguồn, output sai, lỗi cụ thể.",
+        "C": "Sai — thiếu tài liệu gốc thì không thể sửa đúng.",
+        "D": "Sai — model mạnh hơn vẫn không biết lỗi nằm ở đâu."
+      },
+      "keyTakeaway": "Retry phải kèm nguồn + output sai + lỗi validation cụ thể."
+    },
+    {
+      "id": "mock-08-q51",
+      "number": 51,
+      "scenarioId": "S6",
+      "domain": 4,
+      "domainName": "Prompt Engineering & Structured Output",
+      "taskStatement": "4.2",
+      "lesson": "4-2_few-shot-prompting",
+      "concept": "Narrative extraction coverage",
+      "difficulty": "medium",
+      "question": "Most vendors list the due date in a table, and extraction works. One vendor states it only in a paragraph (\"Payment must be received no later than 15 March 2026\"), and the model returns due_date: null for those invoices. What is the BEST fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Make due_date a required field so the model is forced to fill it in every time"
+        },
+        {
+          "key": "B",
+          "text": "Add an instruction telling the model to \"look carefully at all parts of the document for any dates\""
+        },
+        {
+          "key": "C",
+          "text": "Add a few-shot example extracting a due date from narrative prose next to a table example"
+        },
+        {
+          "key": "D",
+          "text": "Pre-process the documents with OCR so that the paragraphs are turned into tables"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Few-shot nên bao quát cả dạng bảng và dạng văn xuôi. Một ví dụ trích xuất từ câu văn cho model thấy thông tin có thể nằm trong đoạn văn và cách lấy nó ra.",
+      "optionExplanations": {
+        "A": "Sai — bắt buộc trường gây bịa giá trị khi thật sự không có.",
+        "B": "Sai — lời nhắc chung chung, không minh họa được mẫu cần học.",
+        "C": "Đúng — exemplar cho dạng narrative.",
+        "D": "Sai — OCR không chuyển văn xuôi thành bảng có cấu trúc."
+      },
+      "keyTakeaway": "Thông tin nằm trong văn xuôi → thêm few-shot narrative bên cạnh ví dụ bảng."
+    },
+    {
+      "id": "mock-08-q52",
+      "number": 52,
+      "scenarioId": "S6",
+      "domain": 4,
+      "domainName": "Prompt Engineering & Structured Output",
+      "taskStatement": "4.5",
+      "lesson": "4-5_batch-processing-strategies",
+      "concept": "custom_id per request",
+      "difficulty": "easy",
+      "question": "Northwind submitted 5,000 invoices via the Message Batches API and matched each result to its input by array index. Several ERP records received another vendor's data. What is the root cause and fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Batch results expire after 24 hours, so some were stale; download them faster next time"
+        },
+        {
+          "key": "B",
+          "text": "The Batches API may switch models mid-batch; pin an explicit model version in each request"
+        },
+        {
+          "key": "C",
+          "text": "Some requests errored, shifting positions; resubmit the entire batch from the beginning"
+        },
+        {
+          "key": "D",
+          "text": "Result order is not guaranteed; give each invoice a unique custom_id and correlate by it"
+        }
+      ],
+      "answer": "D",
+      "explanation": "Kết quả Message Batches không đảm bảo theo thứ tự đầu vào. Mỗi request cần custom_id duy nhất để ghép kết quả chính xác và chỉ retry những request thất bại.",
+      "optionExplanations": {
+        "A": "Sai — kết quả vẫn truy xuất được lâu hơn 24 giờ; vấn đề là thứ tự.",
+        "B": "Sai — không có chuyện đổi model giữa batch.",
+        "C": "Sai — gửi lại toàn bộ vẫn ghép theo vị trí, lỗi lặp lại.",
+        "D": "Đúng — dùng custom_id để correlate."
+      },
+      "keyTakeaway": "Batch: ghép kết quả bằng custom_id, không bằng vị trí mảng."
+    },
+    {
+      "id": "mock-08-q53",
+      "number": 53,
+      "scenarioId": "S6",
+      "domain": 5,
+      "domainName": "Context Management & Reliability",
+      "taskStatement": "5.5",
+      "lesson": "5-5_human-review-confidence-calibration",
+      "concept": "Segment-level evaluation",
+      "difficulty": "medium",
+      "question": "On Northwind's validation set, overall field accuracy is 97%, and a proposal says to auto-approve all extractions since the target is 95%. Handwritten delivery notes are 5% of volume, and international invoices another 12%. What should happen BEFORE deciding?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Approve the proposal, because overall accuracy already exceeds the 95% target"
+        },
+        {
+          "key": "B",
+          "text": "Auto-approve everything but sample 1% of all documents uniformly at random for a human audit afterward"
+        },
+        {
+          "key": "C",
+          "text": "Raise the target to 99% overall before allowing any extraction to be auto-approved"
+        },
+        {
+          "key": "D",
+          "text": "Measure accuracy per document type and field, auto-approving only segments that meet the bar"
+        }
+      ],
+      "answer": "D",
+      "explanation": "Độ chính xác tổng thể có thể che giấu các phân khúc kém (viết tay, hóa đơn quốc tế). Cần đo theo loại tài liệu và theo trường, chỉ tự động duyệt những phân khúc đạt chuẩn.",
+      "optionExplanations": {
+        "A": "Sai — 97% tổng có thể ứng với phân khúc viết tay chỉ đạt 70%.",
+        "B": "Sai — mẫu ngẫu nhiên 1% quá ít để phát hiện phân khúc nhỏ kém.",
+        "C": "Sai — vẫn là chỉ số tổng, vẫn che giấu phân khúc kém.",
+        "D": "Đúng — đánh giá theo segment trước khi auto-approve."
+      },
+      "keyTakeaway": "Accuracy tổng che giấu segment yếu — đo theo loại tài liệu và trường."
+    },
+    {
+      "id": "mock-08-q54",
+      "number": 54,
+      "scenarioId": "S6",
+      "domain": 5,
+      "domainName": "Context Management & Reliability",
+      "taskStatement": "5.5",
+      "lesson": "5-5_human-review-confidence-calibration",
+      "concept": "Calibration with ground truth",
+      "difficulty": "hard",
+      "question": "Northwind's model emits a confidence score per field, and the plan is to auto-approve fields scored at least 0.95. On 2,000 labeled held-out invoices, amount fields scored 0.95 or higher were correct only 83% of the time. What is the BEST next step?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Raise the threshold to 0.99 for every field without collecting further measurements"
+        },
+        {
+          "key": "B",
+          "text": "Ask the model in its prompt to be noticeably more conservative whenever it assigns confidence scores"
+        },
+        {
+          "key": "C",
+          "text": "Calibrate per-field thresholds on the labeled held-out data to reach the needed empirical accuracy"
+        },
+        {
+          "key": "D",
+          "text": "Keep the 0.95 threshold, because the model itself reports that it is 95% confident"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Điểm tự tin thô của model không phải xác suất đúng thực nghiệm. Phải hiệu chuẩn ngưỡng trên dữ liệu có nhãn, theo từng trường, để chọn cutoff đạt độ chính xác yêu cầu.",
+      "optionExplanations": {
+        "A": "Sai — đổi ngưỡng mù quáng không đảm bảo độ chính xác thực tế.",
+        "B": "Sai — lời nhắc không hiệu chuẩn được điểm số.",
+        "C": "Đúng — hiệu chuẩn bằng ground truth.",
+        "D": "Sai — dữ liệu cho thấy 0.95 chỉ tương ứng 83% đúng."
+      },
+      "keyTakeaway": "Confidence thô ≠ xác suất đúng; hiệu chuẩn trên dữ liệu có nhãn."
+    },
+    {
+      "id": "mock-08-q55",
+      "number": 55,
+      "scenarioId": "S6",
+      "domain": 5,
+      "domainName": "Context Management & Reliability",
+      "taskStatement": "5.1",
+      "lesson": "5-1_context-window-management",
+      "concept": "Tool result trimming",
+      "difficulty": "medium",
+      "question": "While reconciling a 40-invoice vendor statement in one conversation, Northwind's agent calls get_vendor_record, which returns about 60 fields (audit history, previous addresses, contact logs). The task needs only vendor_id, legal_name, tax_id, payment_terms and bank_account_last4. Context grows quickly and the model starts mixing vendors. What is the BEST fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Increase max_tokens so the model has more room in which to reason about each vendor"
+        },
+        {
+          "key": "B",
+          "text": "Trim each tool result to the fields the task needs, keeping vendor_id for provenance"
+        },
+        {
+          "key": "C",
+          "text": "Summarize each vendor record into a single free-text sentence before adding it"
+        },
+        {
+          "key": "D",
+          "text": "Start a brand-new conversation for every single get_vendor_record call"
+        }
+      ],
+      "answer": "B",
+      "explanation": "Chỉ giữ lại các trường cần cho tác vụ hiện tại (kèm định danh để truy vết) giúp context gọn và giảm nhầm lẫn. Kết quả thô đầy đủ tích lũy theo thời gian sẽ làm loãng thông tin quan trọng.",
+      "optionExplanations": {
+        "A": "Sai — max_tokens là giới hạn output, không giảm phình context đầu vào.",
+        "B": "Đúng — cắt trường thừa, giữ định danh.",
+        "C": "Sai — câu văn tóm tắt có thể mất định danh và số chính xác.",
+        "D": "Sai — mất ngữ cảnh đối chiếu giữa các hóa đơn."
+      },
+      "keyTakeaway": "Tool trả quá nhiều trường → cắt còn trường cần thiết, giữ định danh."
+    },
+    {
+      "id": "mock-08-q56",
+      "number": 56,
+      "scenarioId": "S6",
+      "domain": 5,
+      "domainName": "Context Management & Reliability",
+      "taskStatement": "5.2",
+      "lesson": "5-2_escalation-ambiguity-resolution",
+      "concept": "Ambiguous identity",
+      "difficulty": "hard",
+      "question": "When matching invoices to the vendor master, \"Acme Supplies\" matches three vendor records in different countries. The agent currently picks the most recently used record. What is the BEST approach?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Disambiguate with a verified identifier on the invoice (tax ID, IBAN); route to review if none is unique"
+        },
+        {
+          "key": "B",
+          "text": "Keep choosing the most recently active vendor record, since it is usually the correct one"
+        },
+        {
+          "key": "C",
+          "text": "Choose the vendor record whose country matches the currency printed on the invoice"
+        },
+        {
+          "key": "D",
+          "text": "Create a new vendor record for this invoice so that none of the existing vendors is ever chosen incorrectly"
+        }
+      ],
+      "answer": "A",
+      "explanation": "Khi nhiều bản ghi trùng tên, phải phân định bằng định danh đáng tin (mã số thuế, IBAN). Nếu không phân định được duy nhất, chuyển người xem xét thay vì đoán — sai vendor nghĩa là thanh toán nhầm.",
+      "optionExplanations": {
+        "A": "Đúng — dùng định danh đã xác minh, không duy nhất thì escalate.",
+        "B": "Sai — đoán theo độ gần đây có thể thanh toán nhầm người.",
+        "C": "Sai — tiền tệ không phải định danh; nhiều vendor dùng cùng tiền tệ.",
+        "D": "Sai — tạo bản ghi trùng làm bẩn dữ liệu master."
+      },
+      "keyTakeaway": "Trùng tên → phân định bằng định danh xác minh; không được thì chuyển người."
+    },
+    {
+      "id": "mock-08-q57",
+      "number": 57,
+      "scenarioId": "S6",
+      "domain": 2,
+      "domainName": "Tool Design & MCP Integration",
+      "taskStatement": "2.2",
+      "lesson": "2-2_structured-error-responses",
+      "concept": "Transient versus validation",
+      "difficulty": "hard",
+      "question": "Northwind's post_invoice tool returns the plain string \"Error\" for every failure, and the agent retries everything three times. Logs show two common failures: HTTP 503 from the ERP and \"vendor_id format invalid: expected V-######\". What is the BEST redesign?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Return failures as successful empty results so that the agent simply moves on"
+        },
+        {
+          "key": "B",
+          "text": "Return isError with category (transient or validation), retryable flag and an actionable message"
+        },
+        {
+          "key": "C",
+          "text": "Keep the plain error string but increase the retry count to ten for every failure, with a short fixed delay"
+        },
+        {
+          "key": "D",
+          "text": "Throw exceptions from the tool so that the whole pipeline stops on any error"
+        }
+      ],
+      "answer": "B",
+      "explanation": "Lỗi tạm thời (503) nên retry nguyên trạng với backoff; lỗi validation cần sửa đầu vào rồi mới gửi lại. Tool phải trả metadata có cấu trúc (isError, loại lỗi, retryable, thông điệp hành động) để agent xử lý đúng.",
+      "optionExplanations": {
+        "A": "Sai — che giấu lỗi, hóa đơn không được ghi sổ.",
+        "B": "Đúng — metadata lỗi có cấu trúc cho từng loại.",
+        "C": "Sai — retry ID sai định dạng bao nhiêu lần cũng thất bại.",
+        "D": "Sai — dừng toàn pipeline vì lỗi có thể tự phục hồi."
+      },
+      "keyTakeaway": "Transient → retry backoff; validation → sửa input; tool phải báo loại lỗi rõ ràng."
+    },
+    {
+      "id": "mock-08-q58",
+      "number": 58,
+      "scenarioId": "S6",
+      "domain": 1,
+      "domainName": "Agentic Architecture & Orchestration",
+      "taskStatement": "1.4",
+      "lesson": "1-4_workflow-enforcement-and-handoff",
+      "concept": "Risk-based control choice",
+      "difficulty": "medium",
+      "question": "Northwind has two rules: invoices over $10,000 require a second approver before posting to the ERP (a SOX control), and reviewer summaries should use a concise, neutral tone. Both currently live only in the system prompt. What is the BEST arrangement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Enforce the threshold in code so posting rejects unapproved invoices over $10,000; keep tone in the prompt"
+        },
+        {
+          "key": "B",
+          "text": "Keep both rules in the system prompt but move the threshold rule to the top in bold text"
+        },
+        {
+          "key": "C",
+          "text": "Enforce both rules in code, adding a tone classifier that blocks any reviewer summary that it judges to be non-neutral"
+        },
+        {
+          "key": "D",
+          "text": "Move both rules into few-shot examples so the model learns them by demonstration"
+        }
+      ],
+      "answer": "A",
+      "explanation": "Kiểm soát liên quan tiền, bảo mật, tuân thủ quy định phải enforce bằng code (tất định). Hướng dẫn văn phong là mềm, phù hợp để trong prompt.",
+      "optionExplanations": {
+        "A": "Đúng — SOX trong code, văn phong trong prompt.",
+        "B": "Sai — prompt không đảm bảo kiểm soát tài chính bắt buộc.",
+        "C": "Sai — quá mức cần thiết cho văn phong.",
+        "D": "Sai — few-shot vẫn là xác suất cho quy tắc bắt buộc."
+      },
+      "keyTakeaway": "Tiền/quy định → enforce bằng code; văn phong → prompt."
+    },
+    {
+      "id": "mock-08-q59",
+      "number": 59,
+      "scenarioId": "S6",
+      "domain": 1,
+      "domainName": "Agentic Architecture & Orchestration",
+      "taskStatement": "1.5",
+      "lesson": "1-5_agent-sdk-hooks",
+      "concept": "PostToolUse normalization",
+      "difficulty": "medium",
+      "question": "Northwind's agent uses three tools: an OCR service returning dates like \"03/04/2026\" (day first), an ERP lookup returning epoch milliseconds, and an FX service returning ISO 8601 timestamps. The model sometimes swaps day and month. What is the MOST reliable fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Explain each tool's date format in the system prompt so the model can interpret them"
+        },
+        {
+          "key": "B",
+          "text": "Ask the model to convert all dates to ISO 8601 in its reasoning before using them"
+        },
+        {
+          "key": "C",
+          "text": "Add few-shot examples showing each date format alongside its correct interpretation"
+        },
+        {
+          "key": "D",
+          "text": "Add a PostToolUse hook that normalizes every tool's dates to ISO 8601 before the model sees them"
+        }
+      ],
+      "answer": "D",
+      "explanation": "PostToolUse chạy sau khi tool thực thi và trước khi model nhận kết quả, là nơi lý tưởng để chuẩn hóa định dạng bằng code tất định. Không nên để model đoán định dạng mỗi lần.",
+      "optionExplanations": {
+        "A": "Sai — model vẫn phải tự diễn giải, vẫn có thể nhầm.",
+        "B": "Sai — chuyển đổi trong suy luận vẫn mang tính xác suất.",
+        "C": "Sai — giảm lỗi nhưng không loại bỏ.",
+        "D": "Đúng — chuẩn hóa tất định trước khi model thấy."
+      },
+      "keyTakeaway": "Định dạng đầu ra tool không đồng nhất → chuẩn hóa bằng PostToolUse hook."
+    },
+    {
+      "id": "mock-08-q60",
+      "number": 60,
+      "scenarioId": "S6",
+      "domain": 1,
+      "domainName": "Agentic Architecture & Orchestration",
+      "taskStatement": "1.1",
+      "lesson": "1-1_agentic-loops",
+      "concept": "Nonstandard stop reasons",
+      "difficulty": "hard",
+      "question": "While extracting a 300-line-item invoice, a response came back with stop_reason \"max_tokens\" and an incomplete tool_use block. Northwind's loop contains:\nif resp.stop_reason != \"end_turn\":\n    run_tools(resp)\nand it crashed on the partial input. What is the BEST fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Treat every non-end_turn stop as tool_use and fill the missing fields with defaults"
+        },
+        {
+          "key": "B",
+          "text": "Retry the identical request unchanged until it eventually returns end_turn"
+        },
+        {
+          "key": "C",
+          "text": "Handle max_tokens explicitly: never run the partial call; raise max_tokens or split the line items"
+        },
+        {
+          "key": "D",
+          "text": "Remove max_tokens from the request entirely so that the responses can never be truncated again in the future"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Mỗi stop_reason cần xử lý riêng; max_tokens nghĩa là phản hồi bị cắt, tool_use không hoàn chỉnh không được thực thi. Cách đúng là phát hiện cắt cụt rồi tăng max_tokens hoặc chia nhỏ tác vụ.",
+      "optionExplanations": {
+        "A": "Sai — chạy tool với input bịa là nguy hiểm.",
+        "B": "Sai — cùng request sẽ lại bị cắt ở cùng chỗ.",
+        "C": "Đúng — xử lý max_tokens riêng và khắc phục nguyên nhân.",
+        "D": "Sai — max_tokens là tham số bắt buộc của Messages API."
+      },
+      "keyTakeaway": "Không phải mọi stop_reason khác end_turn đều là tool_use — xử lý max_tokens riêng."
+    }
+  ]
+}
