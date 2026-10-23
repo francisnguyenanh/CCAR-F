@@ -68,6 +68,7 @@ def main():
     sys.stdout.reconfigure(encoding="utf-8")
     prefixes = sys.argv[1:]
     files = sorted(glob.glob(os.path.join(ROOT, "input", "*.md")))
+    files = [f for f in files if not os.path.basename(f).startswith("ref-")]  # trang Quick Reference có định dạng riêng
     if prefixes:
         files = [f for f in files if any(os.path.basename(f).startswith(p) for p in prefixes)]
     bad = 0

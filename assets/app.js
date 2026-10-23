@@ -114,10 +114,12 @@
     const done = new Set(store.get("done", []));
     const collapsed = new Set(store.get("collapsed", []));
     const q = (store.get("search", "") || "").toLowerCase();
-    const pct = Math.round((done.size / lessons.length) * 100);
+    const real = lessons.filter((l) => !l.ref); // trang Quick Reference không tính vào tiến độ
+    const doneN = real.filter((l) => done.has(l.id)).length;
+    const pct = Math.round((doneN / real.length) * 100);
 
     let html = `<input class="side-search" id="sideSearch" type="search" placeholder="Tìm bài học…" value="${esc(q)}">
-      <div class="side-progress">Đã học ${done.size}/${lessons.length} bài (${pct}%)<div class="bar"><i style="width:${pct}%"></i></div></div>`;
+      <div class="side-progress">Đã học ${doneN}/${real.length} bài (${pct}%)<div class="bar"><i style="width:${pct}%"></i></div></div>`;
     for (const d of domains) {
       const items = lessons.filter((l) => l.domain === d.id && (!q || (l.code + " " + l.title).toLowerCase().includes(q)));
       if (!items.length) continue;
@@ -327,7 +329,7 @@
       </div>
       <article class="prose" id="lessonBody">${rendered ? rendered.html : window.marked ? marked.parse(md) : `<pre>${esc(md)}</pre>`}</article>
       <div class="btn-row" style="margin-top:28px">
-        <button class="btn ${done.has(lesson.id) ? "" : "primary"}" id="doneBtn">${done.has(lesson.id) ? "✓ Đã học — bỏ đánh dấu" : "Đánh dấu đã học"}</button>
+        ${lesson.ref ? "" : `<button class="btn ${done.has(lesson.id) ? "" : "primary"}" id="doneBtn">${done.has(lesson.id) ? "✓ Đã học — bỏ đánh dấu" : "Đánh dấu đã học"}</button>`}
         <a class="btn" href="#/mock">Luyện đề →</a>
       </div>
       <nav class="lesson-nav">
@@ -339,7 +341,7 @@
     if (rendered) { bindPractice($("#lessonBody")); toc = rendered.toc; }
     else toc = enhanceLesson($("#lessonBody"));
     renderSidebar(lesson.id, toc);
-    $("#doneBtn").addEventListener("click", () => {
+    $("#doneBtn")?.addEventListener("click", () => {
       const s = new Set(store.get("done", []));
       s.has(lesson.id) ? s.delete(lesson.id) : s.add(lesson.id);
       store.set("done", [...s]);

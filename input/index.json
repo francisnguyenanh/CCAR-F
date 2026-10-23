@@ -236,6 +236,46 @@
       "domain": 5,
       "code": "5.6",
       "title": "Information Provenance & Multi-Source Synthesis"
+    },
+    {
+      "id": "ref-1_quick-reference-glossary",
+      "file": "ref-1_quick-reference-glossary.md",
+      "domain": 1,
+      "code": "Ref",
+      "title": "Quick Reference & Glossary",
+      "ref": true
+    },
+    {
+      "id": "ref-2_quick-reference-glossary",
+      "file": "ref-2_quick-reference-glossary.md",
+      "domain": 2,
+      "code": "Ref",
+      "title": "Quick Reference & Glossary",
+      "ref": true
+    },
+    {
+      "id": "ref-3_quick-reference-glossary",
+      "file": "ref-3_quick-reference-glossary.md",
+      "domain": 3,
+      "code": "Ref",
+      "title": "Quick Reference & Glossary",
+      "ref": true
+    },
+    {
+      "id": "ref-4_quick-reference-glossary",
+      "file": "ref-4_quick-reference-glossary.md",
+      "domain": 4,
+      "code": "Ref",
+      "title": "Quick Reference & Glossary",
+      "ref": true
+    },
+    {
+      "id": "ref-5_quick-reference-glossary",
+      "file": "ref-5_quick-reference-glossary.md",
+      "domain": 5,
+      "code": "Ref",
+      "title": "Quick Reference & Glossary",
+      "ref": true
     }
   ]
 }

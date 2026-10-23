@@ -148,6 +148,8 @@ Hãy phân biệt hai khái niệm: **cấp phép trước (pre-approve)** và *
 - `allowed-tools: Read, Grep` nghĩa là khi skill chạy, `Read` và `Grep` được dùng ngay, không bật hộp thoại xin phép. Điều này tiện cho skill chỉ đọc, giúp chạy mượt trong CI hoặc khi cần ít gián đoạn.
 - Nếu `Bash` không nằm trong danh sách, Claude vẫn có thể muốn gọi `Bash`; khi đó áp dụng hệ thống quyền bình thường của dự án (hỏi người dùng, hoặc theo allow/deny đã cấu hình). `Bash` không tự "biến mất".
 
+**Lưu ý khi thi:** exam guide mô tả `allowed-tools` là cách *giới hạn quyền tool của skill*, và đó là đáp án được chấm khi đề hỏi theo cách đó. Hành vi thực tế của Claude Code (kiểm tra ngày 6/10/2026) là *tiền phê duyệt* các tool được liệt kê; `disallowed-tools` và permission deny rule mới là ranh giới thật sự. Hãy hiểu cả hai: chọn theo cách diễn đạt của đề, nhưng khi thiết kế thật thì đừng coi `allowed-tools` là hàng rào an toàn.
+
 Hệ quả thiết kế: nếu bạn coi `allowed-tools: Read, Grep` là "hàng rào" bảo đảm skill không thể sửa file, bạn đang hiểu sai; một lời gọi tool khác vẫn có thể diễn ra nếu quyền thông thường cho phép hoặc người dùng chấp thuận. Muốn bảo đảm tool bị chặn, hãy dùng `permissions.deny` trong settings (hoặc hook chặn), chúng mới là cơ chế cưỡng chế. Bảng so sánh:
 
 | Mục tiêu | Cơ chế đúng |

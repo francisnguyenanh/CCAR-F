@@ -330,3 +330,8 @@ h1, h2, h3, h4 { line-height: 1.3; }
 .practice-q .qstem p { margin: 4px 0; }
 .k-card .practice-q { box-shadow: none; background: var(--bg); }
 .k-card .practice-q details > p { margin: 6px 0; }
+
+/* ---------- Quick Reference & Glossary pages ---------- */
+.prose h2 + h3, .prose h3 { scroll-margin-top: 70px; }
+.prose table th { background: var(--surface-2); font-size: 14px; }
+.prose table td { font-size: 14.5px; vertical-align: top; }

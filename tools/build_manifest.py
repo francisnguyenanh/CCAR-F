@@ -39,6 +39,22 @@ def build_lessons():
             "title": m.group(3).strip(),
         })
     lessons.sort(key=lambda l: tuple(int(x) for x in l["code"].split(".")))
+    # Trang tham khảo của từng domain (ref-N_*.md, dòng đầu "# DN — Tiêu đề") đặt cuối domain đó.
+    for path in sorted(glob.glob(os.path.join(INPUT, "ref-*.md"))):
+        name = os.path.basename(path)
+        with open(path, encoding="utf-8") as f:
+            first = f.readline().strip()
+        m = re.match(r"#\s*D(\d+)\s*[—-]\s*(.+)", first)
+        if not m:
+            continue
+        lessons.append({
+            "id": os.path.splitext(name)[0],
+            "file": name,
+            "domain": int(m.group(1)),
+            "code": "Ref",
+            "title": m.group(2).strip(),
+            "ref": True,
+        })
     out = {"domains": DOMAINS, "lessons": lessons}
     with open(os.path.join(INPUT, "index.json"), "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=2)

@@ -71,3 +71,4 @@ pnpm-debug.log*
 .env.*.local
 *.pem
 *.key
+input_2/
