@@ -1,326 +1,260 @@
 # 1.1 — Agentic Loops
 
-> Domain 1: Agentic Architecture & Orchestration · Tỷ trọng toàn domain: 27%
-> Source lesson: https://claudecertificationguide.com/learn/1-agentic-architecture/1-1-agentic-loops
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+**Agentic loop** là vòng lặp cho phép Claude tự làm việc nhiều bước: Claude gọi tool → code của bạn chạy tool → trả kết quả lại cho Claude → Claude quyết định gọi tiếp hay trả lời. Đây là nền tảng của mọi agent (Agent SDK, Claude Code, multi-agent).
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Agentic Loops**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Đề thi hay hỏi về **cách điều khiển vòng lặp một cách xác định (deterministic)**: dựa vào gì để biết *tiếp tục* hay *dừng*, giữ lịch sử hội thoại ra sao, và xử lý các trường hợp dừng bất thường. Quy tắc nhớ nhanh: **hãy để `stop_reason` — không phải văn bản của model — điều khiển vòng lặp.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. `stop_reason` là tín hiệu điều khiển vòng lặp
 
-### 2.1. stop_reason is control signal
+### Trọng tâm
 
-**Principle (EN):** Check response.stop_reason, not prose or first content block.
+Mỗi response của Claude có trường `stop_reason`. Vòng lặp phải **tiếp tục khi `tool_use`** và **dừng khi `end_turn`** — không đoán qua nội dung văn bản.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **check response.stop_reason, not prose or first content block**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** A service agent replies with explanation plus lookup_order tool_use.
+Khi gọi Messages API, response gồm danh sách `content` (các block `text`, `tool_use`...) và `stop_reason` cho biết *vì sao* model dừng sinh:
 
-**Recommended implementation:** Continue calling tool and return tool_result to messages.
+- `tool_use` → model muốn gọi tool. Code phải chạy tool, rồi gọi API lại.
+- `end_turn` → model đã xong lượt này. Thoát vòng lặp, trả kết quả cho người dùng.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Treat any text block as completion.
+Vòng lặp chuẩn:
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "A service agent replies with explanation plus lookup_order tool_use".
-- Decision: áp dụng nguyên tắc **stop_reason is control signal** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Continue calling tool and return tool_result to messages" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.2. Tool history preservation
-
-**Principle (EN):** Append assistant tool_use plus matching user tool_result; carry conversation forward.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **append assistant tool_use plus matching user tool_result; carry conversation forward**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** A lookup succeeds but agent repeats the lookup on the next turn.
-
-**Recommended implementation:** Preserve tool IDs and result in message history.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Send only the last user question.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "A lookup succeeds but agent repeats the lookup on the next turn".
-- Decision: áp dụng nguyên tắc **Tool history preservation** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Preserve tool IDs and result in message history" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.3. Safety iteration caps
-
-**Principle (EN):** Stop on end_turn; caps merely prevent runaway loops.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **stop on end_turn; caps merely prevent runaway loops**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** A research agent legitimately needs 12 searches while limit is 10.
-
-**Recommended implementation:** Use stop_reason to terminate, plus cap as safety bound.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Declare completion at iteration ten.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "A research agent legitimately needs 12 searches while limit is 10".
-- Decision: áp dụng nguyên tắc **Safety iteration caps** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Use stop_reason to terminate, plus cap as safety bound" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.4. Nonstandard stop reasons
-
-**Principle (EN):** Handle pause_turn, max_tokens and refusal separately instead of assuming tool_use.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **handle pause_turn, max_tokens and refusal separately instead of assuming tool_use**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Response is truncated by max_tokens.
-
-**Recommended implementation:** Detect truncation and safely continue or report incomplete response.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Attempt to run an imaginary tool.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Response is truncated by max_tokens".
-- Decision: áp dụng nguyên tắc **Nonstandard stop reasons** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Detect truncation and safely continue or report incomplete response" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-## 3. Ví dụ thiết kế / Worked engineering example
-
-**Problem:** A service agent replies with explanation plus lookup_order tool_use.
-
-**Bad design:** Treat any text block as completion.
-
-**Better design:** Continue calling tool and return tool_result to messages.
-
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
-
-### Walkthrough: decision trace / Luồng xử lý
-
-```text
-INPUT  : A service agent replies with explanation plus lookup_order tool_use.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Continue calling tool and return tool_result to messages.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
+```python
+while True:
+    resp = client.messages.create(model=M, tools=TOOLS, messages=messages)
+    if resp.stop_reason == "end_turn":
+        break                                   # xong
+    if resp.stop_reason == "tool_use":
+        results = run_tools(resp.content)       # chạy MỌI tool_use block
+        messages.append({"role": "assistant", "content": resp.content})
+        messages.append({"role": "user", "content": results})
+        continue
+    handle_other(resp)                          # xem K4
 ```
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+**Vì sao không dựa vào văn bản?** Claude thường viết một đoạn giải thích *rồi mới* gọi tool trong cùng một response (`text` block đứng trước `tool_use` block). Nếu bạn coi "có text = đã xong" hoặc chỉ nhìn `content[0]`, bạn sẽ dừng sớm, bỏ sót tool call chưa chạy. Ngược lại, parse câu như "Tôi đã hoàn thành" là dựa vào ngôn ngữ tự nhiên — không ổn định và không kiểm chứng được.
 
-## 4. Exam traps / Bẫy dễ nhầm
+Một response có thể chứa **nhiều `tool_use` block** (parallel tool calls). Phải duyệt hết `content`, không chỉ block đầu.
 
-1. **Bẫy stop_reason is control signal:** "Treat any text block as completion" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở stop_reason is control signal, rồi chọn "Continue calling tool and return tool_result to messages".
+### Keyword
 
-2. **Bẫy Tool history preservation:** "Send only the last user question" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở tool history preservation, rồi chọn "Preserve tool IDs and result in message history".
+- `stop_reason` — trường trong response cho biết lý do model dừng; dùng để điều khiển vòng lặp
+- `tool_use` — giá trị `stop_reason`/loại content block: model yêu cầu gọi một tool
+- `end_turn` — giá trị `stop_reason`: model đã hoàn tất lượt, không cần gọi thêm tool
+- `content block` — từng phần của response (text, tool_use...); một response có thể có nhiều block
+- `agentic loop` — vòng lặp gọi model → chạy tool → trả kết quả cho đến khi xong
+- `deterministic control` — điều khiển xác định, dựa trên tín hiệu có cấu trúc thay vì suy đoán
 
-3. **Bẫy Safety iteration caps:** "Declare completion at iteration ten" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở safety iteration caps, rồi chọn "Use stop_reason to terminate, plus cap as safety bound".
+### Bẫy đề thi
 
-4. **Bẫy Nonstandard stop reasons:** "Attempt to run an imaginary tool" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở nonstandard stop reasons, rồi chọn "Detect truncation and safely continue or report incomplete response".
+- ✗ Coi response có `text` block là "đã xong" ⇒ ✓ Kiểm tra `stop_reason`; text có thể đi kèm `tool_use`
+- ✗ Chỉ xử lý `content[0]` ⇒ ✓ Duyệt toàn bộ `content`, có thể có nhiều `tool_use`
+- ✗ Parse câu "task complete" trong văn bản để thoát vòng lặp ⇒ ✓ Dùng `stop_reason == "end_turn"`
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+### Câu hỏi
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+#### Q1. Một service agent trả về response gồm một đoạn text giải thích và một block `tool_use` gọi `lookup_order`. Vòng lặp hiện tại thấy có text nên coi là xong và trả kết quả cho khách. Cách sửa đúng là gì?
+- A. Thêm prompt yêu cầu model không viết text trước khi gọi tool
+- B. Kiểm tra `stop_reason`: nếu là `tool_use` thì chạy tool và gọi tiếp
+- C. Chỉ xử lý block đầu tiên của `content`
+- D. Giới hạn vòng lặp tối đa 1 lần cho chắc chắn
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **A service agent replies with explanation plus lookup_order tool_use**. Phương án nào phù hợp nhất?
+**Đáp án:** B
 
-- **A.** Continue calling tool and return tool_result to messages; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Treat any text block as completion; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Send only the last user question; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Declare completion at iteration ten; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+**Giải thích:** Đây là lỗi dùng text làm điều kiện dừng. `stop_reason == "tool_use"` mới là tín hiệu chắc chắn rằng còn tool phải chạy. A là sửa bằng prompt (không đảm bảo, model vẫn có thể viết text trước tool). C bỏ sót tool call. D cắt ngang công việc.
 
-**Đáp án: A**
+#### Q2. Cách nào dưới đây để quyết định thoát vòng lặp là **đáng tin cậy nhất**?
+- A. Tìm cụm "I have completed the task" trong text cuối
+- B. Dừng khi response không có `text` block
+- C. Dừng khi `stop_reason == "end_turn"`
+- D. Dừng sau đúng 5 vòng lặp
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** C
 
-- **A:** **Đúng.** Check response.stop_reason, not prose or first content block. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Treat any text block as completion" được nêu ở cơ chế stop_reason is control signal. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Tool history preservation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Safety iteration caps**, không giải quyết được yêu cầu cốt lõi "Check response.stop_reason, not prose or first content block" và thiếu điều kiện kiểm chứng.
+**Giải thích:** `stop_reason` là tín hiệu có cấu trúc do API cung cấp. A phụ thuộc cách diễn đạt của model. B sai vì response cuối thường chính là text. D là giới hạn cố định, không phản ánh việc agent đã xong chưa (xem K3).
 
-**Exam heuristic:** Nếu đề xuất hiện "A service agent replies with explanation plus lookup_order tool_use", ưu tiên phân biệt `stop_reason is control signal` với các lựa chọn mô tả chuyện khác.
+## K2. Giữ đầy đủ lịch sử tool (`tool_use` + `tool_result`)
 
-### Q02. Một kỹ sư đề xuất **Send only the last user question** cho tình huống: A lookup succeeds but agent repeats the lookup on the next turn. Cần phản biện thế nào?
+### Trọng tâm
 
-- **A.** Attempt to run an imaginary tool; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Preserve tool IDs and result in message history; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Send only the last user question; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Declare completion at iteration ten; áp dụng trực tiếp dù cơ chế sự cố khác.
+Sau mỗi lần chạy tool, phải **thêm cả message assistant (chứa `tool_use`) và message user (chứa `tool_result` khớp `tool_use_id`)** vào `messages` rồi mới gọi API lại.
 
-**Đáp án: B**
+### Giải thích
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+API không có trí nhớ: mỗi lần gọi, bạn gửi lại toàn bộ `messages`. Model chỉ "nhớ" những gì có trong đó. Với tool, một vòng gồm hai message:
 
-- **A:** **Sai.** Phương án thuộc **Nonstandard stop reasons**, không giải quyết được yêu cầu cốt lõi "Append assistant tool_use plus matching user tool_result; carry conversation forward" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Append assistant tool_use plus matching user tool_result; carry conversation forward. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Send only the last user question" được nêu ở cơ chế Tool history preservation. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Safety iteration caps**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+1. **assistant**: nguyên `resp.content` (có các block `tool_use`, mỗi block có `id`)
+2. **user**: danh sách block `tool_result`, mỗi block mang `tool_use_id` trùng với `id` của `tool_use` tương ứng
 
-**Exam heuristic:** Nếu đề xuất hiện "A lookup succeeds but agent repeats the lookup on the next turn", ưu tiên phân biệt `Tool history preservation` với các lựa chọn mô tả chuyện khác.
+```python
+messages.append({"role": "assistant", "content": resp.content})
+messages.append({"role": "user", "content": [
+    {"type": "tool_result", "tool_use_id": tu.id, "content": "Order #123: shipped"}
+    for tu in tool_uses
+]})
+```
 
-### Q03. Nếu sự cố **A research agent legitimately needs 12 searches while limit is 10** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+Quy tắc cần nhớ:
 
-- **A.** Attempt to run an imaginary tool; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Treat any text block as completion; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Use stop_reason to terminate, plus cap as safety bound; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Declare completion at iteration ten; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+- Mỗi `tool_use` **phải** có đúng một `tool_result` cùng `tool_use_id`; thiếu hoặc sai ID → API trả lỗi.
+- Nếu model gọi nhiều tool song song, gom **tất cả** `tool_result` vào **một** user message.
+- `tool_result` phải nằm ngay sau message assistant chứa `tool_use` tương ứng.
+- Nếu chỉ gửi lại câu hỏi cuối của user, model mất kết quả tool trước đó và sẽ **gọi lại tool** (lặp vô ích) hoặc trả lời thiếu căn cứ.
 
-**Đáp án: C**
+Tool lỗi cũng phải trả `tool_result` (với `is_error: true`) để model biết và xử lý, không được bỏ qua.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Keyword
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Nonstandard stop reasons**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **stop_reason is control signal**, không giải quyết được yêu cầu cốt lõi "Stop on end_turn; caps merely prevent runaway loops" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Stop on end_turn; caps merely prevent runaway loops. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Declare completion at iteration ten" được nêu ở cơ chế Safety iteration caps. Không đảm bảo xử lý được case và dễ che mất failure mode.
+- `tool_result` — block user message chứa kết quả chạy tool, gửi lại cho model
+- `tool_use_id` — ID nối `tool_result` với `tool_use` tương ứng
+- `conversation history` — toàn bộ `messages` gửi kèm mỗi lần gọi API; model chỉ biết những gì có trong đó
+- `parallel tool calls` — model gọi nhiều tool trong một response
+- `is_error` — cờ trong `tool_result` báo tool chạy lỗi
+- `stateless API` — API không lưu trạng thái; client chịu trách nhiệm gửi lại ngữ cảnh
 
-**Exam heuristic:** Nếu đề xuất hiện "A research agent legitimately needs 12 searches while limit is 10", ưu tiên phân biệt `Safety iteration caps` với các lựa chọn mô tả chuyện khác.
+### Bẫy đề thi
 
-### Q04. Để viết acceptance criteria cho tình huống **Response is truncated by max_tokens**, lựa chọn nào thể hiện ranh giới đúng?
+- ✗ Chỉ gửi lại câu hỏi mới nhất của user ⇒ ✓ Gửi lại toàn bộ lịch sử gồm `tool_use` và `tool_result`
+- ✗ Tool chạy lỗi thì bỏ qua, không trả `tool_result` ⇒ ✓ Vẫn trả `tool_result` có `is_error` để model xử lý
+- ✗ Trả từng `tool_result` ở nhiều user message cho các tool gọi song song ⇒ ✓ Gom vào một user message
 
-- **A.** Attempt to run an imaginary tool; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Treat any text block as completion; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Send only the last user question; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Detect truncation and safely continue or report incomplete response; kèm kiểm thử lại điều kiện và ghi evidence.
+### Câu hỏi
 
-**Đáp án: D**
+#### Q1. Agent tra cứu đơn hàng thành công, nhưng ở lượt kế tiếp lại gọi `lookup_order` lần nữa với cùng tham số. Nguyên nhân khả dĩ nhất?
+- A. Lịch sử gửi đi thiếu `tool_use` và `tool_result` của lần tra cứu trước
+- B. Model bị quá tải nên quên
+- C. `max_tokens` quá thấp
+- D. Chưa đặt giới hạn số vòng lặp
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** A
 
-- **A:** **Sai.** Đây chính là bẫy "Attempt to run an imaginary tool" được nêu ở cơ chế Nonstandard stop reasons. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **stop_reason is control signal**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Tool history preservation**, không giải quyết được yêu cầu cốt lõi "Handle pause_turn, max_tokens and refusal separately instead of assuming tool_use" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Handle pause_turn, max_tokens and refusal separately instead of assuming tool_use. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+**Giải thích:** API không có trí nhớ; nếu không gửi lại `tool_use`/`tool_result`, model không biết đã tra cứu rồi. B không phải cơ chế thực tế. C làm response bị cắt, không gây gọi lại. D chỉ là lưới an toàn, không sửa nguyên nhân.
 
-**Exam heuristic:** Nếu đề xuất hiện "Response is truncated by max_tokens", ưu tiên phân biệt `Nonstandard stop reasons` với các lựa chọn mô tả chuyện khác.
+#### Q2. Model trả về 3 `tool_use` block song song. Cách trả kết quả đúng là gì?
+- A. Gọi API 3 lần, mỗi lần gửi một `tool_result`
+- B. Chỉ trả kết quả tool đầu tiên, hai tool còn lại bỏ qua
+- C. Một user message chứa 3 `tool_result`, mỗi cái đúng `tool_use_id`
+- D. Gộp 3 kết quả thành một đoạn text trong user message
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Treat any text block as completion**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+**Đáp án:** C
 
-- **A.** Continue calling tool and return tool_result to messages; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Treat any text block as completion; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Send only the last user question; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Declare completion at iteration ten; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+**Giải thích:** Mỗi `tool_use` cần đúng một `tool_result` khớp ID, và tất cả nằm trong cùng một user message ngay sau message assistant. A, B làm thiếu `tool_result` → API báo lỗi. D mất liên kết `tool_use_id`.
 
-**Đáp án: A**
+## K3. Giới hạn số vòng lặp chỉ là lưới an toàn
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Trọng tâm
 
-- **A:** **Đúng.** Check response.stop_reason, not prose or first content block. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Treat any text block as completion" được nêu ở cơ chế stop_reason is control signal. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Tool history preservation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Safety iteration caps**, không giải quyết được yêu cầu cốt lõi "Check response.stop_reason, not prose or first content block" và thiếu điều kiện kiểm chứng.
+Điều kiện dừng chính là `end_turn`. **Iteration cap** (ví dụ tối đa 20 vòng) chỉ để chặn vòng lặp vô hạn; khi chạm cap phải **báo chưa hoàn thành**, không được coi là thành công.
 
-**Exam heuristic:** Nếu đề xuất hiện "A service agent replies with explanation plus lookup_order tool_use", ưu tiên phân biệt `stop_reason is control signal` với các lựa chọn mô tả chuyện khác.
+### Giải thích
 
-### Q06. Sau khi audit phát hiện **A lookup succeeds but agent repeats the lookup on the next turn**, điều gì là cải tiến có thể kiểm chứng?
+Vòng lặp luôn cần một chốt chặn để tránh agent lặp mãi (tốn tiền, treo hệ thống) nếu có lỗi logic hoặc model liên tục gọi tool. Nhưng cần phân biệt vai trò:
 
-- **A.** Attempt to run an imaginary tool; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Preserve tool IDs and result in message history; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Send only the last user question; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Declare completion at iteration ten; áp dụng trực tiếp dù cơ chế sự cố khác.
+- **Điều kiện dừng đúng** = `stop_reason == "end_turn"` (agent tự kết luận xong).
+- **Safety cap** = chỉ cắt khi bất thường. Nên đặt đủ rộng để tác vụ hợp lệ không bị cắt.
 
-**Đáp án: B**
+Ví dụ: research agent hợp lệ cần 12 lần search mà bạn đặt cap = 10 và coi "đến vòng 10 là xong" → kết quả cụt nhưng được báo như hoàn chỉnh. Cách đúng: để `end_turn` quyết định, cap đặt cao hơn nhu cầu thực (hoặc cấu hình theo loại tác vụ), và khi chạm cap thì trả trạng thái **chưa hoàn thành** (kèm kết quả một phần, log lý do) để người dùng hoặc hệ thống phía trên xử lý tiếp.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Nguyên tắc chung với mọi lỗi: **không âm thầm biến thất bại thành thành công**.
 
-- **A:** **Sai.** Phương án thuộc **Nonstandard stop reasons**, không giải quyết được yêu cầu cốt lõi "Append assistant tool_use plus matching user tool_result; carry conversation forward" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Append assistant tool_use plus matching user tool_result; carry conversation forward. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Send only the last user question" được nêu ở cơ chế Tool history preservation. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Safety iteration caps**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+### Keyword
 
-**Exam heuristic:** Nếu đề xuất hiện "A lookup succeeds but agent repeats the lookup on the next turn", ưu tiên phân biệt `Tool history preservation` với các lựa chọn mô tả chuyện khác.
+- `iteration cap` / `max_iterations` — giới hạn số vòng lặp tối đa của agent
+- `safety bound` — chốt chặn an toàn, không phải điều kiện hoàn thành
+- `runaway loop` — vòng lặp chạy mất kiểm soát, không bao giờ dừng
+- `termination condition` — điều kiện kết thúc vòng lặp
+- `partial result` — kết quả một phần khi chưa xong
+- `silent failure` — thất bại nhưng không báo, bị nhầm là thành công
 
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **A research agent legitimately needs 12 searches while limit is 10**, nên chọn gì?
+### Bẫy đề thi
 
-- **A.** Attempt to run an imaginary tool; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Treat any text block as completion; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Use stop_reason to terminate, plus cap as safety bound; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Declare completion at iteration ten; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+- ✗ Coi "đã đến vòng lặp thứ N" là hoàn thành ⇒ ✓ Dừng bằng `end_turn`; cap chỉ chặn bất thường và phải báo chưa hoàn thành
+- ✗ Bỏ hẳn iteration cap vì đã có `stop_reason` ⇒ ✓ Vẫn cần cap như lưới an toàn chống vòng lặp vô hạn
+- ✗ Đặt cap thật thấp để tiết kiệm chi phí ⇒ ✓ Cap vừa đủ rộng cho tác vụ hợp lệ
 
-**Đáp án: C**
+### Câu hỏi
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+#### Q1. Research agent hợp lệ cần 12 lần search, nhưng cap đặt là 10 và code trả kết quả như thể đã xong. Cách thiết kế đúng?
+- A. Giữ cap = 10 và coi vòng 10 là điểm hoàn thành
+- B. Dùng `end_turn` để kết thúc; cap đặt đủ cao như lưới an toàn, chạm cap thì báo chưa hoàn thành
+- C. Bỏ cap hoàn toàn
+- D. Bảo model "đừng search quá 10 lần" trong prompt
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Nonstandard stop reasons**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **stop_reason is control signal**, không giải quyết được yêu cầu cốt lõi "Stop on end_turn; caps merely prevent runaway loops" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Stop on end_turn; caps merely prevent runaway loops. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Declare completion at iteration ten" được nêu ở cơ chế Safety iteration caps. Không đảm bảo xử lý được case và dễ che mất failure mode.
+**Đáp án:** B
 
-**Exam heuristic:** Nếu đề xuất hiện "A research agent legitimately needs 12 searches while limit is 10", ưu tiên phân biệt `Safety iteration caps` với các lựa chọn mô tả chuyện khác.
+**Giải thích:** Hoàn thành phải do `end_turn` quyết định. Cap chỉ để chặn bất thường và nếu chạm cap phải minh bạch là chưa xong. A giấu thất bại. C mất bảo vệ chống vòng lặp vô hạn. D dựa vào prompt, không đảm bảo.
 
-### Q08. Một reviewer nêu giải pháp **Attempt to run an imaginary tool**. Đánh giá chính xác nhất là gì?
+#### Q2. Khi vòng lặp chạm `max_iterations`, hành vi nào phù hợp nhất?
+- A. Trả kết quả hiện có như thể thành công
+- B. Im lặng khởi động lại vòng lặp từ đầu
+- C. Trả kết quả một phần cùng trạng thái "chưa hoàn thành" và lý do
+- D. Xoá lịch sử rồi hỏi lại người dùng
 
-- **A.** Attempt to run an imaginary tool; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Treat any text block as completion; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Send only the last user question; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Detect truncation and safely continue or report incomplete response; kèm kiểm thử lại điều kiện và ghi evidence.
+**Đáp án:** C
 
-**Đáp án: D**
+**Giải thích:** Phải báo trung thực để phía trên quyết định (thử lại, tăng cap, chuyển người). A là silent failure. B có thể lặp vô hạn. D mất ngữ cảnh.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+## K4. Các `stop_reason` đặc biệt: `pause_turn`, `max_tokens`, `refusal`
 
-- **A:** **Sai.** Đây chính là bẫy "Attempt to run an imaginary tool" được nêu ở cơ chế Nonstandard stop reasons. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **stop_reason is control signal**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Tool history preservation**, không giải quyết được yêu cầu cốt lõi "Handle pause_turn, max_tokens and refusal separately instead of assuming tool_use" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Handle pause_turn, max_tokens and refusal separately instead of assuming tool_use. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+### Trọng tâm
 
-**Exam heuristic:** Nếu đề xuất hiện "Response is truncated by max_tokens", ưu tiên phân biệt `Nonstandard stop reasons` với các lựa chọn mô tả chuyện khác.
+`tool_use` và `end_turn` không phải tất cả. Phải xử lý riêng `max_tokens` (bị cắt), `pause_turn` (tạm dừng với server tool), `refusal` (từ chối), `stop_sequence`; **không được giả định mọi lần dừng khác `end_turn` đều là `tool_use`**.
 
-### Q09. Trong thử nghiệm đối chứng với tình huống **A service agent replies with explanation plus lookup_order tool_use**, tiêu chí pass phù hợp là gì?
+### Giải thích
 
-- **A.** Continue calling tool and return tool_result to messages; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Treat any text block as completion; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Send only the last user question; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Declare completion at iteration ten; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+- **`max_tokens`**: response bị cắt vì hết hạn mức token đầu ra. Nội dung dở dang. Nếu đang cắt giữa một `tool_use`, JSON tham số sẽ hỏng → **không chạy tool**. Cách xử lý: tăng `max_tokens` rồi thử lại, hoặc yêu cầu tiếp tục, hoặc báo response chưa đầy đủ.
+- **`pause_turn`**: xảy ra khi model đang chạy các **server tool** (như web search) và lượt kéo dài. Để tiếp tục, gửi lại response vừa nhận như một message assistant rồi gọi API lại; model sẽ chạy tiếp.
+- **`refusal`**: model từ chối trả lời vì lý do an toàn. Đừng lặp lại y nguyên request; hãy xử lý có chủ đích (báo người dùng, chuyển hướng).
+- **`stop_sequence`**: model dừng vì gặp chuỗi dừng bạn cấu hình. Dừng theo thiết kế, xử lý theo logic của bạn.
 
-**Đáp án: A**
+Một vòng lặp tốt có nhánh rõ ràng cho từng giá trị, và nhánh mặc định cho giá trị lạ: ghi log, không âm thầm coi là thành công.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+```python
+match resp.stop_reason:
+    case "end_turn":   done()
+    case "tool_use":   run_and_continue()
+    case "max_tokens": retry_with_more_tokens_or_report_incomplete()
+    case "pause_turn": messages.append({"role": "assistant", "content": resp.content}); continue
+    case "refusal":    report_refusal()
+    case _:            log_and_fail_safe()
+```
 
-- **A:** **Đúng.** Check response.stop_reason, not prose or first content block. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Treat any text block as completion" được nêu ở cơ chế stop_reason is control signal. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Tool history preservation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Safety iteration caps**, không giải quyết được yêu cầu cốt lõi "Check response.stop_reason, not prose or first content block" và thiếu điều kiện kiểm chứng.
+### Keyword
 
-**Exam heuristic:** Nếu đề xuất hiện "A service agent replies with explanation plus lookup_order tool_use", ưu tiên phân biệt `stop_reason is control signal` với các lựa chọn mô tả chuyện khác.
+- `max_tokens` — vừa là tham số giới hạn token đầu ra, vừa là `stop_reason` khi bị cắt
+- `truncation` — bị cắt cụt do hết token
+- `pause_turn` — `stop_reason` khi lượt dài bị tạm dừng (server tool); gửi lại để tiếp tục
+- `server tool` — tool chạy phía Anthropic (ví dụ web search), khác tool do bạn tự chạy
+- `refusal` — `stop_reason` khi model từ chối
+- `stop_sequence` — chuỗi dừng do bạn đặt; model dừng khi sinh ra chuỗi này
+- `fail-safe` — nhánh mặc định an toàn khi gặp trường hợp không lường trước
 
-### Q10. Để giảm lỗi tái diễn với **A lookup succeeds but agent repeats the lookup on the next turn**, biện pháp nào phù hợp với cơ chế đã học?
+### Bẫy đề thi
 
-- **A.** Attempt to run an imaginary tool; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Preserve tool IDs and result in message history; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Send only the last user question; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Declare completion at iteration ten; áp dụng trực tiếp dù cơ chế sự cố khác.
+- ✗ Giả định mọi `stop_reason` khác `end_turn` đều là `tool_use` và chạy tool ⇒ ✓ Xử lý riêng từng giá trị
+- ✗ Response bị `max_tokens` cắt giữa `tool_use` mà vẫn chạy tool ⇒ ✓ Phát hiện cắt cụt, tăng token hoặc báo chưa đầy đủ
+- ✗ Gặp `refusal` thì gửi lại y nguyên request nhiều lần ⇒ ✓ Xử lý có chủ đích, báo người dùng
 
-**Đáp án: B**
+### Câu hỏi
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+#### Q1. Response có `stop_reason = "max_tokens"` và block `tool_use` cuối bị cắt dở JSON. Hành động đúng?
+- A. Chạy tool với phần JSON đã nhận
+- B. Coi như `end_turn` và trả kết quả
+- C. Phát hiện bị cắt, không chạy tool; tăng `max_tokens` thử lại hoặc báo chưa đầy đủ
+- D. Bỏ qua và gọi API lại với cùng cấu hình
 
-- **A:** **Sai.** Phương án thuộc **Nonstandard stop reasons**, không giải quyết được yêu cầu cốt lõi "Append assistant tool_use plus matching user tool_result; carry conversation forward" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Append assistant tool_use plus matching user tool_result; carry conversation forward. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Send only the last user question" được nêu ở cơ chế Tool history preservation. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Safety iteration caps**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+**Đáp án:** C
 
-**Exam heuristic:** Nếu đề xuất hiện "A lookup succeeds but agent repeats the lookup on the next turn", ưu tiên phân biệt `Tool history preservation` với các lựa chọn mô tả chuyện khác.
+**Giải thích:** `max_tokens` nghĩa là output bị cắt, tham số tool có thể hỏng. Chạy tool với dữ liệu dở là rủi ro; coi là hoàn thành là sai. D sẽ lặp lại đúng lỗi cũ.
 
-## 6. Lab / Bài thực hành tự kiểm tra
+#### Q2. Agent dùng web search (server tool) nhận `stop_reason = "pause_turn"`. Làm gì để tiếp tục?
+- A. Coi như đã xong, thoát vòng lặp
+- B. Gửi lại response vừa nhận như message assistant rồi gọi API tiếp
+- C. Tự chạy web search ở phía client
+- D. Xoá lịch sử và bắt đầu lại
 
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "A service agent replies with explanation plus lookup_order tool_use".
+**Đáp án:** B
 
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Continue calling tool and return tool_result to messages.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
-
-## 7. Cheat sheet / Ôn nhanh
-
-- **stop_reason is control signal:** Check response.stop_reason, not prose or first content block. ✓ Continue calling tool and return tool_result to messages. ✗ Treat any text block as completion.
-- **Tool history preservation:** Append assistant tool_use plus matching user tool_result; carry conversation forward. ✓ Preserve tool IDs and result in message history. ✗ Send only the last user question.
-- **Safety iteration caps:** Stop on end_turn; caps merely prevent runaway loops. ✓ Use stop_reason to terminate, plus cap as safety bound. ✗ Declare completion at iteration ten.
-- **Nonstandard stop reasons:** Handle pause_turn, max_tokens and refusal separately instead of assuming tool_use. ✓ Detect truncation and safely continue or report incomplete response. ✗ Attempt to run an imaginary tool.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/1-agentic-architecture/1-1-agentic-loops
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** `pause_turn` là lượt dài bị tạm dừng, không phải kết thúc. Gửi lại nội dung để model chạy tiếp. A cắt ngang công việc. C sai vì đây là server tool do Anthropic chạy. D mất tiến trình.

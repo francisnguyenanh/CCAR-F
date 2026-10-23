@@ -1,326 +1,245 @@
 # 4.5 — Batch Processing Strategies
 
-> Domain 4: Prompt Engineering & Structured Output · Tỷ trọng toàn domain: 20%
-> Source lesson: https://claudecertificationguide.com/learn/4-prompt-engineering/4-5-batch-processing
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+**Message Batches API** cho phép gửi nhiều request cùng lúc để xử lý bất đồng bộ với **chi phí thấp hơn** (giảm giá khoảng một nửa so với gọi đồng bộ), đổi lại là **độ trễ không đảm bảo**: kết quả có thể cần tới 24 giờ mới xong (thường nhanh hơn nhưng không có cam kết). Do đó nó hợp với công việc nền, không hợp với luồng có người hoặc pipeline đang chờ.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Batch Processing Strategies**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Đề thi hỏi cách chọn giữa batch và đồng bộ theo **độ trễ chấp nhận được**, các use case điển hình của batch, cách đối chiếu kết quả bằng **`custom_id`**, và giới hạn: một request batch **không thể chạy vòng lặp tool tương tác** giữa chừng. Quy tắc nhớ nhanh: **việc chặn người chờ dùng đồng bộ; việc nền, không gấp dùng batch; luôn khớp kết quả bằng `custom_id`; việc cần tool nhiều lượt không đi batch.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Chọn batch hay đồng bộ theo độ trễ (latency fit)
 
-### 2.1. Latency fit
+### Trọng tâm
 
-**Principle (EN):** Batch saves cost but may take up to 24h without fixed response latency.
+Batch rẻ hơn nhưng không có cam kết thời gian (tối đa khoảng 24 giờ). **Đừng chuyển mọi thứ sang batch chỉ vì rẻ**; việc đang chặn người dùng hoặc quy trình phải ở đường đồng bộ.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **batch saves cost but may take up to 24h without fixed response latency**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** CI premerge review blocks developer.
+Message Batches API xử lý request theo khả năng của hệ thống, không đảm bảo thời gian trả kết quả. Bạn nhận một ID batch, sau đó kiểm tra trạng thái (poll) và lấy kết quả khi xong. Đổi lại, chi phí token thấp hơn đáng kể so với gọi `messages.create` đồng bộ.
 
-**Recommended implementation:** Keep synchronous path for blocking review.
+Cách ra quyết định dựa trên câu hỏi: **có ai hoặc hệ thống nào đang chờ kết quả này ngay không?**
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Move all jobs to batch because cheaper.
+| Tình huống | Cách dùng | Lý do |
+|---|---|---|
+| Pre-merge check: developer chờ để merge PR | Đồng bộ | Chặn người dùng, cần phản hồi trong vài giây-phút |
+| Chatbot hỗ trợ khách | Đồng bộ | Tương tác thời gian thực |
+| Báo cáo đêm, kết quả cần vào sáng mai | Batch | Có thời gian, tiết kiệm chi phí |
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "CI premerge review blocks developer".
-- Decision: áp dụng nguyên tắc **Latency fit** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Keep synchronous path for blocking review" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Sai lầm hay gặp là lý luận "batch rẻ hơn nên chuyển tất cả". Với pre-merge review, nếu dùng batch, developer có thể phải chờ hàng giờ mà không có SLA nào. Chi phí tiết kiệm không bù được việc chặn công việc.
 
-### 2.2. Async reporting use case
+Khi dùng batch cho việc có thời hạn, hãy tính sao cho **cửa sổ xử lý lớn nhất (24 giờ)** vẫn nằm trong hạn bạn cần: ví dụ gửi sớm hơn, không gửi sát giờ deadline.
 
-**Principle (EN):** Nightly audits and offline extraction fit Message Batches.
+### Keyword
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **nightly audits and offline extraction fit Message Batches**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+- `Message Batches API` — API gửi nhiều request xử lý bất đồng bộ, chi phí thấp hơn
+- `asynchronous processing` — xử lý bất đồng bộ, không chờ kết quả ngay
+- `synchronous path` — đường gọi đồng bộ, nhận kết quả ngay trong request
+- `cost savings` — tiết kiệm chi phí (khoảng một nửa với batch)
+- `processing window` — khoảng thời gian tối đa batch có thể mất (đến khoảng 24 giờ)
+- `blocking workflow` — luồng công việc có người hoặc hệ thống đang chờ kết quả
 
-**Case study / Tình huống:** Technical debt report only needed tomorrow.
+### Bẫy đề thi
 
-**Recommended implementation:** Submit batched requests and collect later.
+- ✗ Chuyển mọi việc sang batch vì rẻ hơn ⇒ ✓ Giữ đường đồng bộ cho việc đang chặn người dùng
+- ✗ Giả định batch luôn xong trong vài phút ⇒ ✓ Không có cam kết độ trễ; có thể tới khoảng 24 giờ
+- ✗ Gửi batch sát deadline ⇒ ✓ Chừa đủ thời gian cho cửa sổ xử lý tối đa
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Spend synchronous budget on every report.
+### Câu hỏi
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Technical debt report only needed tomorrow".
-- Decision: áp dụng nguyên tắc **Async reporting use case** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Submit batched requests and collect later" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+#### Q1. Công ty muốn giảm chi phí cho việc review code tự động chạy trước khi merge PR, nơi developer chờ kết quả để tiếp tục. Đề xuất nào hợp lý?
+- A. Chuyển review pre-merge sang Message Batches vì rẻ hơn
+- B. Giữ review pre-merge ở đường đồng bộ; dùng batch cho các tác vụ nền không gấp
+- C. Chạy review mỗi tuần một lần bằng batch
+- D. Bỏ review tự động
 
-### 2.3. custom_id per request
+**Đáp án:** B
 
-**Principle (EN):** Batch result ordering should not be assumed.
+**Giải thích:** Review pre-merge chặn developer nên cần phản hồi nhanh, batch không cam kết độ trễ. A đánh đổi sai. C làm mất tác dụng kiểm tra trước merge. D bỏ mất giá trị.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **batch result ordering should not be assumed**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+#### Q2. Nhận định nào đúng về độ trễ của Message Batches?
+- A. Luôn hoàn thành trong 1 phút
+- B. Hoàn thành đúng bằng thời gian đồng bộ nhưng rẻ hơn
+- C. Không có cam kết độ trễ cố định; có thể mất đến khoảng 24 giờ
+- D. Phải chờ đúng 24 giờ
 
-**Case study / Tình huống:** 1,000 documents return mixed outcomes.
+**Đáp án:** C
 
-**Recommended implementation:** Correlate by custom_id and retry failed subset.
+**Giải thích:** Batch có cửa sổ xử lý tối đa nhưng nhiều batch xong sớm hơn; không có cam kết. A, B sai vì độ trễ không được bảo đảm. D sai vì không phải luôn chờ hết 24 giờ.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Match results by array position.
+## K2. Use case phù hợp cho batch: công việc nền, ngoại tuyến
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "1,000 documents return mixed outcomes".
-- Decision: áp dụng nguyên tắc **custom_id per request** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Correlate by custom_id and retry failed subset" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+### Trọng tâm
 
-### 2.4. No interactive tool loop inside item
+Batch phù hợp với việc **khối lượng lớn, không cần kết quả ngay**: audit hằng đêm, trích xuất tài liệu ngoại tuyến, báo cáo nợ kỹ thuật, đánh giá hàng loạt.
 
-**Principle (EN):** Single batch request cannot dynamically call tools and reenter same item.
+### Giải thích
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **single batch request cannot dynamically call tools and reenter same item**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+Đặc điểm của công việc nên đưa vào batch:
 
-**Case study / Tình huống:** Agent must fetch latest order info mid-analysis.
+- **Khối lượng lớn**, nhiều item độc lập nhau (mỗi tài liệu, mỗi file là một request riêng).
+- **Không có người chờ**: kết quả được dùng sau (sáng hôm sau, cuối tuần).
+- **Nhạy cảm chi phí hơn độ trễ**: tiết kiệm lớn khi nhân với hàng nghìn request.
 
-**Recommended implementation:** Use synchronous orchestration for tool-dependent phase.
+Ví dụ phù hợp: báo cáo nợ kỹ thuật chỉ cần ngày mai; trích xuất thông tin từ kho hợp đồng cũ; chạy bộ đánh giá (evaluation) prompt trên hàng nghìn mẫu; phân loại/gắn nhãn dữ liệu cũ; sinh bản tóm tắt cho kho tài liệu.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Assume batch performs arbitrary multi-turn tools.
+Không phù hợp: chatbot, review chặn merge, bất cứ bước nào trong chuỗi mà bước sau phụ thuộc kết quả ngay.
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Agent must fetch latest order info mid-analysis".
-- Decision: áp dụng nguyên tắc **No interactive tool loop inside item** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Use synchronous orchestration for tool-dependent phase" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Mẹo thực dụng: có thể **kết hợp**: dùng đồng bộ cho một vài mẫu để thử prompt (nhanh, sửa lặp lại), khi prompt ổn định mới gửi toàn bộ khối lượng bằng batch. Cách này tránh lãng phí cả batch lớn chỉ vì prompt có lỗi.
 
-## 3. Ví dụ thiết kế / Worked engineering example
+Dùng đồng bộ cho báo cáo đêm là lãng phí ngân sách: bạn trả giá đầy đủ cho độ trễ thấp mà không ai cần.
 
-**Problem:** CI premerge review blocks developer.
+### Keyword
 
-**Bad design:** Move all jobs to batch because cheaper.
+- `offline processing` — xử lý ngoại tuyến, không cần kết quả tức thì
+- `nightly audit` — kiểm tra hằng đêm chạy nền
+- `bulk extraction` — trích xuất hàng loạt từ nhiều tài liệu
+- `independent items` — các mục độc lập, xử lý song song không phụ thuộc nhau
+- `evaluation run` — chạy đánh giá hàng loạt trên tập mẫu
+- `prompt iteration` — thử và chỉnh prompt trên mẫu nhỏ trước khi chạy khối lượng lớn
 
-**Better design:** Keep synchronous path for blocking review.
+### Bẫy đề thi
 
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
+- ✗ Dùng đồng bộ cho báo cáo chỉ cần vào ngày mai ⇒ ✓ Dùng batch để tiết kiệm
+- ✗ Gửi cả 50.000 tài liệu bằng batch khi prompt chưa kiểm thử ⇒ ✓ Thử trên mẫu nhỏ trước, rồi mới gửi cả khối
+- ✗ Dùng batch cho chuỗi tác vụ phụ thuộc kết quả tức thời ⇒ ✓ Batch cho item độc lập, không chờ
 
-### Walkthrough: decision trace / Luồng xử lý
+### Câu hỏi
 
-```text
-INPUT  : CI premerge review blocks developer.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Keep synchronous path for blocking review.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
+#### Q1. Nhóm cần một báo cáo nợ kỹ thuật cho 800 module, kết quả chỉ được xem vào sáng mai. Phương án tốt nhất?
+- A. Gọi đồng bộ từng module để có kết quả ngay
+- B. Gửi qua Message Batches và thu kết quả sau
+- C. Dùng chatbot tương tác hỏi từng module
+- D. Bỏ qua vì khối lượng quá lớn
+
+**Đáp án:** B
+
+**Giải thích:** Khối lượng lớn, độc lập, không gấp là mẫu use case batch. A trả giá đầy đủ cho độ trễ không cần. C kém hiệu quả. D không cần thiết.
+
+#### Q2. Bạn cần trích xuất dữ liệu từ 40.000 hợp đồng cũ bằng một prompt mới chưa thử. Quy trình hợp lý?
+- A. Gửi ngay cả 40.000 bằng batch
+- B. Gọi đồng bộ từng hợp đồng cho đến hết
+- C. Thử prompt trên mẫu nhỏ bằng đường đồng bộ, chỉnh cho ổn, rồi gửi toàn bộ bằng batch
+- D. Chỉ thử một hợp đồng rồi gửi batch
+
+**Đáp án:** C
+
+**Giải thích:** Thử mẫu nhỏ tránh lãng phí cả khối lớn nếu prompt lỗi, sau đó batch tiết kiệm chi phí. A rủi ro cao. B tốn chi phí. D mẫu quá ít.
+
+## K3. `custom_id` để đối chiếu kết quả
+
+### Trọng tâm
+
+Đừng giả định kết quả batch trả về theo thứ tự gửi; hãy gán **`custom_id` duy nhất** cho mỗi request và đối chiếu kết quả bằng nó, rồi retry riêng tập item lỗi.
+
+### Giải thích
+
+Mỗi request trong batch có một `custom_id` do bạn đặt. Kết quả được trả về kèm đúng `custom_id` đó, **không bảo đảm cùng thứ tự** với lúc gửi vì các request được xử lý song song. Ghép kết quả bằng chỉ số mảng (item thứ 1 ↔ kết quả thứ 1) là lỗi: dữ liệu của tài liệu này sẽ bị gán cho tài liệu khác mà không có lỗi nào báo ra.
+
+```python
+requests = [
+    {"custom_id": f"doc-{doc.id}",
+     "params": {"model": M, "max_tokens": 1024,
+                "messages": [{"role": "user", "content": doc.text}]}}
+    for doc in docs
+]
+# Khi nhận kết quả: lấy result.custom_id -> tra lại doc tương ứng
 ```
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+Trong một batch lớn, kết quả từng request có thể khác nhau (thành công, lỗi, hết hạn hoặc bị huỷ). Quy trình chuẩn:
 
-## 4. Exam traps / Bẫy dễ nhầm
+1. Đặt `custom_id` ổn định, có ý nghĩa (ví dụ ID tài liệu trong hệ thống của bạn).
+2. Khi lấy kết quả, duyệt theo `custom_id`; tách các item thành công và thất bại.
+3. **Chỉ gửi lại tập con thất bại** trong một batch mới, đừng chạy lại toàn bộ.
 
-1. **Bẫy Latency fit:** "Move all jobs to batch because cheaper" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở latency fit, rồi chọn "Keep synchronous path for blocking review".
+Thiết kế `custom_id` theo ID thực thể giúp bạn cũng dễ chứng minh tính idempotent (không xử lý trùng) khi retry.
 
-2. **Bẫy Async reporting use case:** "Spend synchronous budget on every report" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở async reporting use case, rồi chọn "Submit batched requests and collect later".
+### Keyword
 
-3. **Bẫy custom_id per request:** "Match results by array position" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở custom_id per request, rồi chọn "Correlate by custom_id and retry failed subset".
+- `custom_id` — mã do bạn đặt cho mỗi request để nối kết quả với đầu vào
+- `result ordering` — thứ tự kết quả; không được giả định giống thứ tự gửi
+- `partial failure` — một phần item thất bại trong khi phần khác thành công
+- `retry failed subset` — chỉ gửi lại các item thất bại
+- `idempotency` — xử lý lặp lại không gây hiệu ứng trùng lặp
+- `batch id` — mã định danh của cả batch dùng để kiểm tra trạng thái
 
-4. **Bẫy No interactive tool loop inside item:** "Assume batch performs arbitrary multi-turn tools" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở no interactive tool loop inside item, rồi chọn "Use synchronous orchestration for tool-dependent phase".
+### Bẫy đề thi
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+- ✗ Ghép kết quả với đầu vào theo vị trí trong mảng ⇒ ✓ Dùng `custom_id` để đối chiếu
+- ✗ Một item lỗi thì chạy lại cả batch ⇒ ✓ Chỉ retry các item thất bại bằng batch mới
+- ✗ Dùng `custom_id` ngẫu nhiên không lưu lại ⇒ ✓ Dùng ID ổn định gắn với thực thể nguồn
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+### Câu hỏi
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **CI premerge review blocks developer**. Phương án nào phù hợp nhất?
+#### Q1. Sau khi một batch 1.000 tài liệu xong, dev ghép kết quả theo thứ tự trong mảng và phát hiện nhiều tài liệu nhận nhầm thông tin của tài liệu khác. Nguyên nhân và cách sửa?
+- A. Model bị lỗi; đổi model
+- B. Thứ tự kết quả không đảm bảo; đặt `custom_id` cho mỗi request và đối chiếu theo đó
+- C. Giảm số tài liệu mỗi batch
+- D. Chuyển sang đồng bộ hoàn toàn
 
-- **A.** Match results by array position; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Keep synchronous path for blocking review; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Move all jobs to batch because cheaper; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Spend synchronous budget on every report; áp dụng trực tiếp dù cơ chế sự cố khác.
+**Đáp án:** B
 
-**Đáp án: B**
+**Giải thích:** Kết quả batch không bảo đảm thứ tự gửi. A sai nguyên nhân. C và D không giải quyết cơ chế ghép sai.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+#### Q2. Trong 1.000 request, 37 request thất bại. Xử lý hợp lý nhất?
+- A. Gửi lại cả 1.000 request
+- B. Bỏ qua 37 request đó
+- C. Dựa trên `custom_id` lọc 37 item lỗi, kiểm tra nguyên nhân (nếu cần chỉnh) rồi gửi riêng trong batch mới
+- D. Đợi 24 giờ và hy vọng chúng tự được xử lý
 
-- **A:** **Sai.** Phương án thuộc **custom_id per request**, không giải quyết được yêu cầu cốt lõi "Batch saves cost but may take up to 24h without fixed response latency" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Batch saves cost but may take up to 24h without fixed response latency. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Move all jobs to batch because cheaper" được nêu ở cơ chế Latency fit. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Async reporting use case**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+**Đáp án:** C
 
-**Exam heuristic:** Nếu đề xuất hiện "CI premerge review blocks developer", ưu tiên phân biệt `Latency fit` với các lựa chọn mô tả chuyện khác.
+**Giải thích:** `custom_id` cho phép xác định đúng tập lỗi và chỉ chạy lại phần đó, tiết kiệm chi phí. A lãng phí. B mất dữ liệu. D không có cơ chế tự động như vậy.
 
-### Q02. Một kỹ sư đề xuất **Spend synchronous budget on every report** cho tình huống: Technical debt report only needed tomorrow. Cần phản biện thế nào?
+## K4. Không có vòng lặp tool tương tác trong một request batch
 
-- **A.** Match results by array position; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Assume batch performs arbitrary multi-turn tools; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Submit batched requests and collect later; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Spend synchronous budget on every report; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+### Trọng tâm
 
-**Đáp án: C**
+Mỗi request batch là một lượt hoàn chỉnh, **không thể dừng giữa chừng để chạy tool rồi tiếp tục**. Tác vụ cần gọi tool nhiều lượt phải điều phối đồng bộ.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Giải thích
 
-- **A:** **Sai.** Phương án thuộc cơ chế **custom_id per request**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **No interactive tool loop inside item**, không giải quyết được yêu cầu cốt lõi "Nightly audits and offline extraction fit Message Batches" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Nightly audits and offline extraction fit Message Batches. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Spend synchronous budget on every report" được nêu ở cơ chế Async reporting use case. Không đảm bảo xử lý được case và dễ che mất failure mode.
+Agentic loop (bài 1.1) cần: model yêu cầu `tool_use` → code của bạn chạy tool → gửi `tool_result` → model tiếp tục. Mỗi bước phụ thuộc vào kết quả của bước trước và cần code chạy xen kẽ. Một request trong Message Batches được xử lý bất đồng bộ như **một lần gọi độc lập**: không có chỗ để bạn chèn kết quả tool giữa chừng và để cùng item đó tiếp tục.
 
-**Exam heuristic:** Nếu đề xuất hiện "Technical debt report only needed tomorrow", ưu tiên phân biệt `Async reporting use case` với các lựa chọn mô tả chuyện khác.
+Hệ quả thiết kế:
 
-### Q03. Nếu sự cố **1,000 documents return mixed outcomes** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+- Nếu phân tích một item cần dữ liệu tươi (ví dụ tra thông tin đơn hàng mới nhất giữa chừng), **không dùng batch cho giai đoạn phụ thuộc tool đó**. Dùng điều phối đồng bộ (vòng lặp agent bình thường).
+- Có thể **tách pipeline**: giai đoạn thu thập dữ liệu bằng tool chạy trước (đồng bộ hoặc bằng code), sau đó đưa toàn bộ dữ liệu đã chuẩn bị vào request batch, nơi model chỉ cần phân tích/tổng hợp trong một lượt.
+- Một request batch vẫn có thể có tool definition để lấy output có cấu trúc (4.3), nhưng đó là tool "ghi kết quả", không phải vòng lặp tương tác.
 
-- **A.** Match results by array position; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Assume batch performs arbitrary multi-turn tools; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Move all jobs to batch because cheaper; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Correlate by custom_id and retry failed subset; kèm kiểm thử lại điều kiện và ghi evidence.
+Nhớ rằng nếu bạn cần lặp lại nhiều lượt, bạn sẽ phải gửi nhiều batch nối tiếp, mỗi lượt chờ không đảm bảo thời gian, thường không thực tế.
 
-**Đáp án: D**
+### Keyword
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- `interactive tool loop` — vòng lặp gọi tool tương tác xen kẽ giữa model và code
+- `single-turn request` — request chỉ một lượt, không tiếp tục sau khi có kết quả tool
+- `synchronous orchestration` — điều phối đồng bộ cho phần cần nhiều lượt
+- `pipeline staging` — tách pipeline thành giai đoạn chuẩn bị dữ liệu và giai đoạn phân tích
+- `data preparation` — chuẩn bị dữ liệu trước khi đưa vào batch
+- `multi-turn dependency` — phụ thuộc giữa các lượt, kết quả bước trước quyết định bước sau
 
-- **A:** **Sai.** Đây chính là bẫy "Match results by array position" được nêu ở cơ chế custom_id per request. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **No interactive tool loop inside item**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Latency fit**, không giải quyết được yêu cầu cốt lõi "Batch result ordering should not be assumed" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Batch result ordering should not be assumed. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+### Bẫy đề thi
 
-**Exam heuristic:** Nếu đề xuất hiện "1,000 documents return mixed outcomes", ưu tiên phân biệt `custom_id per request` với các lựa chọn mô tả chuyện khác.
+- ✗ Cho rằng batch xử lý được agent gọi tool nhiều lượt cho mỗi item ⇒ ✓ Giai đoạn cần tool tương tác phải đồng bộ
+- ✗ Bỏ hẳn batch vì một số bước cần tool ⇒ ✓ Tách giai đoạn: chuẩn bị dữ liệu trước, phân tích một lượt bằng batch
+- ✗ Gửi nhiều batch nối tiếp để mô phỏng vòng lặp ⇒ ✓ Dùng điều phối đồng bộ cho phần nhiều lượt
 
-### Q04. Để viết acceptance criteria cho tình huống **Agent must fetch latest order info mid-analysis**, lựa chọn nào thể hiện ranh giới đúng?
+### Câu hỏi
 
-- **A.** Use synchronous orchestration for tool-dependent phase; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Assume batch performs arbitrary multi-turn tools; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Move all jobs to batch because cheaper; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Spend synchronous budget on every report; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+#### Q1. Mỗi item cần agent tra cứu thông tin đơn hàng mới nhất giữa chừng phân tích rồi mới kết luận. Bạn nên làm gì?
+- A. Đưa toàn bộ vào batch, model sẽ tự gọi tool nhiều lần
+- B. Gửi nhiều batch liên tiếp để giả lập vòng lặp
+- C. Bỏ bước tra cứu
+- D. Dùng điều phối đồng bộ cho phần cần tool; hoặc tra cứu dữ liệu trước rồi mới đưa vào batch phân tích một lượt
 
-**Đáp án: A**
+**Đáp án:** D
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Giải thích:** Batch không có chỗ chèn kết quả tool giữa chừng. D dùng đồng bộ hoặc tách giai đoạn. A sai cơ chế. B chậm và không thực tế. C mất thông tin cần thiết.
 
-- **A:** **Đúng.** Single batch request cannot dynamically call tools and reenter same item. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Assume batch performs arbitrary multi-turn tools" được nêu ở cơ chế No interactive tool loop inside item. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Latency fit**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Async reporting use case**, không giải quyết được yêu cầu cốt lõi "Single batch request cannot dynamically call tools and reenter same item" và thiếu điều kiện kiểm chứng.
+#### Q2. Tính chất nào của một request trong Message Batches khiến nó không thích hợp cho agentic loop?
+- A. Đắt hơn đồng bộ
+- B. Chỉ chạy được với một model
+- C. Chỉ hỗ trợ văn bản ngắn
+- D. Xử lý bất đồng bộ như một lượt độc lập, không thể xen kẽ chạy tool rồi trả kết quả cho cùng item
 
-**Exam heuristic:** Nếu đề xuất hiện "Agent must fetch latest order info mid-analysis", ưu tiên phân biệt `No interactive tool loop inside item` với các lựa chọn mô tả chuyện khác.
+**Đáp án:** D
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Move all jobs to batch because cheaper**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
-
-- **A.** Match results by array position; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Keep synchronous path for blocking review; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Move all jobs to batch because cheaper; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Spend synchronous budget on every report; áp dụng trực tiếp dù cơ chế sự cố khác.
-
-**Đáp án: B**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc **custom_id per request**, không giải quyết được yêu cầu cốt lõi "Batch saves cost but may take up to 24h without fixed response latency" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Batch saves cost but may take up to 24h without fixed response latency. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Move all jobs to batch because cheaper" được nêu ở cơ chế Latency fit. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Async reporting use case**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-
-**Exam heuristic:** Nếu đề xuất hiện "CI premerge review blocks developer", ưu tiên phân biệt `Latency fit` với các lựa chọn mô tả chuyện khác.
-
-### Q06. Sau khi audit phát hiện **Technical debt report only needed tomorrow**, điều gì là cải tiến có thể kiểm chứng?
-
-- **A.** Match results by array position; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Assume batch performs arbitrary multi-turn tools; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Submit batched requests and collect later; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Spend synchronous budget on every report; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-
-**Đáp án: C**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc cơ chế **custom_id per request**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **No interactive tool loop inside item**, không giải quyết được yêu cầu cốt lõi "Nightly audits and offline extraction fit Message Batches" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Nightly audits and offline extraction fit Message Batches. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Spend synchronous budget on every report" được nêu ở cơ chế Async reporting use case. Không đảm bảo xử lý được case và dễ che mất failure mode.
-
-**Exam heuristic:** Nếu đề xuất hiện "Technical debt report only needed tomorrow", ưu tiên phân biệt `Async reporting use case` với các lựa chọn mô tả chuyện khác.
-
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **1,000 documents return mixed outcomes**, nên chọn gì?
-
-- **A.** Match results by array position; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Assume batch performs arbitrary multi-turn tools; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Move all jobs to batch because cheaper; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Correlate by custom_id and retry failed subset; kèm kiểm thử lại điều kiện và ghi evidence.
-
-**Đáp án: D**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Đây chính là bẫy "Match results by array position" được nêu ở cơ chế custom_id per request. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **No interactive tool loop inside item**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Latency fit**, không giải quyết được yêu cầu cốt lõi "Batch result ordering should not be assumed" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Batch result ordering should not be assumed. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-
-**Exam heuristic:** Nếu đề xuất hiện "1,000 documents return mixed outcomes", ưu tiên phân biệt `custom_id per request` với các lựa chọn mô tả chuyện khác.
-
-### Q08. Một reviewer nêu giải pháp **Assume batch performs arbitrary multi-turn tools**. Đánh giá chính xác nhất là gì?
-
-- **A.** Use synchronous orchestration for tool-dependent phase; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Assume batch performs arbitrary multi-turn tools; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Move all jobs to batch because cheaper; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Spend synchronous budget on every report; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-
-**Đáp án: A**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Đúng.** Single batch request cannot dynamically call tools and reenter same item. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Assume batch performs arbitrary multi-turn tools" được nêu ở cơ chế No interactive tool loop inside item. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Latency fit**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Async reporting use case**, không giải quyết được yêu cầu cốt lõi "Single batch request cannot dynamically call tools and reenter same item" và thiếu điều kiện kiểm chứng.
-
-**Exam heuristic:** Nếu đề xuất hiện "Agent must fetch latest order info mid-analysis", ưu tiên phân biệt `No interactive tool loop inside item` với các lựa chọn mô tả chuyện khác.
-
-### Q09. Trong thử nghiệm đối chứng với tình huống **CI premerge review blocks developer**, tiêu chí pass phù hợp là gì?
-
-- **A.** Match results by array position; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Keep synchronous path for blocking review; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Move all jobs to batch because cheaper; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Spend synchronous budget on every report; áp dụng trực tiếp dù cơ chế sự cố khác.
-
-**Đáp án: B**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc **custom_id per request**, không giải quyết được yêu cầu cốt lõi "Batch saves cost but may take up to 24h without fixed response latency" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Batch saves cost but may take up to 24h without fixed response latency. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Move all jobs to batch because cheaper" được nêu ở cơ chế Latency fit. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Async reporting use case**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-
-**Exam heuristic:** Nếu đề xuất hiện "CI premerge review blocks developer", ưu tiên phân biệt `Latency fit` với các lựa chọn mô tả chuyện khác.
-
-### Q10. Để giảm lỗi tái diễn với **Technical debt report only needed tomorrow**, biện pháp nào phù hợp với cơ chế đã học?
-
-- **A.** Match results by array position; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Assume batch performs arbitrary multi-turn tools; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Submit batched requests and collect later; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Spend synchronous budget on every report; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-
-**Đáp án: C**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc cơ chế **custom_id per request**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **No interactive tool loop inside item**, không giải quyết được yêu cầu cốt lõi "Nightly audits and offline extraction fit Message Batches" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Nightly audits and offline extraction fit Message Batches. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Spend synchronous budget on every report" được nêu ở cơ chế Async reporting use case. Không đảm bảo xử lý được case và dễ che mất failure mode.
-
-**Exam heuristic:** Nếu đề xuất hiện "Technical debt report only needed tomorrow", ưu tiên phân biệt `Async reporting use case` với các lựa chọn mô tả chuyện khác.
-
-## 6. Lab / Bài thực hành tự kiểm tra
-
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "CI premerge review blocks developer".
-
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Keep synchronous path for blocking review.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
-
-## 7. Cheat sheet / Ôn nhanh
-
-- **Latency fit:** Batch saves cost but may take up to 24h without fixed response latency. ✓ Keep synchronous path for blocking review. ✗ Move all jobs to batch because cheaper.
-- **Async reporting use case:** Nightly audits and offline extraction fit Message Batches. ✓ Submit batched requests and collect later. ✗ Spend synchronous budget on every report.
-- **custom_id per request:** Batch result ordering should not be assumed. ✓ Correlate by custom_id and retry failed subset. ✗ Match results by array position.
-- **No interactive tool loop inside item:** Single batch request cannot dynamically call tools and reenter same item. ✓ Use synchronous orchestration for tool-dependent phase. ✗ Assume batch performs arbitrary multi-turn tools.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/4-prompt-engineering/4-5-batch-processing
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Vòng lặp tool cần code của bạn chèn `tool_result` giữa các lượt, điều batch không hỗ trợ. A sai vì batch rẻ hơn. B và C không phải lý do thực tế.

@@ -1,326 +1,250 @@
 # 2.3 — Tool Distribution & Tool Choice
 
-> Domain 2: Tool Design & MCP Integration · Tỷ trọng toàn domain: 18%
-> Source lesson: https://claudecertificationguide.com/learn/2-tool-design-mcp/2-3-tool-distribution-choice
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+Có hai câu hỏi thiết kế khác nhau nhưng thường đi cùng nhau: **mỗi agent nên nhìn thấy những tool nào** (phân phối tool) và **model bị buộc hay được tự do gọi tool** (tham số `tool_choice`). Cả hai đều ảnh hưởng độ tin cậy: quá nhiều tool khiến model chọn kém; `tool_choice` sai khiến tool không chạy khi cần, hoặc chạy khi không cần.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Tool Distribution & Tool Choice**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Quy tắc nhớ nhanh: **ít tool, đúng vai trò cho từng agent; và chọn `tool_choice` theo mức độ bắt buộc: `auto` (tùy chọn), `any` (bắt buộc dùng một tool, model chọn), tool cụ thể (ép đúng tool đó).**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Quá tải tool (tool overload) và giới hạn theo vai trò
 
-### 2.1. Tool overload
+### Trọng tâm
 
-**Principle (EN):** Many exposed tools degrade model selection; restrict by agent role.
+Càng nhiều tool không liên quan hiển thị cho một agent, độ chính xác chọn tool càng giảm. Cách sửa là **chia vai trò và giới hạn danh sách tool của từng agent**, không phải dời tool sang chỗ khác.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **many exposed tools degrade model selection; restrict by agent role**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** Coordinator directly sees 22 unrelated operations.
+Mỗi tool bạn khai báo chiếm token trong context và là một lựa chọn model phải cân nhắc. Với khoảng vài tool, model chọn rất tốt; khi lên hàng chục tool thuộc nhiều lĩnh vực (ví dụ coordinator thấy cùng lúc 22 thao tác: tìm kiếm, ghi DB, gửi email, xử lý file...), tỷ lệ gọi nhầm tool tăng, đặc biệt khi các mô tả gần giống nhau.
 
-**Recommended implementation:** Split roles and constrain visible tool lists.
+Hướng giải quyết trong hệ thống multi-agent:
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Move same 22 tools across two MCP servers.
+- **Chia theo vai trò**: coordinator chỉ có tool điều phối (giao việc cho subagent); subagent tìm kiếm chỉ có tool tìm kiếm; subagent ghi dữ liệu chỉ có tool ghi.
+- **Giới hạn danh sách tool hiển thị** cho từng agent (ví dụ cấu hình danh sách tool được phép của subagent).
+- Lợi ích phụ: **nguyên tắc đặc quyền tối thiểu** (least privilege): subagent chỉ đọc không thể vô tình xóa dữ liệu.
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Coordinator directly sees 22 unrelated operations".
-- Decision: áp dụng nguyên tắc **Tool overload** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Split roles and constrain visible tool lists" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Một sai lầm phổ biến là "chia 22 tool thành hai MCP server". MCP server chỉ là **cách đóng gói và kết nối** tool; nếu cùng một agent vẫn thấy cả 22 tool thì quá tải vẫn còn nguyên. Vấn đề là **tập tool agent nhìn thấy**, không phải tool đến từ đâu.
 
-### 2.2. Consolidate homogeneous operations
+Ngược lại, đừng đi quá đà: mỗi vai trò phải có đủ tool để hoàn thành công việc của nó, nếu không phải vòng qua coordinator quá nhiều (xem K4).
 
-**Principle (EN):** Numerous near-identical transformations can become enum driven function.
+### Keyword
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **numerous near-identical transformations can become enum driven function**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+- `tool overload` — quá nhiều tool khiến model chọn kém
+- `role-based tool scoping` — giới hạn tool theo vai trò agent
+- `least privilege` — đặc quyền tối thiểu: chỉ cấp quyền cần thiết
+- `coordinator` — agent điều phối, giao việc cho subagent
+- `subagent` — agent con làm một phần việc chuyên biệt
+- `allowed tools` — danh sách tool được phép dùng của một agent
 
-**Case study / Tình huống:** 19 transforms differ only by operation name.
+### Bẫy đề thi
 
-**Recommended implementation:** Use one transform_data tool with transform_type enum.
+- ✗ Chia 22 tool sang hai MCP server là hết quá tải ⇒ ✓ Phải giảm tập tool mà mỗi agent nhìn thấy, theo vai trò
+- ✗ Cho coordinator mọi tool để "linh hoạt" ⇒ ✓ Coordinator chỉ giữ tool điều phối; việc chuyên môn giao subagent
+- ✗ Dặn trong prompt "chỉ dùng 5 tool trong số 22" ⇒ ✓ Giới hạn ở cấu hình, không chỉ ở lời nhắc
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Create 19 separate agent roles.
+### Câu hỏi
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "19 transforms differ only by operation name".
-- Decision: áp dụng nguyên tắc **Consolidate homogeneous operations** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Use one transform_data tool with transform_type enum" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+#### Q1. Coordinator của hệ thống nghiên cứu hiển thị trực tiếp 22 tool không liên quan (tìm kiếm, ghi DB, gửi email...) và hay chọn nhầm. Thiết kế nào tốt nhất?
+- A. Chuyển 22 tool sang hai MCP server khác nhau nhưng vẫn kết nối cho coordinator
+- B. Thêm đoạn prompt dài hướng dẫn chọn tool
+- C. Tạo thêm 22 agent mỗi agent một tool
+- D. Chia vai trò: mỗi subagent chỉ thấy nhóm tool liên quan, coordinator chỉ có tool điều phối
 
-### 2.3. tool_choice semantics
+**Đáp án:** D
 
-**Principle (EN):** auto optional tool, any mandatory unspecified tool, named tool forced.
+**Giải thích:** Giảm tập tool hiển thị theo vai trò xử lý đúng nguyên nhân. A không đổi số tool coordinator thấy. B vẫn để model đối mặt 22 lựa chọn. C quá mức và phức tạp.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **auto optional tool, any mandatory unspecified tool, named tool forced**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+#### Q2. Lợi ích bổ sung nào của việc giới hạn tool theo vai trò?
+- A. Giảm số lượng token output
+- B. Tăng nhiệt độ sampling hiệu quả hơn
+- C. Subagent chỉ đọc không thể gọi tool ghi/xóa, tuân theo đặc quyền tối thiểu
+- D. Cho phép bỏ description của tool
 
-**Case study / Tình huống:** Document schema type unknown yet must extract structured object.
+**Đáp án:** C
 
-**Recommended implementation:** Use any across candidate extractors.
+**Giải thích:** Giới hạn tool vừa cải thiện chọn lựa vừa giảm rủi ro hành động ngoài ý muốn. A, B, D không liên quan.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Use auto and assume tool will run.
+## K2. Gộp các thao tác đồng nhất bằng enum
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Document schema type unknown yet must extract structured object".
-- Decision: áp dụng nguyên tắc **tool_choice semantics** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Use any across candidate extractors" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+### Trọng tâm
 
-### 2.4. Scoped cross-role capabilities
+Nhiều thao tác **gần giống hệt, chỉ khác tên phép** nên gộp thành **một tool với tham số `enum`**, thay vì nhân bản tool hay nhân bản agent.
 
-**Principle (EN):** Offer small safe direct lookup for common verification, escalate hard cases.
+### Giải thích
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **offer small safe direct lookup for common verification, escalate hard cases**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+Giả sử có 19 phép biến đổi dữ liệu: `to_csv`, `to_json`, `dedupe`, `normalize_dates`,... Cùng nhận dữ liệu vào và trả dữ liệu ra. Nếu khai báo 19 tool, model phải đọc 19 description gần giống nhau, vừa tốn token vừa dễ nhầm.
 
-**Case study / Tình huống:** Synthesis needs cheap direct factual checks frequently.
+Cách gọn hơn:
 
-**Recommended implementation:** Expose narrow verify_fact and route complex work centrally.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Give unrestricted search and delete access.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Synthesis needs cheap direct factual checks frequently".
-- Decision: áp dụng nguyên tắc **Scoped cross-role capabilities** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Expose narrow verify_fact and route complex work centrally" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-## 3. Ví dụ thiết kế / Worked engineering example
-
-**Problem:** Coordinator directly sees 22 unrelated operations.
-
-**Bad design:** Move same 22 tools across two MCP servers.
-
-**Better design:** Split roles and constrain visible tool lists.
-
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
-
-### Walkthrough: decision trace / Luồng xử lý
-
-```text
-INPUT  : Coordinator directly sees 22 unrelated operations.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Split roles and constrain visible tool lists.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
+```json
+{
+  "name": "transform_data",
+  "description": "Apply a named transformation to a dataset.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "dataset_id": {"type": "string"},
+      "transform_type": {
+        "type": "string",
+        "enum": ["to_csv", "to_json", "dedupe", "normalize_dates"]
+      }
+    },
+    "required": ["dataset_id", "transform_type"]
+  }
+}
 ```
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+`enum` giới hạn giá trị hợp lệ (schema chặn giá trị lạ), còn description giải thích từng giá trị. Số tool hiển thị giảm mạnh, mà năng lực không đổi.
 
-## 4. Exam traps / Bẫy dễ nhầm
+Điều kiện áp dụng: các thao tác **cùng ý định và cùng hình dạng input/output**. Nếu chúng khác nhau về bản chất (đọc so với ghi, quyền khác nhau, schema khác nhau), thì gộp sẽ tạo "tool đa năng mơ hồ" (xem bài 2.1) và mất khả năng cấp quyền riêng. Cũng đừng giải quyết bằng cách tạo 19 agent: agent là đơn vị nặng (có context, vòng lặp riêng), không dùng để thay cho một tham số.
 
-1. **Bẫy Tool overload:** "Move same 22 tools across two MCP servers" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở tool overload, rồi chọn "Split roles and constrain visible tool lists".
+### Keyword
 
-2. **Bẫy Consolidate homogeneous operations:** "Create 19 separate agent roles" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở consolidate homogeneous operations, rồi chọn "Use one transform_data tool with transform_type enum".
+- `enum` — tập giá trị hữu hạn cho một tham số trong JSON Schema
+- `consolidation` — gộp nhiều tool tương tự thành một
+- `homogeneous operations` — các thao tác đồng nhất về ý định và hình dạng
+- `transform_type` — ví dụ tham số enum chọn phép biến đổi
+- `schema validation` — kiểm tra giá trị đầu vào theo schema
+- `agent proliferation` — nhân bản agent không cần thiết
 
-3. **Bẫy tool_choice semantics:** "Use auto and assume tool will run" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở tool_choice semantics, rồi chọn "Use any across candidate extractors".
+### Bẫy đề thi
 
-4. **Bẫy Scoped cross-role capabilities:** "Give unrestricted search and delete access" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở scoped cross-role capabilities, rồi chọn "Expose narrow verify_fact and route complex work centrally".
+- ✗ 19 phép gần giống nhau thì tạo 19 agent ⇒ ✓ Một tool với tham số enum
+- ✗ Gộp mọi thao tác, kể cả đọc lẫn xóa, vào một tool ⇒ ✓ Chỉ gộp thao tác đồng nhất; khác quyền/ý định thì tách
+- ✗ Để `transform_type` là chuỗi tự do ⇒ ✓ Dùng enum để giới hạn giá trị hợp lệ
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+### Câu hỏi
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+#### Q1. Hệ thống ETL có 19 tool biến đổi dữ liệu, chỉ khác tên phép và cùng input/output. Model thường chọn sai. Giải pháp phù hợp nhất?
+- A. Một tool `transform_data` với tham số `transform_type` kiểu enum
+- B. Giữ nguyên 19 tool và thêm few-shot
+- C. Tạo 19 subagent độc lập
+- D. Cho model viết script riêng mỗi lần
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **Coordinator directly sees 22 unrelated operations**. Phương án nào phù hợp nhất?
+**Đáp án:** A
 
-- **A.** Move same 22 tools across two MCP servers; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Create 19 separate agent roles; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Use auto and assume tool will run; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Split roles and constrain visible tool lists; kèm kiểm thử lại điều kiện và ghi evidence.
+**Giải thích:** Thao tác đồng nhất nên gộp bằng enum, giảm số lựa chọn mà vẫn giữ tính xác định. B vẫn nhiều tool. C quá nặng. D mất tính kiểm soát.
 
-**Đáp án: D**
+#### Q2. Điều kiện nào KHÔNG phù hợp để gộp hai tool thành một tool dùng enum?
+- A. Cùng ý định và cùng hình dạng input
+- B. Khác nhau chỉ ở tên phép biến đổi
+- C. Cùng mức quyền truy cập
+- D. Một tool chỉ đọc, tool kia xóa dữ liệu và cần quyền riêng
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** D
 
-- **A:** **Sai.** Đây chính là bẫy "Move same 22 tools across two MCP servers" được nêu ở cơ chế Tool overload. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Consolidate homogeneous operations**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **tool_choice semantics**, không giải quyết được yêu cầu cốt lõi "Many exposed tools degrade model selection; restrict by agent role" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Many exposed tools degrade model selection; restrict by agent role. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+**Giải thích:** Khác biệt quyền và hậu quả cần tách để kiểm soát và mô tả rõ. A, B, C là điều kiện thuận lợi để gộp.
 
-**Exam heuristic:** Nếu đề xuất hiện "Coordinator directly sees 22 unrelated operations", ưu tiên phân biệt `Tool overload` với các lựa chọn mô tả chuyện khác.
+## K3. Ngữ nghĩa của `tool_choice`
 
-### Q02. Một kỹ sư đề xuất **Create 19 separate agent roles** cho tình huống: 19 transforms differ only by operation name. Cần phản biện thế nào?
+### Trọng tâm
 
-- **A.** Use one transform_data tool with transform_type enum; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Create 19 separate agent roles; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Use auto and assume tool will run; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Give unrestricted search and delete access; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+`tool_choice` điều khiển mức bắt buộc gọi tool: **`auto`** (model tự quyết, có thể không gọi), **`any`** (phải gọi một trong các tool, model chọn tool nào), **tool cụ thể** (`{"type": "tool", "name": ...}`, ép gọi đúng tool đó). Ngoài ra có **`none`** (không gọi tool).
 
-**Đáp án: A**
+### Giải thích
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+| Giá trị | Hành vi | Dùng khi |
+|---|---|---|
+| `auto` (mặc định) | Model tự quyết có gọi tool hay trả lời bằng văn bản | Trợ lý hội thoại chung |
+| `any` | Bắt buộc gọi **một** tool, model chọn trong danh sách | Cần output có cấu trúc nhưng chưa biết loại nào |
+| `tool` + `name` | Bắt buộc gọi **đúng tool** được chỉ định | Luôn cần một bước cố định (ví dụ trích xuất theo một schema) |
+| `none` | Không được gọi tool | Muốn chỉ văn bản dù tool vẫn khai báo |
 
-- **A:** **Đúng.** Numerous near-identical transformations can become enum driven function. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Create 19 separate agent roles" được nêu ở cơ chế Consolidate homogeneous operations. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **tool_choice semantics**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Scoped cross-role capabilities**, không giải quyết được yêu cầu cốt lõi "Numerous near-identical transformations can become enum driven function" và thiếu điều kiện kiểm chứng.
+Ví dụ: bạn nhận tài liệu chưa rõ loại (hóa đơn, hợp đồng, biên lai) và cần trích xuất thành đối tượng có cấu trúc. Có ba tool trích xuất `extract_invoice`, `extract_contract`, `extract_receipt`. Với `auto`, đôi khi model trả lời bằng văn bản tự do, bạn không có object. Với tool cụ thể, bạn ép sai loại khi tài liệu là hợp đồng. Giải pháp đúng là **`any`**: chắc chắn có một lần gọi tool trích xuất, model tự chọn tool phù hợp loại tài liệu.
 
-**Exam heuristic:** Nếu đề xuất hiện "19 transforms differ only by operation name", ưu tiên phân biệt `Consolidate homogeneous operations` với các lựa chọn mô tả chuyện khác.
+Chi tiết cần nhớ: khi dùng `any` hoặc tool cụ thể, response có `tool_use` ngay từ đầu, model **không viết đoạn giải thích trước** như ở `auto`. Ngoài ra, `tool_choice` thường dùng để ép đầu ra có cấu trúc (xem bài 4.3), và việc ép tool không thay đổi việc bạn vẫn phải chạy tool và trả `tool_result` nếu muốn vòng lặp tiếp tục.
 
-### Q03. Nếu sự cố **Document schema type unknown yet must extract structured object** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+### Keyword
 
-- **A.** Move same 22 tools across two MCP servers; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Use any across candidate extractors; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Use auto and assume tool will run; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Give unrestricted search and delete access; áp dụng trực tiếp dù cơ chế sự cố khác.
+- `tool_choice` — tham số điều khiển việc model có/bắt buộc gọi tool
+- `auto` — model tự quyết định gọi tool hay không
+- `any` — bắt buộc gọi một tool bất kỳ trong danh sách
+- `forced tool` — ép gọi đúng tool chỉ định bằng `{"type": "tool", "name": ...}`
+- `none` — cấm gọi tool
+- `structured output` — đầu ra có cấu trúc, thường đạt qua tool use
 
-**Đáp án: B**
+### Bẫy đề thi
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- ✗ Dùng `auto` và cho rằng tool chắc chắn được gọi ⇒ ✓ `auto` có thể trả văn bản; cần chắc chắn thì dùng `any` hoặc ép tool
+- ✗ Ép một tool cụ thể khi chưa biết loại tài liệu ⇒ ✓ Dùng `any` để model chọn trong các tool ứng viên
+- ✗ Nghĩ `any` nghĩa là "gọi mọi tool" ⇒ ✓ `any` = bắt buộc gọi một tool, model chọn
 
-- **A:** **Sai.** Phương án thuộc **Tool overload**, không giải quyết được yêu cầu cốt lõi "auto optional tool, any mandatory unspecified tool, named tool forced" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** auto optional tool, any mandatory unspecified tool, named tool forced. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Use auto and assume tool will run" được nêu ở cơ chế tool_choice semantics. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Scoped cross-role capabilities**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+### Câu hỏi
 
-**Exam heuristic:** Nếu đề xuất hiện "Document schema type unknown yet must extract structured object", ưu tiên phân biệt `tool_choice semantics` với các lựa chọn mô tả chuyện khác.
+#### Q1. Pipeline nhận tài liệu loại chưa biết (hóa đơn, hợp đồng, biên lai) và luôn phải trả về một đối tượng trích xuất có cấu trúc, mỗi loại có tool riêng. Thiết lập `tool_choice` nào hợp lý nhất?
+- A. `auto`
+- B. `any`
+- C. Ép cố định `extract_invoice`
+- D. `none`
 
-### Q04. Để viết acceptance criteria cho tình huống **Synthesis needs cheap direct factual checks frequently**, lựa chọn nào thể hiện ranh giới đúng?
+**Đáp án:** B
 
-- **A.** Move same 22 tools across two MCP servers; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Create 19 separate agent roles; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Expose narrow verify_fact and route complex work centrally; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Give unrestricted search and delete access; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+**Giải thích:** `any` đảm bảo luôn có lời gọi tool trích xuất và để model chọn tool đúng loại. `auto` có thể trả văn bản thuần. C ép sai với tài liệu không phải hóa đơn. D cấm gọi tool.
 
-**Đáp án: C**
+#### Q2. Một bước cố định của workflow luôn phải chạy `extract_metadata` ngay đầu mỗi tài liệu trước mọi bước khác. Cách đảm bảo xác định nhất?
+- A. Dặn trong prompt "hãy luôn gọi extract_metadata trước"
+- B. Dùng `tool_choice: auto` và hy vọng
+- C. Ép `tool_choice` vào đúng `extract_metadata` ở lượt đầu rồi chuyển sang chế độ thường cho các lượt sau
+- D. Dùng `none` ở lượt đầu
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** C
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Tool overload**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Consolidate homogeneous operations**, không giải quyết được yêu cầu cốt lõi "Offer small safe direct lookup for common verification, escalate hard cases" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Offer small safe direct lookup for common verification, escalate hard cases. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Give unrestricted search and delete access" được nêu ở cơ chế Scoped cross-role capabilities. Không đảm bảo xử lý được case và dễ che mất failure mode.
+**Giải thích:** Ép tool cụ thể cho đảm bảo mang tính cấu hình, không phụ thuộc xác suất. A và B không đảm bảo. D cấm gọi tool.
 
-**Exam heuristic:** Nếu đề xuất hiện "Synthesis needs cheap direct factual checks frequently", ưu tiên phân biệt `Scoped cross-role capabilities` với các lựa chọn mô tả chuyện khác.
+## K4. Khả năng chéo vai trò có phạm vi hẹp (scoped cross-role tools)
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Move same 22 tools across two MCP servers**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+### Trọng tâm
 
-- **A.** Move same 22 tools across two MCP servers; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Create 19 separate agent roles; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Use auto and assume tool will run; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Split roles and constrain visible tool lists; kèm kiểm thử lại điều kiện và ghi evidence.
+Khi một agent thường xuyên cần một việc nhỏ, rẻ, an toàn (ví dụ xác minh một sự kiện), hãy cấp cho nó **một tool hẹp** như `verify_fact`; việc phức tạp vẫn chuyển qua coordinator. **Đừng** cấp quyền rộng không giới hạn.
 
-**Đáp án: D**
+### Giải thích
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Giới hạn tool theo vai trò (K1) có nhược điểm: nếu subagent tổng hợp (synthesis) cần xác minh nhanh một con số khoảng chục lần mỗi nhiệm vụ mà luôn phải quay lại coordinator, thì:
 
-- **A:** **Sai.** Đây chính là bẫy "Move same 22 tools across two MCP servers" được nêu ở cơ chế Tool overload. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Consolidate homogeneous operations**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **tool_choice semantics**, không giải quyết được yêu cầu cốt lõi "Many exposed tools degrade model selection; restrict by agent role" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Many exposed tools degrade model selection; restrict by agent role. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+- Tăng số vòng giao tiếp và độ trễ.
+- Coordinator bị tắc nghẽn bởi các yêu cầu tầm thường.
 
-**Exam heuristic:** Nếu đề xuất hiện "Coordinator directly sees 22 unrelated operations", ưu tiên phân biệt `Tool overload` với các lựa chọn mô tả chuyện khác.
+Giải pháp cân bằng là **tool chéo vai trò có phạm vi hẹp**:
 
-### Q06. Sau khi audit phát hiện **19 transforms differ only by operation name**, điều gì là cải tiến có thể kiểm chứng?
+- `verify_fact(claim)`: chỉ đọc, kết quả nhỏ, rủi ro thấp, dùng cho **trường hợp 80% thường gặp**.
+- Các trường hợp khó (cần nghiên cứu sâu, nhiều nguồn) vẫn **giao lại coordinator** để điều phối subagent tìm kiếm.
 
-- **A.** Use one transform_data tool with transform_type enum; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Create 19 separate agent roles; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Use auto and assume tool will run; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Give unrestricted search and delete access; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+Điều không nên làm: đưa cho subagent tổng hợp bộ tìm kiếm web đầy đủ và quyền ghi/xóa "cho tiện". Điều này phá vỡ chia vai trò, tăng bề mặt rủi ro và quay lại tình trạng quá tải tool.
 
-**Đáp án: A**
+Nguyên tắc thiết kế: **cấp đúng khả năng nhỏ nhất đủ giải quyết nhu cầu phổ biến**, và có đường leo thang cho phần còn lại.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Keyword
 
-- **A:** **Đúng.** Numerous near-identical transformations can become enum driven function. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Create 19 separate agent roles" được nêu ở cơ chế Consolidate homogeneous operations. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **tool_choice semantics**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Scoped cross-role capabilities**, không giải quyết được yêu cầu cốt lõi "Numerous near-identical transformations can become enum driven function" và thiếu điều kiện kiểm chứng.
+- `scoped tool` — tool có phạm vi quyền/hành vi hẹp
+- `verify_fact` — ví dụ tool xác minh sự kiện chỉ đọc, nhẹ
+- `cross-role capability` — khả năng dùng chung giữa các vai trò
+- `synthesis agent` — agent tổng hợp kết quả từ nhiều nguồn
+- `escalation path` — đường chuyển lên vai trò mạnh hơn cho trường hợp khó
+- `round trip` — một vòng đi–về giữa các agent, tốn độ trễ
 
-**Exam heuristic:** Nếu đề xuất hiện "19 transforms differ only by operation name", ưu tiên phân biệt `Consolidate homogeneous operations` với các lựa chọn mô tả chuyện khác.
+### Bẫy đề thi
 
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Document schema type unknown yet must extract structured object**, nên chọn gì?
+- ✗ Cho subagent toàn bộ tool tìm kiếm và xóa để khỏi phải quay lại coordinator ⇒ ✓ Chỉ cấp tool hẹp, chỉ đọc cho nhu cầu phổ biến
+- ✗ Mọi xác minh nhỏ đều phải qua coordinator ⇒ ✓ Việc đơn giản xử lý trực tiếp bằng tool hẹp; việc phức tạp mới chuyển lên
+- ✗ Coi tool hẹp là phá nguyên tắc giới hạn vai trò ⇒ ✓ Đó là ngoại lệ có kiểm soát nhằm giảm round trip
 
-- **A.** Move same 22 tools across two MCP servers; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Use any across candidate extractors; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Use auto and assume tool will run; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Give unrestricted search and delete access; áp dụng trực tiếp dù cơ chế sự cố khác.
+### Câu hỏi
 
-**Đáp án: B**
+#### Q1. Agent tổng hợp thường phải xác minh các số liệu đơn giản, mỗi lần đều qua coordinator làm hệ thống chậm. Cách tiếp cận tốt nhất?
+- A. Cấp cho agent tổng hợp công cụ tìm kiếm web đầy đủ cùng quyền ghi
+- B. Giữ nguyên, chậm là chấp nhận được
+- C. Cấp tool hẹp, chỉ đọc `verify_fact` cho việc phổ biến, các việc phức tạp vẫn chuyển qua coordinator
+- D. Bỏ bước xác minh
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** C
 
-- **A:** **Sai.** Phương án thuộc **Tool overload**, không giải quyết được yêu cầu cốt lõi "auto optional tool, any mandatory unspecified tool, named tool forced" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** auto optional tool, any mandatory unspecified tool, named tool forced. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Use auto and assume tool will run" được nêu ở cơ chế tool_choice semantics. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Scoped cross-role capabilities**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+**Giải thích:** Tool hẹp giảm round trip mà vẫn giữ rủi ro thấp; case khó vẫn có đường leo thang. A phá phân quyền. B bỏ qua vấn đề. D hạ chất lượng.
 
-**Exam heuristic:** Nếu đề xuất hiện "Document schema type unknown yet must extract structured object", ưu tiên phân biệt `tool_choice semantics` với các lựa chọn mô tả chuyện khác.
+#### Q2. Khi cấp tool chéo vai trò cho một subagent, tiêu chí nào quan trọng nhất?
+- A. Tool càng mạnh càng tốt
+- B. Phạm vi hẹp, ít rủi ro, phục vụ nhu cầu phổ biến và có đường leo thang
+- C. Tool phải giống hệt tool của coordinator
+- D. Tool chỉ ghi, không đọc
 
-### Q08. Một reviewer nêu giải pháp **Give unrestricted search and delete access**. Đánh giá chính xác nhất là gì?
+**Đáp án:** B
 
-- **A.** Move same 22 tools across two MCP servers; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Create 19 separate agent roles; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Expose narrow verify_fact and route complex work centrally; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Give unrestricted search and delete access; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-
-**Đáp án: C**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc cơ chế **Tool overload**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Consolidate homogeneous operations**, không giải quyết được yêu cầu cốt lõi "Offer small safe direct lookup for common verification, escalate hard cases" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Offer small safe direct lookup for common verification, escalate hard cases. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Give unrestricted search and delete access" được nêu ở cơ chế Scoped cross-role capabilities. Không đảm bảo xử lý được case và dễ che mất failure mode.
-
-**Exam heuristic:** Nếu đề xuất hiện "Synthesis needs cheap direct factual checks frequently", ưu tiên phân biệt `Scoped cross-role capabilities` với các lựa chọn mô tả chuyện khác.
-
-### Q09. Trong thử nghiệm đối chứng với tình huống **Coordinator directly sees 22 unrelated operations**, tiêu chí pass phù hợp là gì?
-
-- **A.** Move same 22 tools across two MCP servers; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Create 19 separate agent roles; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Use auto and assume tool will run; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Split roles and constrain visible tool lists; kèm kiểm thử lại điều kiện và ghi evidence.
-
-**Đáp án: D**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Đây chính là bẫy "Move same 22 tools across two MCP servers" được nêu ở cơ chế Tool overload. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Consolidate homogeneous operations**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **tool_choice semantics**, không giải quyết được yêu cầu cốt lõi "Many exposed tools degrade model selection; restrict by agent role" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Many exposed tools degrade model selection; restrict by agent role. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-
-**Exam heuristic:** Nếu đề xuất hiện "Coordinator directly sees 22 unrelated operations", ưu tiên phân biệt `Tool overload` với các lựa chọn mô tả chuyện khác.
-
-### Q10. Để giảm lỗi tái diễn với **19 transforms differ only by operation name**, biện pháp nào phù hợp với cơ chế đã học?
-
-- **A.** Use one transform_data tool with transform_type enum; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Create 19 separate agent roles; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Use auto and assume tool will run; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Give unrestricted search and delete access; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-
-**Đáp án: A**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Đúng.** Numerous near-identical transformations can become enum driven function. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Create 19 separate agent roles" được nêu ở cơ chế Consolidate homogeneous operations. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **tool_choice semantics**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Scoped cross-role capabilities**, không giải quyết được yêu cầu cốt lõi "Numerous near-identical transformations can become enum driven function" và thiếu điều kiện kiểm chứng.
-
-**Exam heuristic:** Nếu đề xuất hiện "19 transforms differ only by operation name", ưu tiên phân biệt `Consolidate homogeneous operations` với các lựa chọn mô tả chuyện khác.
-
-## 6. Lab / Bài thực hành tự kiểm tra
-
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "Coordinator directly sees 22 unrelated operations".
-
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Split roles and constrain visible tool lists.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
-
-## 7. Cheat sheet / Ôn nhanh
-
-- **Tool overload:** Many exposed tools degrade model selection; restrict by agent role. ✓ Split roles and constrain visible tool lists. ✗ Move same 22 tools across two MCP servers.
-- **Consolidate homogeneous operations:** Numerous near-identical transformations can become enum driven function. ✓ Use one transform_data tool with transform_type enum. ✗ Create 19 separate agent roles.
-- **tool_choice semantics:** auto optional tool, any mandatory unspecified tool, named tool forced. ✓ Use any across candidate extractors. ✗ Use auto and assume tool will run.
-- **Scoped cross-role capabilities:** Offer small safe direct lookup for common verification, escalate hard cases. ✓ Expose narrow verify_fact and route complex work centrally. ✗ Give unrestricted search and delete access.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/2-tool-design-mcp/2-3-tool-distribution-choice
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Mục tiêu là giảm độ trễ mà không phá đặc quyền tối thiểu. A, C đi ngược nguyên tắc. D không liên quan nhu cầu xác minh.

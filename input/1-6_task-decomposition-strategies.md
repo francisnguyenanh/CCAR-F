@@ -1,326 +1,234 @@
 # 1.6 — Task Decomposition Strategies
 
-> Domain 1: Agentic Architecture & Orchestration · Tỷ trọng toàn domain: 27%
-> Source lesson: https://claudecertificationguide.com/learn/1-agentic-architecture/1-6-task-decomposition
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+Một tác vụ lớn hiếm khi nên giao cho model trong một lượt duy nhất. **Task decomposition** là việc chia nhỏ tác vụ thành các bước mà mỗi bước model làm tốt. Có hai họ chiến lược chính: **prompt chaining cố định** (các bước biết trước, theo thứ tự cố định) và **phân rã thích ứng** (kế hoạch thay đổi theo những gì phát hiện được). Ngoài ra còn các vấn đề thực tế: một lượt duyệt quá nhiều mục làm model xử lý hời hợt (attention dilution), và kiểm tra từng mục riêng lẻ không bắt được lỗi giữa các mục.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Task Decomposition Strategies**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Đề thi hay hỏi "bài toán này nên dùng chiến lược nào" và "vì sao cách làm một lượt cho kết quả không đều". Quy tắc nhớ nhanh: **bước biết trước → pipeline cố định; phạm vi chưa biết → thích ứng; nhiều mục → duyệt riêng từng mục rồi có một lượt tích hợp.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Prompt chaining cố định
 
-### 2.1. Fixed prompt chaining
+### Trọng tâm
 
-**Principle (EN):** Known predictable steps suit fixed pipelines.
+Khi các bước đã biết trước và lặp lại giống nhau, hãy dùng một chuỗi cố định (ví dụ trích xuất → kiểm tra → định dạng). Không cần agent tự lập kế hoạch lại cho mỗi mục.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **known predictable steps suit fixed pipelines**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** Extract fields, validate and format 10,000 standard documents.
+**Prompt chaining** chia tác vụ thành chuỗi bước tuần tự, đầu ra của bước trước là đầu vào của bước sau; mỗi bước có prompt hẹp, rõ ràng, tập trung. Ví dụ xử lý 10.000 hóa đơn chuẩn: (1) trích xuất các trường, (2) kiểm tra hợp lệ theo luật, (3) định dạng thành báo cáo.
 
-**Recommended implementation:** Use defined extraction-validation-report sequence.
+Lợi ích của chuỗi cố định:
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Re-plan every document arbitrarily.
+- **Dễ đoán và dễ kiểm thử**: mỗi bước có đầu vào/đầu ra rõ ràng, bạn có thể đo chất lượng từng bước.
+- **Có thể chèn kiểm tra giữa các bước** (gate), ví dụ nếu bước 1 thiếu trường bắt buộc thì dừng hoặc gửi xử lý riêng.
+- **Rẻ và nhất quán** khi xử lý hàng loạt: không tốn token để "lập kế hoạch" mỗi lần.
+- Mỗi bước dễ tối ưu độc lập (prompt, model nhỏ hơn cho bước đơn giản).
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Extract fields, validate and format 10,000 standard documents".
-- Decision: áp dụng nguyên tắc **Fixed prompt chaining** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Use defined extraction-validation-report sequence" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Khi nào dùng: tác vụ có cấu trúc ổn định, input thuộc cùng một loại. Khi nào **không**: khi các bước thực sự phụ thuộc vào thứ chưa biết trước (xem K2). Sai lầm điển hình ngược lại là bắt agent "tự lập kế hoạch lại từ đầu" cho từng tài liệu chuẩn: tốn kém, kết quả giữa các tài liệu không nhất quán, khó kiểm toán.
 
-### 2.2. Adaptive task decomposition
+### Keyword
 
-**Principle (EN):** Unknown scope and dependencies need adaptive investigation.
+- `prompt chaining` — chuỗi prompt tuần tự, đầu ra bước trước là đầu vào bước sau
+- `fixed pipeline` — quy trình cố định các bước đã biết trước
+- `gate` — điểm kiểm tra giữa hai bước để quyết định đi tiếp hay dừng
+- `batch processing` — xử lý số lượng lớn mục theo cùng một quy trình
+- `consistency` — tính nhất quán giữa các lần xử lý
+- `workflow` — quy trình do code định nghĩa, khác với agent tự quyết định
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **unknown scope and dependencies need adaptive investigation**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Bẫy đề thi
 
-**Case study / Tình huống:** Legacy application tests reveal untested upstream dependency.
+- ✗ Cho agent tự lập kế hoạch lại cho mỗi tài liệu chuẩn ⇒ ✓ Dùng pipeline cố định trích xuất, kiểm tra, định dạng
+- ✗ Gộp mọi bước vào một prompt khổng lồ cho gọn ⇒ ✓ Chia từng bước hẹp để dễ kiểm thử và tối ưu
+- ✗ Dùng pipeline cố định cho bài toán mà bước sau phụ thuộc phát hiện bất ngờ ⇒ ✓ Dùng phân rã thích ứng
 
-**Recommended implementation:** Update task graph as discoveries emerge.
+### Câu hỏi
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Keep blindly following original file order.
+#### Q1. Công ty cần xử lý 10.000 hóa đơn cùng định dạng: trích các trường, kiểm tra hợp lệ rồi xuất báo cáo chuẩn. Thiết kế nào hợp lý nhất?
+- A. Một agent tự do lập kế hoạch khác nhau cho mỗi hóa đơn
+- B. Pipeline cố định ba bước trích xuất, kiểm tra, định dạng
+- C. Một prompt duy nhất làm cả ba việc cho cả lô
+- D. Nhờ nhân viên làm thủ công và chỉ dùng model để sửa lỗi
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Legacy application tests reveal untested upstream dependency".
-- Decision: áp dụng nguyên tắc **Adaptive task decomposition** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Update task graph as discoveries emerge" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+**Đáp án:** B
 
-### 2.3. Attention dilution
+**Giải thích:** Các bước đã biết và lặp lại nên chuỗi cố định cho tính nhất quán, dễ kiểm thử và chi phí thấp. A tốn kém và không nhất quán. C làm khó đo lường từng bước. D không tận dụng tự động hóa.
 
-**Principle (EN):** One pass over many items reduces depth and consistency.
+#### Q2. Lợi ích nào dưới đây KHÔNG phải của prompt chaining cố định?
+- A. Dễ kiểm thử từng bước
+- B. Có thể chèn kiểm tra chất lượng giữa các bước
+- C. Tự động thích ứng khi phát hiện cấu trúc bất ngờ mà không cần sửa quy trình
+- D. Chi phí dự đoán được
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **one pass over many items reduces depth and consistency**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+**Đáp án:** C
 
-**Case study / Tình huống:** Review first five of fourteen files is thorough, last nine superficial.
+**Giải thích:** Chuỗi cố định, theo định nghĩa, không tự thay đổi cấu trúc; khả năng thích ứng thuộc về phân rã thích ứng. A, B, D đều là ưu điểm thật.
 
-**Recommended implementation:** Separate per-file reviews from cross-file integration.
+## K2. Phân rã thích ứng (adaptive decomposition)
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Only enlarge context window.
+### Trọng tâm
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Review first five of fourteen files is thorough, last nine superficial".
-- Decision: áp dụng nguyên tắc **Attention dilution** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Separate per-file reviews from cross-file integration" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Khi phạm vi và phụ thuộc chưa biết trước, hãy để kế hoạch tiến hóa: bắt đầu bằng khảo sát, rồi cập nhật đồ thị nhiệm vụ khi có phát hiện mới.
 
-### 2.4. Cross-item integration
+### Giải thích
 
-**Principle (EN):** Local passes do not detect cross-module contract issues.
+Nhiều tác vụ không thể lên kế hoạch hoàn chỉnh ngay từ đầu. Ví dụ bổ sung test cho một ứng dụng legacy: bạn không biết trước module nào phụ thuộc module nào. Khi viết test cho file A, bạn phát hiện nó dùng một thư viện nội bộ chưa có test nào, và nếu thư viện đó hỏng thì test của A không có ý nghĩa. Thứ tự file ban đầu bỗng không còn tối ưu.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **local passes do not detect cross-module contract issues**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+Quy trình thích ứng:
 
-**Case study / Tình huống:** Each service looks fine but API contracts mismatch.
+1. **Khảo sát** (map structure): xác định cấu trúc, điểm vào, các phần có rủi ro.
+2. **Lập kế hoạch ban đầu** theo ưu tiên (rủi ro cao, ảnh hưởng lớn).
+3. **Thực hiện từng phần**, ghi nhận phát hiện mới.
+4. **Cập nhật kế hoạch**: thêm nhiệm vụ mới, đổi thứ tự, bỏ nhiệm vụ không còn cần.
 
-**Recommended implementation:** Run separate integration pass over local findings and interfaces.
+Đây cũng là cách agent như Claude Code làm việc với codebase lạ. Điểm khác biệt so với chuỗi cố định: số lượng và thứ tự bước được quyết định lúc chạy bởi **kết quả của các bước trước**. Phải trả giá bằng tính khó đoán và chi phí cao hơn, nên chỉ dùng khi sự bất định là thật.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Assume individual file correctness proves system consistency.
+Sai lầm ngược: bám cứng thứ tự ban đầu ("cứ làm file theo bảng chữ cái") dù phát hiện đã cho thấy thứ tự đó vô nghĩa.
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Each service looks fine but API contracts mismatch".
-- Decision: áp dụng nguyên tắc **Cross-item integration** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Run separate integration pass over local findings and interfaces" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+### Keyword
 
-## 3. Ví dụ thiết kế / Worked engineering example
+- `adaptive decomposition` — phân rã thay đổi theo phát hiện trong lúc chạy
+- `task graph` — đồ thị nhiệm vụ và quan hệ phụ thuộc giữa chúng
+- `exploration` — giai đoạn khảo sát để hiểu cấu trúc trước khi hành động
+- `emergent dependency` — phụ thuộc chỉ lộ ra trong quá trình làm việc
+- `prioritization` — sắp xếp thứ tự theo rủi ro và tác động
+- `replanning` — lập lại kế hoạch khi thông tin thay đổi
 
-**Problem:** Extract fields, validate and format 10,000 standard documents.
+### Bẫy đề thi
 
-**Bad design:** Re-plan every document arbitrarily.
+- ✗ Bám thứ tự file ban đầu dù đã phát hiện phụ thuộc mới ⇒ ✓ Cập nhật kế hoạch theo phát hiện
+- ✗ Dùng phân rã thích ứng cho tác vụ lặp lại ổn định ⇒ ✓ Tác vụ ổn định dùng pipeline cố định cho rẻ và nhất quán
+- ✗ Bắt đầu viết ngay mà chưa khảo sát cấu trúc codebase lạ ⇒ ✓ Khảo sát trước, ưu tiên theo rủi ro rồi mới triển khai
 
-**Better design:** Use defined extraction-validation-report sequence.
+### Câu hỏi
 
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
+#### Q1. Agent đang bổ sung test cho một codebase legacy 200 module. Giữa chừng phát hiện module `billing` phụ thuộc vào `ledger` chưa có test nào. Hành động tốt nhất?
+- A. Tiếp tục theo thứ tự bảng chữ cái đã lập từ đầu
+- B. Bỏ `billing` vì quá phức tạp
+- C. Chạy lại từ đầu với kế hoạch mới cho cả 200 module
+- D. Thêm nhiệm vụ kiểm thử `ledger` vào đồ thị và sắp lại thứ tự hợp lý
 
-### Walkthrough: decision trace / Luồng xử lý
+**Đáp án:** D
 
-```text
-INPUT  : Extract fields, validate and format 10,000 standard documents.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Use defined extraction-validation-report sequence.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
-```
+**Giải thích:** Phát hiện phụ thuộc mới cần được phản ánh vào kế hoạch. A bỏ qua thông tin quan trọng. B né vấn đề. C lãng phí khi chỉ cần điều chỉnh cục bộ.
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+#### Q2. Trường hợp nào phù hợp nhất với phân rã thích ứng thay vì pipeline cố định?
+- A. Chuyển 5.000 file CSV cùng schema sang JSON
+- B. Dịch hàng loạt tin nhắn theo cùng mẫu
+- C. Điều tra nguyên nhân một lỗi hiệu năng chưa rõ trong hệ thống nhiều thành phần
+- D. Gửi báo cáo định kỳ theo mẫu có sẵn
 
-## 4. Exam traps / Bẫy dễ nhầm
+**Đáp án:** C
 
-1. **Bẫy Fixed prompt chaining:** "Re-plan every document arbitrarily" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở fixed prompt chaining, rồi chọn "Use defined extraction-validation-report sequence".
+**Giải thích:** Điều tra lỗi chưa rõ cần bước sau phụ thuộc kết quả bước trước. A, B, D đều có bước biết trước và lặp lại nên hợp với pipeline cố định.
 
-2. **Bẫy Adaptive task decomposition:** "Keep blindly following original file order" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở adaptive task decomposition, rồi chọn "Update task graph as discoveries emerge".
+## K3. Loãng chú ý khi duyệt nhiều mục trong một lượt (attention dilution)
 
-3. **Bẫy Attention dilution:** "Only enlarge context window" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở attention dilution, rồi chọn "Separate per-file reviews from cross-file integration".
+### Trọng tâm
 
-4. **Bẫy Cross-item integration:** "Assume individual file correctness proves system consistency" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở cross-item integration, rồi chọn "Run separate integration pass over local findings and interfaces".
+Khi giao quá nhiều mục trong một lượt, chất lượng không đều: các mục đầu được xem kỹ, các mục sau hời hợt. Hãy tách thành từng lượt cho mỗi mục; **không** chỉ phóng to context window.
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+### Giải thích
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+Review 14 file trong một prompt thường cho kết quả quen thuộc: năm file đầu được phân tích sâu, chín file sau chỉ lướt, hoặc nhận xét trùng lặp và mâu thuẫn. Đây là **attention dilution**: nhiều nội dung cạnh tranh sự chú ý, độ sâu trên mỗi mục giảm, và tính nhất quán của tiêu chuẩn đánh giá kém đi.
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **Extract fields, validate and format 10,000 standard documents**. Phương án nào phù hợp nhất?
+Phản xạ sai là "dùng model có context lớn hơn". Context lớn giúp **chứa** được nhiều nội dung hơn, nhưng không đảm bảo chú ý đồng đều với mọi phần của nó. Bạn vẫn gặp hiện tượng bỏ sót ở giữa dài.
 
-- **A.** Use defined extraction-validation-report sequence; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Re-plan every document arbitrarily; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Keep blindly following original file order; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Only enlarge context window; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+Cách chữa:
 
-**Đáp án: A**
+- **Per-item pass**: mỗi file một lượt review riêng, cùng một prompt và tiêu chí, nên độ sâu và tiêu chuẩn đồng đều. Các lượt này độc lập nên có thể chạy song song (ví dụ bằng subagent).
+- Đầu ra mỗi lượt theo **schema cố định** (vấn đề, mức độ, vị trí) để dễ gộp.
+- Các vấn đề liên quan nhiều mục được xử lý ở bước riêng (xem K4).
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Tương đương: thay vì "hãy review toàn bộ PR 14 file", hãy "review file này theo checklist", lặp 14 lần, rồi tổng hợp. Chi phí có thể tăng chút, nhưng chất lượng ổn định và dễ kiểm chứng hơn.
 
-- **A:** **Đúng.** Known predictable steps suit fixed pipelines. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Re-plan every document arbitrarily" được nêu ở cơ chế Fixed prompt chaining. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Adaptive task decomposition**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Attention dilution**, không giải quyết được yêu cầu cốt lõi "Known predictable steps suit fixed pipelines" và thiếu điều kiện kiểm chứng.
+### Keyword
 
-**Exam heuristic:** Nếu đề xuất hiện "Extract fields, validate and format 10,000 standard documents", ưu tiên phân biệt `Fixed prompt chaining` với các lựa chọn mô tả chuyện khác.
+- `attention dilution` — loãng chú ý khi nội dung quá nhiều trong một lượt
+- `per-file pass` — lượt xử lý riêng cho từng file/mục
+- `context window` — giới hạn lượng nội dung model xử lý, chứa được không đồng nghĩa chú ý đều
+- `consistency of criteria` — tính nhất quán của tiêu chí đánh giá giữa các mục
+- `fan-out` — tỏa ra nhiều lượt xử lý độc lập
+- `structured findings` — kết quả review theo schema cố định, dễ gộp
 
-### Q02. Một kỹ sư đề xuất **Keep blindly following original file order** cho tình huống: Legacy application tests reveal untested upstream dependency. Cần phản biện thế nào?
+### Bẫy đề thi
 
-- **A.** Assume individual file correctness proves system consistency; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Update task graph as discoveries emerge; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Keep blindly following original file order; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Only enlarge context window; áp dụng trực tiếp dù cơ chế sự cố khác.
+- ✗ Review hết 14 file trong một prompt vì context đủ lớn ⇒ ✓ Mỗi file một lượt review với cùng tiêu chí
+- ✗ Chỉ nâng cấp model có context lớn hơn để hết hời hợt ⇒ ✓ Chia nhỏ để độ sâu đồng đều
+- ✗ Dặn "hãy xem kỹ từng file" trong một prompt dài là đủ ⇒ ✓ Cấu trúc hóa quy trình thay vì chỉ nhắc nhở
 
-**Đáp án: B**
+### Câu hỏi
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+#### Q1. Một PR có 14 file. Review một lượt cho thấy nhận xét chi tiết ở 5 file đầu và hời hợt ở các file còn lại. Cách cải thiện tốt nhất?
+- A. Chuyển sang model có context window lớn hơn và giữ một prompt
+- B. Thêm câu "hãy xem kỹ tất cả file" vào đầu prompt
+- C. Chạy một lượt review riêng cho mỗi file với cùng tiêu chí, rồi gộp kết quả
+- D. Chỉ review 5 file đầu vì đó là quan trọng nhất
 
-- **A:** **Sai.** Phương án thuộc **Cross-item integration**, không giải quyết được yêu cầu cốt lõi "Unknown scope and dependencies need adaptive investigation" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Unknown scope and dependencies need adaptive investigation. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Keep blindly following original file order" được nêu ở cơ chế Adaptive task decomposition. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Attention dilution**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+**Đáp án:** C
 
-**Exam heuristic:** Nếu đề xuất hiện "Legacy application tests reveal untested upstream dependency", ưu tiên phân biệt `Adaptive task decomposition` với các lựa chọn mô tả chuyện khác.
+**Giải thích:** Tách lượt cho từng file giữ độ sâu và tiêu chí đồng đều. A không giải quyết phân bổ chú ý. B vẫn dựa vào nhắc nhở. D bỏ sót 9 file.
 
-### Q03. Nếu sự cố **Review first five of fourteen files is thorough, last nine superficial** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+#### Q2. Vì sao việc tăng context window không tự động chữa được attention dilution?
+- A. Vì context lớn hơn chỉ cho phép chứa nhiều hơn, chứ không bảo đảm sự chú ý đồng đều trên mọi phần
+- B. Vì context window lớn luôn chậm hơn
+- C. Vì model không đọc phần giữa của context
+- D. Vì context window không ảnh hưởng đến chất lượng
 
-- **A.** Assume individual file correctness proves system consistency; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Re-plan every document arbitrarily; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Separate per-file reviews from cross-file integration; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Only enlarge context window; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+**Đáp án:** A
 
-**Đáp án: C**
+**Giải thích:** Sức chứa khác với độ chú ý. B và C khẳng định quá mức. D sai vì context ảnh hưởng chất lượng, nhưng lớn hơn không phải giải pháp cho hiện tượng này.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+## K4. Lượt tích hợp xuyên mục (cross-item integration)
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Cross-item integration**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Fixed prompt chaining**, không giải quyết được yêu cầu cốt lõi "One pass over many items reduces depth and consistency" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** One pass over many items reduces depth and consistency. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Only enlarge context window" được nêu ở cơ chế Attention dilution. Không đảm bảo xử lý được case và dễ che mất failure mode.
+### Trọng tâm
 
-**Exam heuristic:** Nếu đề xuất hiện "Review first five of fourteen files is thorough, last nine superficial", ưu tiên phân biệt `Attention dilution` với các lựa chọn mô tả chuyện khác.
+Review từng mục riêng lẻ không phát hiện được sự không khớp **giữa** các mục (ví dụ hợp đồng API giữa hai service). Cần một lượt tích hợp riêng nhìn vào các phát hiện cục bộ và các giao diện.
 
-### Q04. Để viết acceptance criteria cho tình huống **Each service looks fine but API contracts mismatch**, lựa chọn nào thể hiện ranh giới đúng?
+### Giải thích
 
-- **A.** Assume individual file correctness proves system consistency; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Re-plan every document arbitrarily; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Keep blindly following original file order; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Run separate integration pass over local findings and interfaces; kèm kiểm thử lại điều kiện và ghi evidence.
+Giả sử ba service A, B, C. Review riêng từng service: code sạch, test qua, không lỗi. Nhưng A gọi B với trường `userId` (chuỗi) trong khi B mong `user_id` (số). Lỗi chỉ lộ ra khi nhìn **hai phía của giao diện cùng lúc**. Lượt per-file không thể thấy vì mỗi lượt chỉ biết một phía.
 
-**Đáp án: D**
+Do đó thiết kế review hai tầng:
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+1. **Tầng cục bộ (per-item)**: tìm lỗi trong từng mục, chạy song song, đầu ra có cấu trúc.
+2. **Tầng tích hợp (cross-item)**: nhận tóm tắt các phát hiện cục bộ cùng định nghĩa giao diện (API schema, type, contract) để kiểm tra tính nhất quán: tên trường, kiểu dữ liệu, thứ tự gọi, giả định về lỗi.
 
-- **A:** **Sai.** Đây chính là bẫy "Assume individual file correctness proves system consistency" được nêu ở cơ chế Cross-item integration. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Fixed prompt chaining**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Adaptive task decomposition**, không giải quyết được yêu cầu cốt lõi "Local passes do not detect cross-module contract issues" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Local passes do not detect cross-module contract issues. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+Tầng tích hợp **không** đọc lại toàn bộ mã nguồn; nó dùng bản tóm tắt và chỉ những phần ranh giới, nên vẫn gọn và có trọng tâm. Cách làm này cũng đáp ứng K3 (độ sâu cục bộ) và bổ sung góc nhìn hệ thống.
 
-**Exam heuristic:** Nếu đề xuất hiện "Each service looks fine but API contracts mismatch", ưu tiên phân biệt `Cross-item integration` với các lựa chọn mô tả chuyện khác.
+Sai lầm cần tránh: suy luận "mỗi file đúng nên cả hệ thống đúng". Tính đúng đắn cục bộ không đảm bảo tính nhất quán toàn cục.
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Re-plan every document arbitrarily**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+### Keyword
 
-- **A.** Use defined extraction-validation-report sequence; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Re-plan every document arbitrarily; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Keep blindly following original file order; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Only enlarge context window; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+- `integration pass` — lượt kiểm tra tính nhất quán giữa các thành phần
+- `API contract` — thỏa thuận về schema, kiểu dữ liệu giữa hai bên giao tiếp
+- `interface mismatch` — sự không khớp giữa hai phía của một giao diện
+- `local vs global correctness` — đúng cục bộ khác với đúng toàn hệ thống
+- `two-stage review` — review hai tầng: từng mục rồi tích hợp
+- `summary handoff` — truyền bản tóm tắt phát hiện cục bộ sang bước tích hợp
 
-**Đáp án: A**
+### Bẫy đề thi
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- ✗ Mỗi file đều đạt nên hệ thống nhất quán ⇒ ✓ Cần lượt tích hợp để kiểm tra hợp đồng giữa các thành phần
+- ✗ Lượt tích hợp phải đọc lại toàn bộ mã nguồn của mọi file ⇒ ✓ Dùng tóm tắt phát hiện cục bộ và định nghĩa giao diện
+- ✗ Chỉ làm lượt tích hợp mà bỏ review từng file ⇒ ✓ Cần cả hai tầng: sâu cục bộ và nhất quán toàn cục
 
-- **A:** **Đúng.** Known predictable steps suit fixed pipelines. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Re-plan every document arbitrarily" được nêu ở cơ chế Fixed prompt chaining. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Adaptive task decomposition**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Attention dilution**, không giải quyết được yêu cầu cốt lõi "Known predictable steps suit fixed pipelines" và thiếu điều kiện kiểm chứng.
+### Câu hỏi
 
-**Exam heuristic:** Nếu đề xuất hiện "Extract fields, validate and format 10,000 standard documents", ưu tiên phân biệt `Fixed prompt chaining` với các lựa chọn mô tả chuyện khác.
+#### Q1. Review từng service riêng đều không có lỗi, nhưng khi deploy thì service A gọi service B thất bại do khác tên trường và kiểu dữ liệu. Biện pháp quy trình nào sẽ bắt được lỗi loại này?
+- A. Tăng độ sâu của review từng service
+- B. Thêm lượt review tích hợp so sánh hai phía của mỗi API contract
+- C. Chạy lại review từng service bằng model mạnh hơn
+- D. Bỏ qua vì mỗi service đã đạt
 
-### Q06. Sau khi audit phát hiện **Legacy application tests reveal untested upstream dependency**, điều gì là cải tiến có thể kiểm chứng?
+**Đáp án:** B
 
-- **A.** Assume individual file correctness proves system consistency; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Update task graph as discoveries emerge; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Keep blindly following original file order; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Only enlarge context window; áp dụng trực tiếp dù cơ chế sự cố khác.
+**Giải thích:** Lỗi nằm ở giao diện giữa hai thành phần, chỉ phát hiện khi nhìn cả hai phía. A và C vẫn chỉ nhìn từng phía. D bỏ qua rủi ro thực tế.
 
-**Đáp án: B**
+#### Q2. Thiết kế quy trình review 20 module nào hợp lý nhất?
+- A. Một lượt duy nhất đọc toàn bộ 20 module
+- B. Chỉ lượt tích hợp, không review từng module
+- C. Chỉ review từng module, không cần tích hợp
+- D. Review từng module song song với đầu ra có cấu trúc, rồi một lượt tích hợp dùng các phát hiện và định nghĩa giao diện
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** D
 
-- **A:** **Sai.** Phương án thuộc **Cross-item integration**, không giải quyết được yêu cầu cốt lõi "Unknown scope and dependencies need adaptive investigation" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Unknown scope and dependencies need adaptive investigation. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Keep blindly following original file order" được nêu ở cơ chế Adaptive task decomposition. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Attention dilution**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-
-**Exam heuristic:** Nếu đề xuất hiện "Legacy application tests reveal untested upstream dependency", ưu tiên phân biệt `Adaptive task decomposition` với các lựa chọn mô tả chuyện khác.
-
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Review first five of fourteen files is thorough, last nine superficial**, nên chọn gì?
-
-- **A.** Assume individual file correctness proves system consistency; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Re-plan every document arbitrarily; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Separate per-file reviews from cross-file integration; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Only enlarge context window; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-
-**Đáp án: C**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc cơ chế **Cross-item integration**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Fixed prompt chaining**, không giải quyết được yêu cầu cốt lõi "One pass over many items reduces depth and consistency" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** One pass over many items reduces depth and consistency. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Only enlarge context window" được nêu ở cơ chế Attention dilution. Không đảm bảo xử lý được case và dễ che mất failure mode.
-
-**Exam heuristic:** Nếu đề xuất hiện "Review first five of fourteen files is thorough, last nine superficial", ưu tiên phân biệt `Attention dilution` với các lựa chọn mô tả chuyện khác.
-
-### Q08. Một reviewer nêu giải pháp **Assume individual file correctness proves system consistency**. Đánh giá chính xác nhất là gì?
-
-- **A.** Assume individual file correctness proves system consistency; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Re-plan every document arbitrarily; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Keep blindly following original file order; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Run separate integration pass over local findings and interfaces; kèm kiểm thử lại điều kiện và ghi evidence.
-
-**Đáp án: D**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Đây chính là bẫy "Assume individual file correctness proves system consistency" được nêu ở cơ chế Cross-item integration. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Fixed prompt chaining**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Adaptive task decomposition**, không giải quyết được yêu cầu cốt lõi "Local passes do not detect cross-module contract issues" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Local passes do not detect cross-module contract issues. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-
-**Exam heuristic:** Nếu đề xuất hiện "Each service looks fine but API contracts mismatch", ưu tiên phân biệt `Cross-item integration` với các lựa chọn mô tả chuyện khác.
-
-### Q09. Trong thử nghiệm đối chứng với tình huống **Extract fields, validate and format 10,000 standard documents**, tiêu chí pass phù hợp là gì?
-
-- **A.** Use defined extraction-validation-report sequence; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Re-plan every document arbitrarily; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Keep blindly following original file order; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Only enlarge context window; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-
-**Đáp án: A**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Đúng.** Known predictable steps suit fixed pipelines. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Re-plan every document arbitrarily" được nêu ở cơ chế Fixed prompt chaining. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Adaptive task decomposition**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Attention dilution**, không giải quyết được yêu cầu cốt lõi "Known predictable steps suit fixed pipelines" và thiếu điều kiện kiểm chứng.
-
-**Exam heuristic:** Nếu đề xuất hiện "Extract fields, validate and format 10,000 standard documents", ưu tiên phân biệt `Fixed prompt chaining` với các lựa chọn mô tả chuyện khác.
-
-### Q10. Để giảm lỗi tái diễn với **Legacy application tests reveal untested upstream dependency**, biện pháp nào phù hợp với cơ chế đã học?
-
-- **A.** Assume individual file correctness proves system consistency; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Update task graph as discoveries emerge; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Keep blindly following original file order; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Only enlarge context window; áp dụng trực tiếp dù cơ chế sự cố khác.
-
-**Đáp án: B**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc **Cross-item integration**, không giải quyết được yêu cầu cốt lõi "Unknown scope and dependencies need adaptive investigation" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Unknown scope and dependencies need adaptive investigation. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Keep blindly following original file order" được nêu ở cơ chế Adaptive task decomposition. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Attention dilution**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-
-**Exam heuristic:** Nếu đề xuất hiện "Legacy application tests reveal untested upstream dependency", ưu tiên phân biệt `Adaptive task decomposition` với các lựa chọn mô tả chuyện khác.
-
-## 6. Lab / Bài thực hành tự kiểm tra
-
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "Extract fields, validate and format 10,000 standard documents".
-
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Use defined extraction-validation-report sequence.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
-
-## 7. Cheat sheet / Ôn nhanh
-
-- **Fixed prompt chaining:** Known predictable steps suit fixed pipelines. ✓ Use defined extraction-validation-report sequence. ✗ Re-plan every document arbitrarily.
-- **Adaptive task decomposition:** Unknown scope and dependencies need adaptive investigation. ✓ Update task graph as discoveries emerge. ✗ Keep blindly following original file order.
-- **Attention dilution:** One pass over many items reduces depth and consistency. ✓ Separate per-file reviews from cross-file integration. ✗ Only enlarge context window.
-- **Cross-item integration:** Local passes do not detect cross-module contract issues. ✓ Run separate integration pass over local findings and interfaces. ✗ Assume individual file correctness proves system consistency.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/1-agentic-architecture/1-6-task-decomposition
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Hai tầng vừa giữ độ sâu cục bộ vừa kiểm tra nhất quán toàn cục. A gặp attention dilution. B thiếu chi tiết cục bộ. C bỏ sót lỗi giao diện.

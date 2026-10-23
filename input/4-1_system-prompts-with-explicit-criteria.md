@@ -1,326 +1,239 @@
 # 4.1 — System Prompts with Explicit Criteria
 
-> Domain 4: Prompt Engineering & Structured Output · Tỷ trọng toàn domain: 20%
-> Source lesson: https://claudecertificationguide.com/learn/4-prompt-engineering/4-1-system-prompts
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+Bài này nói về cách viết **system prompt** cho các tác vụ đánh giá (code review, kiểm tra tài liệu, phân loại) sao cho kết quả **chính xác, nhất quán và đáng tin**. Điểm cốt lõi: thay vì dặn model những câu mơ hồ như "hãy cẩn thận", "chỉ báo lỗi quan trọng", bạn phải định nghĩa **tiêu chí cụ thể**: loại vấn đề nào phải báo, loại nào phải bỏ qua, mức độ nghiêm trọng được hiểu thế nào kèm ví dụ code.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **System Prompts with Explicit Criteria**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Trong đề thi, các câu hỏi thường mô tả một hệ thống review bị nhiễu (quá nhiều false positive, mức severity lung tung) rồi hỏi cách sửa. Đáp án đúng gần như luôn là **tiêu chí rõ ràng + ví dụ gắn nhãn**; còn các phương án "bảo model tự tin hơn", "đặt ngưỡng confidence", "giữ hết finding cho đầy đủ" thường là bẫy. Quy tắc nhớ nhanh: **tiêu chí tường minh thắng chỉ dẫn mơ hồ; độ chính xác của từng loại finding quyết định niềm tin của người dùng.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Tiêu chí phân loại tường minh (explicit categorical criteria)
 
-### 2.1. Explicit categorical standards
+### Trọng tâm
 
-**Principle (EN):** Define precisely report/skip categories rather than be conservative.
+Hãy nêu rõ trong prompt **loại nào phải báo (report)** và **loại nào phải bỏ qua (skip)**, kèm điều kiện kích hoạt cụ thể, thay vì dặn chung chung kiểu "thận trọng" hay "chỉ báo khi chắc chắn".
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **define precisely report/skip categories rather than be conservative**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** Reviewer flags style preferences as critical defects.
+Model không biết chuẩn của team bạn nếu bạn không nói. Khi prompt chỉ có "review code and flag important issues", model phải tự đoán "important" là gì: có lúc nó coi tên biến chưa đẹp là lỗi nghiêm trọng, có lúc bỏ sót lỗ hổng thật. Hướng dẫn mơ hồ như "be conservative" hoặc "only report high-confidence issues" **không thay đổi định nghĩa** của vấn đề, nó chỉ làm model e dè một cách ngẫu nhiên: giảm cả finding sai lẫn finding đúng.
 
-**Recommended implementation:** State bugs/security report; style skip; concrete triggers.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Use only high-confidence issues.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Reviewer flags style preferences as critical defects".
-- Decision: áp dụng nguyên tắc **Explicit categorical standards** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "State bugs/security report; style skip; concrete triggers" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.2. False positive trust
-
-**Principle (EN):** Poor category precision can erode trust across all categories.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **poor category precision can erode trust across all categories**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Documentation mismatch false alarms bury true security alerts.
-
-**Recommended implementation:** Temporarily disable noisy class and refine criteria.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Keep noisy findings live for completeness.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Documentation mismatch false alarms bury true security alerts".
-- Decision: áp dụng nguyên tắc **False positive trust** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Temporarily disable noisy class and refine criteria" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.3. Severity examples
-
-**Principle (EN):** Labeled snippets calibrate categorical judgement better than abstract prose.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **labeled snippets calibrate categorical judgement better than abstract prose**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Critical versus minor severity varies between runs.
-
-**Recommended implementation:** Provide concrete code cases for each severity level.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Define severe as very important only.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Critical versus minor severity varies between runs".
-- Decision: áp dụng nguyên tắc **Severity examples** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Provide concrete code cases for each severity level" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.4. Confidence versus criteria
-
-**Principle (EN):** Uncalibrated self-confidence cannot replace objective finding criteria.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **uncalibrated self-confidence cannot replace objective finding criteria**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Model confidently reports benign variable naming issue as security.
-
-**Recommended implementation:** Define error taxonomy and use confidence only for routing after calibration.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Threshold 0.9 and trust result.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Model confidently reports benign variable naming issue as security".
-- Decision: áp dụng nguyên tắc **Confidence versus criteria** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Define error taxonomy and use confidence only for routing after calibration" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-## 3. Ví dụ thiết kế / Worked engineering example
-
-**Problem:** Reviewer flags style preferences as critical defects.
-
-**Bad design:** Use only high-confidence issues.
-
-**Better design:** State bugs/security report; style skip; concrete triggers.
-
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
-
-### Walkthrough: decision trace / Luồng xử lý
+Cách làm đúng là viết thành các **danh mục có điều kiện**:
 
 ```text
-INPUT  : Reviewer flags style preferences as critical defects.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : State bugs/security report; style skip; concrete triggers.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
+REPORT (luôn báo):
+- Bug logic gây sai kết quả hoặc crash (null deref, off-by-one, race condition rõ ràng)
+- Lỗ hổng bảo mật: SQL injection, secret hard-code, thiếu kiểm tra quyền
+
+SKIP (không báo):
+- Sở thích style/format (đặt tên, thụt lề, thứ tự import) đã có linter lo
+- Pattern cục bộ chấp nhận được trong codebase này (ví dụ: dùng print trong script nội bộ)
 ```
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+Mỗi mục nên có **trigger cụ thể** (điều gì khiến bạn gắn nhãn đó) để hai lần chạy khác nhau cho cùng quyết định. Tiêu chí tường minh còn giúp bạn debug: khi kết quả sai, bạn biết sửa dòng nào trong prompt, còn "hãy cẩn thận hơn" thì không có gì để sửa.
 
-## 4. Exam traps / Bẫy dễ nhầm
+Lưu ý: đây là chỉ dẫn "mềm" qua prompt. Nếu cần đảm bảo **tuyệt đối** (ví dụ phải có trường nào đó), dùng schema hoặc validator (xem 4.3, 4.4); prompt tiêu chí dùng để nâng chất lượng phán đoán.
 
-1. **Bẫy Explicit categorical standards:** "Use only high-confidence issues" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở explicit categorical standards, rồi chọn "State bugs/security report; style skip; concrete triggers".
+### Keyword
 
-2. **Bẫy False positive trust:** "Keep noisy findings live for completeness" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở false positive trust, rồi chọn "Temporarily disable noisy class and refine criteria".
+- `explicit criteria` — tiêu chí tường minh, định nghĩa rõ cái gì phải báo, cái gì bỏ qua
+- `report/skip categories` — các nhóm vấn đề cần báo và cần bỏ qua
+- `concrete trigger` — điều kiện kích hoạt cụ thể cho một loại finding
+- `vague instruction` — chỉ dẫn mơ hồ ("be careful", "be conservative")
+- `system prompt` — prompt hệ thống, nơi đặt vai trò, tiêu chí và quy tắc làm việc cho model
+- `style preference` — sở thích về phong cách code, thường không đáng báo là lỗi
 
-3. **Bẫy Severity examples:** "Define severe as very important only" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở severity examples, rồi chọn "Provide concrete code cases for each severity level".
+### Bẫy đề thi
 
-4. **Bẫy Confidence versus criteria:** "Threshold 0.9 and trust result" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở confidence versus criteria, rồi chọn "Define error taxonomy and use confidence only for routing after calibration".
+- ✗ Thêm câu "chỉ báo những vấn đề có độ tin cậy cao" để giảm nhiễu ⇒ ✓ Định nghĩa rõ danh mục report/skip với trigger cụ thể
+- ✗ Viết "be conservative" và coi như đã hướng dẫn xong ⇒ ✓ Chỉ dẫn mơ hồ không đổi được ranh giới; cần tiêu chí đo được
+- ✗ Dùng một đoạn văn dài mô tả mong muốn chung ⇒ ✓ Liệt kê danh mục và điều kiện cụ thể dễ kiểm chứng
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+### Câu hỏi
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+#### Q1. Một công cụ review code tự động liên tục gắn nhãn "critical" cho các góp ý về đặt tên biến và thụt lề, khiến developer phớt lờ toàn bộ báo cáo. Cách cải thiện hiệu quả nhất trong system prompt là gì?
+- A. Thêm câu "hãy thận trọng và chỉ báo khi thật sự chắc chắn"
+- B. Liệt kê rõ nhóm phải báo (bug logic, lỗ hổng bảo mật) và nhóm phải bỏ qua (style, format), kèm điều kiện cụ thể
+- C. Yêu cầu model viết ngắn hơn để giảm số finding
+- D. Tăng temperature để kết quả đa dạng hơn
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **Reviewer flags style preferences as critical defects**. Phương án nào phù hợp nhất?
+**Đáp án:** B
 
-- **A.** Define severe as very important only; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** State bugs/security report; style skip; concrete triggers; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Use only high-confidence issues; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Keep noisy findings live for completeness; áp dụng trực tiếp dù cơ chế sự cố khác.
+**Giải thích:** B định nghĩa lại ranh giới của vấn đề một cách đo được. A chỉ làm model e dè ngẫu nhiên, vẫn không biết style là gì để bỏ qua. C giảm độ dài chứ không đổi tiêu chí. D làm kết quả kém ổn định hơn, ngược với mục tiêu.
 
-**Đáp án: B**
+#### Q2. Team muốn model chỉ báo lỗ hổng bảo mật và bug thực sự, còn các pattern đã được linter xử lý thì bỏ qua. Prompt nào phù hợp nhất?
+- A. "Review the code and report anything you think is wrong."
+- B. "Be extremely careful and thorough in your review."
+- C. "Only report issues you are highly confident about."
+- D. "Report: logic bugs and security vulnerabilities (e.g. unsanitized SQL, hard-coded secrets). Skip: naming, formatting, import order."
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** D
 
-- **A:** **Sai.** Phương án thuộc **Severity examples**, không giải quyết được yêu cầu cốt lõi "Define precisely report/skip categories rather than be conservative" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Define precisely report/skip categories rather than be conservative. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Use only high-confidence issues" được nêu ở cơ chế Explicit categorical standards. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **False positive trust**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+**Giải thích:** D có cả danh mục báo, danh mục bỏ qua và ví dụ trigger. A, B quá chung chung nên model tự định nghĩa "wrong" hoặc "thorough". C dựa vào độ tự tin chủ quan của model, không xác định loại finding nào đáng báo.
 
-**Exam heuristic:** Nếu đề xuất hiện "Reviewer flags style preferences as critical defects", ưu tiên phân biệt `Explicit categorical standards` với các lựa chọn mô tả chuyện khác.
+## K2. Độ chính xác từng nhóm và niềm tin của người dùng (false positive trust)
 
-### Q02. Một kỹ sư đề xuất **Keep noisy findings live for completeness** cho tình huống: Documentation mismatch false alarms bury true security alerts. Cần phản biện thế nào?
+### Trọng tâm
 
-- **A.** Define severe as very important only; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Threshold 0.9 and trust result; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Temporarily disable noisy class and refine criteria; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Keep noisy findings live for completeness; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+Một nhóm finding có tỉ lệ false positive cao sẽ **làm mất niềm tin vào cả những nhóm khác**; hãy tạm tắt nhóm nhiễu và tinh chỉnh tiêu chí thay vì giữ chúng "cho đủ".
 
-**Đáp án: C**
+### Giải thích
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Người dùng không đánh giá từng finding riêng lẻ, họ đánh giá **cả công cụ**. Nếu 70% cảnh báo "tài liệu không khớp code" là báo động giả, developer sẽ học cách bỏ qua báo cáo, và rồi cũng bỏ qua cảnh báo bảo mật thật nằm lẫn trong đó. Đây là hiệu ứng "alert fatigue": chi phí của false positive không chỉ là thời gian xem xét, mà là **suy giảm độ tin cậy toàn hệ thống**.
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Severity examples**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Confidence versus criteria**, không giải quyết được yêu cầu cốt lõi "Poor category precision can erode trust across all categories" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Poor category precision can erode trust across all categories. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Keep noisy findings live for completeness" được nêu ở cơ chế False positive trust. Không đảm bảo xử lý được case và dễ che mất failure mode.
+Cách xử lý có kỷ luật:
 
-**Exam heuristic:** Nếu đề xuất hiện "Documentation mismatch false alarms bury true security alerts", ưu tiên phân biệt `False positive trust` với các lựa chọn mô tả chuyện khác.
+1. Đo precision theo **từng category** (không chỉ trung bình toàn bộ): mỗi nhóm bao nhiêu finding được chấp nhận, bao nhiêu bị bác.
+2. Với nhóm có precision thấp: **tạm tắt** (hoặc hạ xuống chế độ không chặn) trong lúc cải thiện tiêu chí và ví dụ.
+3. Bật lại khi precision đạt ngưỡng chấp nhận được.
 
-### Q03. Nếu sự cố **Critical versus minor severity varies between runs** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+Lý do không nên "giữ để đầy đủ": tính đầy đủ chỉ có giá trị khi người đọc còn tin báo cáo. Một báo cáo ngắn mà 90% đúng có ích hơn báo cáo dài mà người ta ngừng đọc. Cũng đừng nhầm với việc bỏ hẳn nhóm vĩnh viễn: tắt tạm là biện pháp bảo vệ niềm tin trong khi sửa, và nhóm bị tắt vẫn quay lại khi đã được hiệu chỉnh.
 
-- **A.** Define severe as very important only; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Threshold 0.9 and trust result; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Use only high-confidence issues; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Provide concrete code cases for each severity level; kèm kiểm thử lại điều kiện và ghi evidence.
+### Keyword
 
-**Đáp án: D**
+- `false positive` — báo động giả: finding bị báo nhưng thực ra không phải vấn đề
+- `precision per category` — độ chính xác tính riêng cho từng nhóm finding
+- `alert fatigue` — mệt mỏi cảnh báo: người dùng bỏ qua mọi cảnh báo vì quá nhiều nhiễu
+- `trust erosion` — niềm tin bị xói mòn do kết quả sai lặp lại
+- `temporarily disable` — tạm tắt một nhóm nhiễu trong lúc tinh chỉnh
+- `refine criteria` — tinh chỉnh tiêu chí để nhóm đó chính xác hơn
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Bẫy đề thi
 
-- **A:** **Sai.** Đây chính là bẫy "Define severe as very important only" được nêu ở cơ chế Severity examples. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Confidence versus criteria**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Explicit categorical standards**, không giải quyết được yêu cầu cốt lõi "Labeled snippets calibrate categorical judgement better than abstract prose" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Labeled snippets calibrate categorical judgement better than abstract prose. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+- ✗ Giữ mọi finding bật để báo cáo "đầy đủ" ⇒ ✓ Tạm tắt nhóm nhiễu, tinh chỉnh rồi bật lại
+- ✗ Chỉ nhìn precision trung bình toàn hệ thống ⇒ ✓ Đo theo từng category để thấy nhóm nào gây nhiễu
+- ✗ Cho rằng false positive chỉ tốn thời gian xem xét ⇒ ✓ Nó còn làm mất niềm tin vào cả nhóm finding chính xác
 
-**Exam heuristic:** Nếu đề xuất hiện "Critical versus minor severity varies between runs", ưu tiên phân biệt `Severity examples` với các lựa chọn mô tả chuyện khác.
+### Câu hỏi
 
-### Q04. Để viết acceptance criteria cho tình huống **Model confidently reports benign variable naming issue as security**, lựa chọn nào thể hiện ranh giới đúng?
+#### Q1. Công cụ review báo rất nhiều cảnh báo "docstring không khớp code", phần lớn là báo động giả. Developer bắt đầu bỏ qua cả báo cáo, kể cả cảnh báo SQL injection thật. Bước xử lý hợp lý nhất?
+- A. Giữ nguyên tất cả cảnh báo để không bỏ sót điều gì
+- B. Tắt vĩnh viễn toàn bộ công cụ review
+- C. Chuyển toàn bộ cảnh báo sang một file riêng, không ai đọc
+- D. Tạm tắt nhóm "docstring mismatch", tinh chỉnh tiêu chí và ví dụ của nhóm đó, rồi bật lại khi precision đủ tốt
 
-- **A.** Define error taxonomy and use confidence only for routing after calibration; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Threshold 0.9 and trust result; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Use only high-confidence issues; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Keep noisy findings live for completeness; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+**Đáp án:** D
 
-**Đáp án: A**
+**Giải thích:** D bảo vệ niềm tin vào nhóm cảnh báo bảo mật trong lúc sửa nhóm nhiễu. A để alert fatigue tiếp diễn. B bỏ luôn giá trị của công cụ. C thực chất là loại bỏ cảnh báo mà không sửa nguyên nhân.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+#### Q2. Báo cáo thống kê: precision trung bình toàn hệ thống là 75%. Làm sao để biết nên can thiệp vào đâu?
+- A. Tính precision riêng cho từng category finding để tìm nhóm có tỉ lệ bị bác cao
+- B. Lấy trung bình mới sau mỗi tuần
+- C. Hỏi model "bạn có chắc không?" cho từng finding
+- D. Giảm số category xuống còn một
 
-- **A:** **Đúng.** Uncalibrated self-confidence cannot replace objective finding criteria. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Threshold 0.9 and trust result" được nêu ở cơ chế Confidence versus criteria. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Explicit categorical standards**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **False positive trust**, không giải quyết được yêu cầu cốt lõi "Uncalibrated self-confidence cannot replace objective finding criteria" và thiếu điều kiện kiểm chứng.
+**Đáp án:** A
 
-**Exam heuristic:** Nếu đề xuất hiện "Model confidently reports benign variable naming issue as security", ưu tiên phân biệt `Confidence versus criteria` với các lựa chọn mô tả chuyện khác.
+**Giải thích:** Trung bình che khuất việc một nhóm rất kém kéo tụt niềm tin chung; phải tách theo category. B không thêm thông tin. C dựa vào tự đánh giá của model (xem K4). D vứt bỏ phân loại hữu ích.
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Use only high-confidence issues**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+## K3. Ví dụ mức độ nghiêm trọng (severity calibration bằng ví dụ)
 
-- **A.** Define severe as very important only; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** State bugs/security report; style skip; concrete triggers; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Use only high-confidence issues; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Keep noisy findings live for completeness; áp dụng trực tiếp dù cơ chế sự cố khác.
+### Trọng tâm
 
-**Đáp án: B**
+Định nghĩa mức severity bằng **đoạn code ví dụ có gắn nhãn** cho từng mức, không bằng mô tả trừu tượng như "critical là rất quan trọng".
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Giải thích
 
-- **A:** **Sai.** Phương án thuộc **Severity examples**, không giải quyết được yêu cầu cốt lõi "Define precisely report/skip categories rather than be conservative" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Define precisely report/skip categories rather than be conservative. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Use only high-confidence issues" được nêu ở cơ chế Explicit categorical standards. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **False positive trust**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+Từ như "critical", "major", "minor" không có nghĩa tuyệt đối. Nếu bạn chỉ viết "critical = very important", model sẽ suy diễn khác nhau mỗi lần: một lần coi thiếu null-check là critical, lần khác coi là minor. Kết quả là severity **không ổn định giữa các lần chạy**, rất khó để sắp xếp ưu tiên hoặc đặt chính sách (ví dụ "critical thì chặn merge").
 
-**Exam heuristic:** Nếu đề xuất hiện "Reviewer flags style preferences as critical defects", ưu tiên phân biệt `Explicit categorical standards` với các lựa chọn mô tả chuyện khác.
+Cách khắc phục là đưa **ví dụ cụ thể cho từng mức**, mỗi ví dụ là một snippet và nhãn mong muốn kèm lý do ngắn:
 
-### Q06. Sau khi audit phát hiện **Documentation mismatch false alarms bury true security alerts**, điều gì là cải tiến có thể kiểm chứng?
+```text
+CRITICAL — dữ liệu người dùng bị lộ hoặc bị sửa trái phép
+  query = "SELECT * FROM users WHERE id = " + request.args["id"]
+MAJOR — sai logic nhưng không lộ dữ liệu
+  if retries > MAX: return   # nên là >=, bỏ sót lần retry cuối
+MINOR — khó đọc hoặc lệch quy ước, không ảnh hưởng hành vi
+  tmp = compute(x)           # tên biến mơ hồ
+```
 
-- **A.** Define severe as very important only; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Threshold 0.9 and trust result; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Temporarily disable noisy class and refine criteria; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Keep noisy findings live for completeness; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+Ví dụ hoạt động như "điểm neo" cho phán đoán: khi gặp code mới, model so khớp với snippet gần nhất. Hai điều nên nhớ: (1) chọn ví dụ đại diện cho **ranh giới** giữa các mức, không chỉ ca dễ; (2) ví dụ bổ sung cho tiêu chí chữ chứ không thay thế. Kỹ thuật few-shot nói chung được đào sâu ở 4.2.
 
-**Đáp án: C**
+### Keyword
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- `severity level` — mức độ nghiêm trọng (critical/major/minor)
+- `labeled example` — ví dụ có gắn nhãn kết quả mong muốn
+- `calibration` — hiệu chỉnh để phán đoán nhất quán theo chuẩn mong muốn
+- `inconsistent severity` — severity thay đổi giữa các lần chạy với cùng đầu vào
+- `anchor example` — ví dụ làm điểm neo để model so khớp
+- `abstract definition` — định nghĩa trừu tượng, khó áp dụng nhất quán
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Severity examples**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Confidence versus criteria**, không giải quyết được yêu cầu cốt lõi "Poor category precision can erode trust across all categories" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Poor category precision can erode trust across all categories. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Keep noisy findings live for completeness" được nêu ở cơ chế False positive trust. Không đảm bảo xử lý được case và dễ che mất failure mode.
+### Bẫy đề thi
 
-**Exam heuristic:** Nếu đề xuất hiện "Documentation mismatch false alarms bury true security alerts", ưu tiên phân biệt `False positive trust` với các lựa chọn mô tả chuyện khác.
+- ✗ Định nghĩa "critical = rất quan trọng" ⇒ ✓ Cho snippet cụ thể ứng với từng mức severity
+- ✗ Chỉ đưa ví dụ rõ ràng, dễ ⇒ ✓ Bao gồm cả ca sát ranh giới giữa hai mức
+- ✗ Dùng ví dụ để thay hoàn toàn tiêu chí chữ ⇒ ✓ Kết hợp tiêu chí viết rõ và ví dụ minh hoạ
 
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Critical versus minor severity varies between runs**, nên chọn gì?
+### Câu hỏi
 
-- **A.** Define severe as very important only; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Threshold 0.9 and trust result; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Use only high-confidence issues; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Provide concrete code cases for each severity level; kèm kiểm thử lại điều kiện và ghi evidence.
+#### Q1. Cùng một đoạn code thiếu kiểm tra null, lần chạy này model gắn "critical", lần sau gắn "minor". Cách sửa tốt nhất?
+- A. Đặt temperature về 0 và coi như xong
+- B. Bảo model "hãy nhất quán"
+- C. Thêm vào prompt các snippet mẫu cho từng mức severity kèm nhãn và lý do
+- D. Chạy review ba lần rồi lấy mức cao nhất
 
-**Đáp án: D**
+**Đáp án:** C
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Giải thích:** Vấn đề là định nghĩa mức chưa được neo bằng ví dụ; C giải quyết gốc rễ. A giảm ngẫu nhiên nhưng không cho model biết chuẩn đúng. B là chỉ dẫn mơ hồ. D làm đội severity lên và tốn chi phí.
 
-- **A:** **Sai.** Đây chính là bẫy "Define severe as very important only" được nêu ở cơ chế Severity examples. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Confidence versus criteria**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Explicit categorical standards**, không giải quyết được yêu cầu cốt lõi "Labeled snippets calibrate categorical judgement better than abstract prose" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Labeled snippets calibrate categorical judgement better than abstract prose. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+#### Q2. Bạn viết ví dụ severity cho prompt. Lựa chọn nào hiệu quả nhất?
+- A. Chỉ ví dụ cực kỳ rõ ràng, mỗi mức một cái
+- B. Nhiều ví dụ cho mỗi mức, gồm cả ca sát ranh giới, kèm lý do ngắn
+- C. Một đoạn mô tả bằng lời dài hơn, không dùng code
+- D. Ví dụ không cần nhãn, model tự suy ra
 
-**Exam heuristic:** Nếu đề xuất hiện "Critical versus minor severity varies between runs", ưu tiên phân biệt `Severity examples` với các lựa chọn mô tả chuyện khác.
+**Đáp án:** B
 
-### Q08. Một reviewer nêu giải pháp **Threshold 0.9 and trust result**. Đánh giá chính xác nhất là gì?
+**Giải thích:** Các ca sát ranh giới là nơi model dễ phán đoán lệch nhất, và lý do giúp nó khái quát hoá. A bỏ qua vùng khó. C quay lại định nghĩa trừu tượng. D mất tác dụng neo vì không có nhãn.
 
-- **A.** Define error taxonomy and use confidence only for routing after calibration; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Threshold 0.9 and trust result; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Use only high-confidence issues; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Keep noisy findings live for completeness; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+## K4. Tự tin của model không thay thế tiêu chí khách quan (confidence vs criteria)
 
-**Đáp án: A**
+### Trọng tâm
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Điểm confidence tự báo của model **chưa hiệu chỉnh thì không đáng tin**; phải có phân loại lỗi khách quan, và chỉ dùng confidence (sau khi hiệu chỉnh) để **định tuyến**, ví dụ chuyển người xem.
 
-- **A:** **Đúng.** Uncalibrated self-confidence cannot replace objective finding criteria. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Threshold 0.9 and trust result" được nêu ở cơ chế Confidence versus criteria. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Explicit categorical standards**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **False positive trust**, không giải quyết được yêu cầu cốt lõi "Uncalibrated self-confidence cannot replace objective finding criteria" và thiếu điều kiện kiểm chứng.
+### Giải thích
 
-**Exam heuristic:** Nếu đề xuất hiện "Model confidently reports benign variable naming issue as security", ưu tiên phân biệt `Confidence versus criteria` với các lựa chọn mô tả chuyện khác.
+Model có thể trả lời rất tự tin về một kết luận sai, chẳng hạn khẳng định chắc chắn rằng một tên biến xấu là "lỗ hổng bảo mật" với confidence 0.95. Con số tự báo này **không phải xác suất đã kiểm chứng**: nó chưa được so với nhãn thật nên 0.9 có thể ứng với độ đúng thực tế chỉ 60%. Vì vậy đặt quy tắc "confidence >= 0.9 thì tin" là lấy một đại lượng không đáng tin làm cổng quyết định.
 
-### Q09. Trong thử nghiệm đối chứng với tình huống **Reviewer flags style preferences as critical defects**, tiêu chí pass phù hợp là gì?
+Cách đúng gồm hai lớp:
 
-- **A.** Define severe as very important only; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** State bugs/security report; style skip; concrete triggers; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Use only high-confidence issues; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Keep noisy findings live for completeness; áp dụng trực tiếp dù cơ chế sự cố khác.
+- **Tiêu chí khách quan**: xây taxonomy lỗi rõ ràng (K1), để việc có phải lỗi bảo mật hay không phụ thuộc vào đặc điểm code, không phụ thuộc cảm giác của model.
+- **Confidence để định tuyến**: sau khi đã **hiệu chỉnh trên dữ liệu có nhãn** (so confidence với kết quả đúng/sai thật), có thể dùng để quyết định finding nào cần người duyệt. Khi đó confidence thấp thì chuyển người, không phải để loại bỏ hay tự động chấp nhận.
 
-**Đáp án: B**
+Tóm lại thứ tự ưu tiên: tiêu chí quyết định "là gì", dữ liệu có nhãn kiểm chứng "đúng bao nhiêu", còn confidence chỉ là tín hiệu phụ cho việc phân luồng. Chủ đề hiệu chỉnh và định tuyến người duyệt được mở rộng ở 4.6 và domain 5.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Keyword
 
-- **A:** **Sai.** Phương án thuộc **Severity examples**, không giải quyết được yêu cầu cốt lõi "Define precisely report/skip categories rather than be conservative" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Define precisely report/skip categories rather than be conservative. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Use only high-confidence issues" được nêu ở cơ chế Explicit categorical standards. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **False positive trust**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+- `self-reported confidence` — độ tự tin do chính model tự báo cáo
+- `calibrated confidence` — confidence đã được đối chiếu với kết quả thật để phản ánh đúng xác suất
+- `labeled validation set` — tập dữ liệu có nhãn đúng dùng để kiểm chứng và hiệu chỉnh
+- `error taxonomy` — bảng phân loại lỗi có định nghĩa khách quan
+- `confidence routing` — dùng confidence để quyết định luồng xử lý (tự động hay người duyệt)
+- `confident but wrong` — sai nhưng nói rất tự tin
 
-**Exam heuristic:** Nếu đề xuất hiện "Reviewer flags style preferences as critical defects", ưu tiên phân biệt `Explicit categorical standards` với các lựa chọn mô tả chuyện khác.
+### Bẫy đề thi
 
-### Q10. Để giảm lỗi tái diễn với **Documentation mismatch false alarms bury true security alerts**, biện pháp nào phù hợp với cơ chế đã học?
+- ✗ Đặt ngưỡng confidence 0.9 rồi tin mọi kết quả vượt ngưỡng ⇒ ✓ Hiệu chỉnh trên dữ liệu có nhãn trước khi dùng confidence để định tuyến
+- ✗ Dùng confidence thay cho định nghĩa lỗi ⇒ ✓ Dựa vào taxonomy khách quan; confidence chỉ là tín hiệu phụ
+- ✗ Coi confidence cao nghĩa là finding đúng ⇒ ✓ Model có thể sai mà vẫn rất tự tin
 
-- **A.** Define severe as very important only; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Threshold 0.9 and trust result; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Temporarily disable noisy class and refine criteria; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Keep noisy findings live for completeness; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+### Câu hỏi
 
-**Đáp án: C**
+#### Q1. Model báo "SECURITY: biến `usrNm` đặt tên khó hiểu" với confidence 0.95. Đồng nghiệp đề xuất đặt ngưỡng 0.9 để tự động chấp nhận các finding. Đánh giá nào đúng?
+- A. Hợp lý vì 0.95 vượt ngưỡng
+- B. Không đáng tin: confidence chưa hiệu chỉnh không thay được tiêu chí; cần taxonomy lỗi rõ ràng và kiểm chứng trên dữ liệu có nhãn
+- C. Nên nâng ngưỡng lên 0.99 là đủ
+- D. Nên bỏ hết finding bảo mật
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** B
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Severity examples**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Confidence versus criteria**, không giải quyết được yêu cầu cốt lõi "Poor category precision can erode trust across all categories" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Poor category precision can erode trust across all categories. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Keep noisy findings live for completeness" được nêu ở cơ chế False positive trust. Không đảm bảo xử lý được case và dễ che mất failure mode.
+**Giải thích:** Con số 0.95 là tự báo, chưa đối chiếu nhãn thật, và finding này sai về loại. C chỉ dời ngưỡng, vẫn dựa vào số chưa hiệu chỉnh. A lặp lại lỗi. D bỏ mất cả những finding đúng.
 
-**Exam heuristic:** Nếu đề xuất hiện "Documentation mismatch false alarms bury true security alerts", ưu tiên phân biệt `False positive trust` với các lựa chọn mô tả chuyện khác.
+#### Q2. Khi nào dùng confidence của model để chuyển một finding cho người duyệt là hợp lý?
+- A. Ngay từ đầu, dùng giá trị thô của model
+- B. Chỉ khi model viết "I am sure" trong câu trả lời
+- C. Khi confidence đã được hiệu chỉnh bằng dữ liệu có nhãn và dùng để chọn các ca cần người xem
+- D. Không bao giờ vì confidence luôn vô dụng
 
-## 6. Lab / Bài thực hành tự kiểm tra
+**Đáp án:** C
 
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "Reviewer flags style preferences as critical defects".
-
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: State bugs/security report; style skip; concrete triggers.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
-
-## 7. Cheat sheet / Ôn nhanh
-
-- **Explicit categorical standards:** Define precisely report/skip categories rather than be conservative. ✓ State bugs/security report; style skip; concrete triggers. ✗ Use only high-confidence issues.
-- **False positive trust:** Poor category precision can erode trust across all categories. ✓ Temporarily disable noisy class and refine criteria. ✗ Keep noisy findings live for completeness.
-- **Severity examples:** Labeled snippets calibrate categorical judgement better than abstract prose. ✓ Provide concrete code cases for each severity level. ✗ Define severe as very important only.
-- **Confidence versus criteria:** Uncalibrated self-confidence cannot replace objective finding criteria. ✓ Define error taxonomy and use confidence only for routing after calibration. ✗ Threshold 0.9 and trust result.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/4-prompt-engineering/4-1-system-prompts
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Sau hiệu chỉnh, confidence phản ánh khá đúng khả năng sai và phù hợp để phân luồng. A dùng giá trị chưa kiểm chứng. B là suy đoán qua văn bản. D phủ nhận quá mức: nó hữu ích khi đã hiệu chỉnh và chỉ dùng cho định tuyến.

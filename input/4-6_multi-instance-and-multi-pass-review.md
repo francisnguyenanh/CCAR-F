@@ -1,326 +1,233 @@
 # 4.6 — Multi-Instance and Multi-Pass Review
 
-> Domain 4: Prompt Engineering & Structured Output · Tỷ trọng toàn domain: 20%
-> Source lesson: https://claudecertificationguide.com/learn/4-prompt-engineering/4-6-multi-pass-review
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+Khi cần review hoặc kiểm tra chất lượng bằng Claude ở quy mô lớn (nhiều file, nhiều thay đổi), một lần gọi duy nhất thường không đủ tốt. Bài này nói về cách tổ chức review bằng **nhiều instance độc lập** và **nhiều lượt (multi-pass)**: reviewer riêng biệt không bị "neo" bởi lập luận của bên tạo code, review từng file kỹ rồi một lượt tích hợp xuyên file, định tuyến theo confidence đã hiệu chỉnh và đối chiếu các phán quyết mâu thuẫn.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Multi-Instance and Multi-Pass Review**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Đề thi xoay quanh việc nhận ra vì sao review trong cùng một session kém hiệu quả, vì sao nhồi hết file vào một context khổng lồ làm giảm chất lượng, và vì sao điểm confidence thô không dùng để tự động duyệt. Quy tắc nhớ nhanh: **reviewer độc lập thấy nhiều lỗi hơn; chia nhỏ rồi tích hợp; confidence phải hiệu chỉnh mới dùng được; mâu thuẫn giữa các lượt phải được hoà giải.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Reviewer độc lập (independent review instance)
 
-### 2.1. Independent reviewer
+### Trọng tâm
 
-**Principle (EN):** Separate model session reduces anchoring on generated rationale.
+Review trong **một invocation mới, không có ngữ cảnh lập luận của bên sinh code** hiệu quả hơn việc bảo chính session đã viết code "tự kiểm tra lại".
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **separate model session reduces anchoring on generated rationale**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** Generation session praises its own flawed auth code.
+Khi cùng một session vừa viết code vừa review, toàn bộ lập luận trước đó (vì sao chọn cách này, các giả định) vẫn nằm trong context. Model có xu hướng **tiếp nối và bảo vệ** những gì nó đã nói: nhìn lại code sẽ thấy "hợp lý" vì có sẵn lời giải thích, đó là hiệu ứng **anchoring** (neo vào lập luận cũ) cộng với thiên hướng tự khẳng định. Một đoạn code xác thực có lỗ hổng có thể được chính session tạo ra khen là đúng, nhất là khi bạn hỏi "code này đúng chứ?".
 
-**Recommended implementation:** Review in independent fresh invocation.
+Giải pháp là một **instance review độc lập**:
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Ask generator to reassert correctness.
+- Tạo cuộc gọi/session **mới**, chỉ truyền cho nó: code cần review, yêu cầu gốc và tiêu chí review (4.1). Không truyền chuỗi lập luận của bên viết.
+- Có thể dùng subagent với context riêng (xem domain 1) hoặc một request API hoàn toàn mới.
+- Reviewer nhìn code như người ngoài, nên dễ phát hiện giả định sai hơn.
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Generation session praises its own flawed auth code".
-- Decision: áp dụng nguyên tắc **Independent reviewer** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Review in independent fresh invocation" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Lưu ý hai điều: (1) hỏi lại session cũ bằng câu "hãy xác nhận lại đây là đúng" không tạo ra độc lập, vì context cũ vẫn còn; (2) dùng **extended thinking** trong cùng session có thể tăng chất lượng suy luận nhưng không loại bỏ hiệu ứng neo từ lập luận trước đó. Độc lập được tạo bằng cách **tách context**, không phải bằng cách yêu cầu "hãy khách quan".
 
-### 2.2. Local then global review
+### Keyword
 
-**Principle (EN):** Focused per-file passes plus cross-file integration avoids attention dilution.
+- `independent review` — review bởi instance riêng, không dùng chung ngữ cảnh với bên tạo
+- `anchoring` — bị neo vào lập luận đã có trong context nên khó nhìn lại khách quan
+- `self-review limitation` — hạn chế của việc tự review trong cùng session
+- `fresh invocation` — lần gọi mới, context sạch
+- `context isolation` — cô lập ngữ cảnh giữa các instance
+- `generator vs reviewer` — tách vai trò sinh nội dung và đánh giá nội dung
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **focused per-file passes plus cross-file integration avoids attention dilution**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Bẫy đề thi
 
-**Case study / Tình huống:** First files checked deeply but later files skimmed.
+- ✗ Bảo session viết code "hãy xác nhận lại code này đúng" ⇒ ✓ Dùng instance mới, context sạch để review
+- ✗ Dặn "hãy khách quan" trong cùng session thay cho tách context ⇒ ✓ Độc lập đến từ việc cô lập ngữ cảnh
+- ✗ Truyền cả lập luận của bên viết cho reviewer ⇒ ✓ Chỉ cho code, yêu cầu và tiêu chí review
 
-**Recommended implementation:** Parallel file reviews, then contract consistency pass.
+### Câu hỏi
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Put all files into one even larger context.
+#### Q1. Session sinh code xác thực người dùng, khi được hỏi lại "code này an toàn chứ?" đã khẳng định là an toàn, nhưng reviewer người tìm ra lỗ hổng. Cải thiện quy trình tốt nhất?
+- A. Hỏi lại session đó thêm một lần nữa
+- B. Thêm câu "hãy thật khách quan" vào prompt cùng session
+- C. Tăng độ dài context cho session đó
+- D. Chạy review bằng một instance mới, chỉ nhận code, yêu cầu và tiêu chí, không nhận lập luận của bên viết
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "First files checked deeply but later files skimmed".
-- Decision: áp dụng nguyên tắc **Local then global review** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Parallel file reviews, then contract consistency pass" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+**Đáp án:** D
 
-### 2.3. Confidence routing calibration
+**Giải thích:** D tách context nên tránh anchoring. A và B vẫn trong context cũ. C không giải quyết thiên hướng tự khẳng định.
 
-**Principle (EN):** Low confidence routes to humans; calibrated scores use labeled validation data.
+#### Q2. Điều gì làm review bằng một instance độc lập thường hiệu quả hơn tự review trong cùng session?
+- A. Instance mới dùng model mạnh hơn
+- B. Instance mới không bị neo vào lập luận và giả định đã nằm trong context của bên tạo
+- C. Instance mới chạy nhanh hơn
+- D. Instance mới có context dài hơn
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **low confidence routes to humans; calibrated scores use labeled validation data**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+**Đáp án:** B
 
-**Case study / Tình huống:** Security finding has uncertain race condition hypothesis.
+**Giải thích:** Lợi ích đến từ cô lập ngữ cảnh. A, C, D không phải cơ chế chính, và độc lập vẫn có hiệu quả với cùng model.
 
-**Recommended implementation:** Calibrate and request review where risk/uncertainty high.
+## K2. Review cục bộ theo file rồi tích hợp xuyên file (local then global)
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Auto-approve based on raw 0.9 score.
+### Trọng tâm
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Security finding has uncertain race condition hypothesis".
-- Decision: áp dụng nguyên tắc **Confidence routing calibration** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Calibrate and request review where risk/uncertainty high" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Chia thành **các lượt review tập trung theo file (chạy song song)**, rồi thêm **một lượt tích hợp** kiểm tra tính nhất quán giữa các file, thay vì nhồi tất cả vào một context khổng lồ.
 
-### 2.4. Cross-pass contradiction
+### Giải thích
 
-**Principle (EN):** Integrate findings to detect inconsistent judgments.
+Khi cho model review 30 file trong một context rất lớn, sự chú ý bị **pha loãng**: những file đầu được xem kỹ, các file sau chỉ được lướt, và chi tiết bị bỏ sót hoặc đánh giá không đều. Làm context lớn hơn không giải quyết được; nó thường làm tình hình tệ hơn.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **integrate findings to detect inconsistent judgments**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+Mô hình hai tầng:
 
-**Case study / Tình huống:** Same SQL pattern flagged in one file but accepted in another.
-
-**Recommended implementation:** Run adjudication and compare evidence.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Publish conflicting reports separately without reconciliation.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Same SQL pattern flagged in one file but accepted in another".
-- Decision: áp dụng nguyên tắc **Cross-pass contradiction** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Run adjudication and compare evidence" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-## 3. Ví dụ thiết kế / Worked engineering example
-
-**Problem:** Generation session praises its own flawed auth code.
-
-**Bad design:** Ask generator to reassert correctness.
-
-**Better design:** Review in independent fresh invocation.
-
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
-
-### Walkthrough: decision trace / Luồng xử lý
+1. **Lượt cục bộ (per-file)**: mỗi file hoặc nhóm nhỏ được review trong instance riêng với cùng tiêu chí. Chạy song song được, mỗi instance tập trung toàn bộ sự chú ý vào ít nội dung, nên phát hiện bug cục bộ sâu hơn.
+2. **Lượt tích hợp (cross-file)**: một lượt thứ hai nhận **bản tóm tắt finding và các giao diện/hợp đồng giữa module** (không nhất thiết toàn bộ source), để kiểm tra: hàm A giả định dữ liệu đã được kiểm ở B nhưng B không làm; hai module hiểu khác nhau về cùng một format; luồng dữ liệu nhạy cảm đi qua nhiều file.
 
 ```text
-INPUT  : Generation session praises its own flawed auth code.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Review in independent fresh invocation.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
+Pass 1 (song song): file_1 ... file_N  -> findings_i
+Pass 2 (tích hợp):  [findings_1..N + interface contracts] -> cross-file issues
 ```
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+Cách này vừa **bảo đảm độ sâu cho từng file** vừa bắt được lỗi chỉ lộ ra khi nhìn nhiều file cùng lúc (lỗi mà review từng file riêng lẻ không thấy). Nó cũng khớp với kỹ thuật chia nhỏ ngữ cảnh ở domain 5.
 
-## 4. Exam traps / Bẫy dễ nhầm
+### Keyword
 
-1. **Bẫy Independent reviewer:** "Ask generator to reassert correctness" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở independent reviewer, rồi chọn "Review in independent fresh invocation".
+- `attention dilution` — chú ý bị pha loãng khi context quá lớn
+- `per-file review` — review từng file riêng với context tập trung
+- `cross-file integration pass` — lượt tích hợp kiểm tra nhất quán giữa các file
+- `parallel review` — chạy nhiều instance review song song
+- `interface contract` — hợp đồng giao diện giữa các module (kiểu dữ liệu, giả định)
+- `larger context fallacy` — ngộ nhận rằng nhồi nhiều vào context lớn hơn sẽ cải thiện kết quả
 
-2. **Bẫy Local then global review:** "Put all files into one even larger context" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở local then global review, rồi chọn "Parallel file reviews, then contract consistency pass".
+### Bẫy đề thi
 
-3. **Bẫy Confidence routing calibration:** "Auto-approve based on raw 0.9 score" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở confidence routing calibration, rồi chọn "Calibrate and request review where risk/uncertainty high".
+- ✗ Đưa cả 30 file vào một context lớn để review một lần ⇒ ✓ Review theo file song song rồi thêm lượt tích hợp
+- ✗ Chỉ review từng file riêng, không kiểm tra liên file ⇒ ✓ Thêm lượt tích hợp cho lỗi xuyên module
+- ✗ Cho rằng context window lớn nghĩa là chú ý đồng đều ⇒ ✓ Chất lượng chú ý vẫn giảm khi nhồi quá nhiều
 
-4. **Bẫy Cross-pass contradiction:** "Publish conflicting reports separately without reconciliation" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở cross-pass contradiction, rồi chọn "Run adjudication and compare evidence".
+### Câu hỏi
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+#### Q1. Review 30 file trong một request duy nhất: các file đầu được phân tích kỹ, các file cuối chỉ nhận vài nhận xét chung chung, và có lỗi tương thích giữa module bị bỏ sót. Thiết kế tốt hơn?
+- A. Dùng model có context window lớn hơn và gửi tất cả cùng lúc
+- B. Chỉ review 10 file đầu
+- C. Review song song từng file với tiêu chí chung, rồi một lượt tích hợp xem xét giao diện và nhất quán giữa các file
+- D. Yêu cầu model "chú ý đều các file"
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+**Đáp án:** C
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **Generation session praises its own flawed auth code**. Phương án nào phù hợp nhất?
+**Giải thích:** Hai tầng giải quyết cả độ sâu lẫn lỗi liên file. A không khắc phục pha loãng. B bỏ sót phần lớn code. D là chỉ dẫn mơ hồ.
 
-- **A.** Auto-approve based on raw 0.9 score; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Review in independent fresh invocation; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Ask generator to reassert correctness; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Put all files into one even larger context; áp dụng trực tiếp dù cơ chế sự cố khác.
+#### Q2. Mục đích chính của lượt tích hợp (cross-file pass) là gì?
+- A. Lặp lại review từng file lần nữa
+- B. Giảm chi phí
+- C. Tìm lỗi chỉ lộ ra khi nhìn quan hệ giữa các file như giả định không khớp giữa các module
+- D. Thay thế hoàn toàn review từng file
 
-**Đáp án: B**
+**Đáp án:** C
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Giải thích:** Lượt tích hợp bổ sung cho review cục bộ, tập trung vào lỗi xuyên file. A là lặp thừa. B không phải mục đích. D sai vì cần cả hai tầng.
 
-- **A:** **Sai.** Phương án thuộc **Confidence routing calibration**, không giải quyết được yêu cầu cốt lõi "Separate model session reduces anchoring on generated rationale" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Separate model session reduces anchoring on generated rationale. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Ask generator to reassert correctness" được nêu ở cơ chế Independent reviewer. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Local then global review**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+## K3. Hiệu chỉnh confidence và định tuyến sang người duyệt
 
-**Exam heuristic:** Nếu đề xuất hiện "Generation session praises its own flawed auth code", ưu tiên phân biệt `Independent reviewer` với các lựa chọn mô tả chuyện khác.
+### Trọng tâm
 
-### Q02. Một kỹ sư đề xuất **Put all files into one even larger context** cho tình huống: First files checked deeply but later files skimmed. Cần phản biện thế nào?
+**Confidence thô** của model không dùng để tự động duyệt. Hãy **hiệu chỉnh bằng dữ liệu có nhãn**, rồi dùng để chuyển các ca rủi ro cao hoặc không chắc cho người xem.
 
-- **A.** Auto-approve based on raw 0.9 score; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Publish conflicting reports separately without reconciliation; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Parallel file reviews, then contract consistency pass; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Put all files into one even larger context; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+### Giải thích
 
-**Đáp án: C**
+Giả sử review tìm ra một giả thuyết race condition và tự đánh confidence 0.9. Nếu bạn đặt quy tắc "≥ 0.9 thì tự động chấp nhận (hoặc tự động bỏ qua nếu thấp)", bạn đang tin vào một con số **chưa từng được kiểm chứng**. Confidence tự báo có thể quá tự tin: ở mức 0.9, tỉ lệ đúng thực tế có thể chỉ 60%.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Quy trình đúng:
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Confidence routing calibration**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Cross-pass contradiction**, không giải quyết được yêu cầu cốt lõi "Focused per-file passes plus cross-file integration avoids attention dilution" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Focused per-file passes plus cross-file integration avoids attention dilution. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Put all files into one even larger context" được nêu ở cơ chế Local then global review. Không đảm bảo xử lý được case và dễ che mất failure mode.
+1. Thu thập **tập kiểm chứng có nhãn** (finding và kết quả đúng/sai do người xác nhận).
+2. Đo mối quan hệ giữa confidence và độ đúng thực tế, từ đó hiệu chỉnh hoặc chọn ngưỡng dựa trên dữ liệu.
+3. Dùng **định tuyến theo rủi ro**: finding có confidence thấp, hoặc thuộc loại hậu quả nặng (bảo mật, mất dữ liệu), được chuyển cho người xem; finding tự tin và rủi ro thấp đi đường nhanh hơn.
+4. Tiếp tục đo lại theo thời gian vì chất lượng có thể thay đổi khi đổi prompt hay model.
 
-**Exam heuristic:** Nếu đề xuất hiện "First files checked deeply but later files skimmed", ưu tiên phân biệt `Local then global review` với các lựa chọn mô tả chuyện khác.
+Phân biệt hai vai trò: **tiêu chí khách quan** quyết định cái gì là lỗi (4.1); **confidence đã hiệu chỉnh** chỉ quyết định **ai/đường nào** xử lý. Rủi ro của sai sót nên có trọng số: một finding bảo mật không chắc chắn vẫn nên được người xem dù confidence trung bình.
 
-### Q03. Nếu sự cố **Security finding has uncertain race condition hypothesis** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+### Keyword
 
-- **A.** Auto-approve based on raw 0.9 score; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Publish conflicting reports separately without reconciliation; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Ask generator to reassert correctness; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Calibrate and request review where risk/uncertainty high; kèm kiểm thử lại điều kiện và ghi evidence.
+- `confidence calibration` — hiệu chỉnh confidence cho khớp với độ đúng thực tế
+- `labeled validation data` — dữ liệu kiểm chứng có nhãn đúng sai
+- `risk-based routing` — định tuyến theo mức rủi ro
+- `human-in-the-loop` — có người tham gia duyệt ở các điểm quan trọng
+- `threshold selection` — chọn ngưỡng dựa trên dữ liệu đo được
+- `overconfidence` — quá tự tin so với độ đúng thật
 
-**Đáp án: D**
+### Bẫy đề thi
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- ✗ Tự động chấp nhận mọi finding có confidence ≥ 0.9 ⇒ ✓ Hiệu chỉnh trên dữ liệu có nhãn rồi mới dùng để định tuyến
+- ✗ Chỉ định tuyến theo confidence, bỏ qua mức rủi ro của loại lỗi ⇒ ✓ Kết hợp rủi ro (bảo mật, dữ liệu) với độ không chắc chắn
+- ✗ Hiệu chỉnh một lần rồi dùng mãi ⇒ ✓ Đo lại khi đổi prompt, model hoặc dữ liệu
 
-- **A:** **Sai.** Đây chính là bẫy "Auto-approve based on raw 0.9 score" được nêu ở cơ chế Confidence routing calibration. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Cross-pass contradiction**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Independent reviewer**, không giải quyết được yêu cầu cốt lõi "Low confidence routes to humans; calibrated scores use labeled validation data" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Low confidence routes to humans; calibrated scores use labeled validation data. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+### Câu hỏi
 
-**Exam heuristic:** Nếu đề xuất hiện "Security finding has uncertain race condition hypothesis", ưu tiên phân biệt `Confidence routing calibration` với các lựa chọn mô tả chuyện khác.
+#### Q1. Reviewer tự động đưa ra giả thuyết race condition với confidence 0.9. Quy trình hiện tại tự động chấp nhận mọi finding ≥ 0.9. Cải thiện nào đúng?
+- A. Nâng ngưỡng lên 0.95 là đủ
+- B. Hiệu chỉnh confidence bằng dữ liệu có nhãn và định tuyến các ca rủi ro cao hoặc không chắc cho người xem
+- C. Bỏ qua mọi finding về race condition
+- D. Yêu cầu model tự nói "tôi chắc chắn" thêm lần nữa
 
-### Q04. Để viết acceptance criteria cho tình huống **Same SQL pattern flagged in one file but accepted in another**, lựa chọn nào thể hiện ranh giới đúng?
+**Đáp án:** B
 
-- **A.** Run adjudication and compare evidence; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Publish conflicting reports separately without reconciliation; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Ask generator to reassert correctness; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Put all files into one even larger context; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+**Giải thích:** Phải đối chiếu confidence với kết quả thật và kết hợp rủi ro khi định tuyến. A vẫn dùng số chưa hiệu chỉnh. C bỏ mất finding có giá trị. D không thêm thông tin kiểm chứng.
 
-**Đáp án: A**
+#### Q2. Sau khi hiệu chỉnh, team nên dùng confidence như thế nào cho đúng?
+- A. Để quyết định cái gì được tính là lỗi
+- B. Để thay thế hoàn toàn người duyệt
+- C. Để chọn finding nào cần người duyệt, kết hợp với mức rủi ro của loại lỗi
+- D. Không dùng nữa vì không đáng tin
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** C
 
-- **A:** **Đúng.** Integrate findings to detect inconsistent judgments. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Publish conflicting reports separately without reconciliation" được nêu ở cơ chế Cross-pass contradiction. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Independent reviewer**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Local then global review**, không giải quyết được yêu cầu cốt lõi "Integrate findings to detect inconsistent judgments" và thiếu điều kiện kiểm chứng.
+**Giải thích:** Confidence đã hiệu chỉnh phù hợp để phân luồng. A thuộc về tiêu chí khách quan. B bỏ an toàn cho các ca khó. D quá mức khi đã có hiệu chỉnh.
 
-**Exam heuristic:** Nếu đề xuất hiện "Same SQL pattern flagged in one file but accepted in another", ưu tiên phân biệt `Cross-pass contradiction` với các lựa chọn mô tả chuyện khác.
+## K4. Đối chiếu mâu thuẫn giữa các lượt review (cross-pass adjudication)
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Ask generator to reassert correctness**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+### Trọng tâm
 
-- **A.** Auto-approve based on raw 0.9 score; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Review in independent fresh invocation; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Ask generator to reassert correctness; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Put all files into one even larger context; áp dụng trực tiếp dù cơ chế sự cố khác.
+Khi các lượt review đưa ra phán quyết **trái ngược** cho cùng một pattern, hãy chạy bước **hoà giải (adjudication)** so sánh bằng chứng, đừng xuất bản các báo cáo mâu thuẫn một cách riêng rẽ.
 
-**Đáp án: B**
+### Giải thích
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Review song song theo file (K2) có thể cho kết quả không đồng nhất: cùng kiểu truy vấn SQL nối chuỗi, ở file A bị gắn "critical", ở file B lại chấp nhận. Nguyên nhân có thể là sự khác nhau thực sự (file B chỉ nhận hằng số nội bộ, không phải đầu vào người dùng), hoặc chỉ là **phán đoán thiếu nhất quán**. Nếu xuất bản cả hai kết luận như hai báo cáo độc lập, người đọc bị bối rối và mất niềm tin (xem 4.1), còn lỗ hổng thật có thể bị bỏ sót.
 
-- **A:** **Sai.** Phương án thuộc **Confidence routing calibration**, không giải quyết được yêu cầu cốt lõi "Separate model session reduces anchoring on generated rationale" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Separate model session reduces anchoring on generated rationale. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Ask generator to reassert correctness" được nêu ở cơ chế Independent reviewer. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Local then global review**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+Bước hoà giải:
 
-**Exam heuristic:** Nếu đề xuất hiện "Generation session praises its own flawed auth code", ưu tiên phân biệt `Independent reviewer` với các lựa chọn mô tả chuyện khác.
+1. **Phát hiện**: gom finding theo pattern/loại và so sánh phán quyết giữa các file hay các lượt.
+2. **Đối chiếu bằng chứng**: một instance (hoặc người) xem lại hai trường hợp cùng lúc, hỏi "điểm khác biệt thực chất là gì (nguồn dữ liệu, phạm vi, mức hậu quả)?".
+3. **Kết luận thống nhất**: hoặc áp một phán quyết cho cả hai, hoặc ghi rõ lý do vì sao hai ca khác nhau.
+4. **Cải tiến tiêu chí**: nếu mâu thuẫn do prompt mơ hồ, thêm tiêu chí hoặc ví dụ ca biên (4.1, 4.2) và ghi nhận mẫu bất đồng (4.4).
 
-### Q06. Sau khi audit phát hiện **First files checked deeply but later files skimmed**, điều gì là cải tiến có thể kiểm chứng?
+Bước này thường nằm trong lượt tích hợp ở K2, vì đó là nơi nhìn được nhiều file cùng lúc. Mục tiêu: báo cáo cuối **nhất quán nội bộ** và có giải thích cho mọi khác biệt.
 
-- **A.** Auto-approve based on raw 0.9 score; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Publish conflicting reports separately without reconciliation; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Parallel file reviews, then contract consistency pass; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Put all files into one even larger context; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+### Keyword
 
-**Đáp án: C**
+- `adjudication` — hoà giải, phân xử khi có kết luận mâu thuẫn
+- `contradictory findings` — các finding mâu thuẫn nhau cho cùng một pattern
+- `consistency check` — kiểm tra tính nhất quán giữa các phán quyết
+- `evidence comparison` — so sánh bằng chứng giữa các trường hợp
+- `reconciliation` — đối soát và thống nhất kết quả
+- `judgment drift` — phán đoán lệch dần/không đồng đều giữa các lượt
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Bẫy đề thi
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Confidence routing calibration**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Cross-pass contradiction**, không giải quyết được yêu cầu cốt lõi "Focused per-file passes plus cross-file integration avoids attention dilution" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Focused per-file passes plus cross-file integration avoids attention dilution. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Put all files into one even larger context" được nêu ở cơ chế Local then global review. Không đảm bảo xử lý được case và dễ che mất failure mode.
+- ✗ Xuất bản riêng từng báo cáo dù mâu thuẫn nhau ⇒ ✓ Chạy bước hoà giải so sánh bằng chứng trước khi công bố
+- ✗ Luôn chọn phán quyết nghiêm trọng hơn để an toàn ⇒ ✓ Xem xét điểm khác biệt thực chất (nguồn dữ liệu, phạm vi) rồi mới kết luận
+- ✗ Coi mâu thuẫn là ngẫu nhiên, bỏ qua ⇒ ✓ Dùng mâu thuẫn làm tín hiệu để cải tiến tiêu chí và ví dụ
 
-**Exam heuristic:** Nếu đề xuất hiện "First files checked deeply but later files skimmed", ưu tiên phân biệt `Local then global review` với các lựa chọn mô tả chuyện khác.
+### Câu hỏi
 
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Security finding has uncertain race condition hypothesis**, nên chọn gì?
+#### Q1. Review song song cho thấy cùng một kiểu truy vấn SQL nối chuỗi bị gắn "critical" ở file A nhưng được chấp nhận ở file B. Bạn xử lý thế nào?
+- A. Công bố cả hai kết quả riêng rẽ
+- B. Chạy bước hoà giải so sánh bằng chứng hai trường hợp (nguồn dữ liệu, phạm vi), thống nhất kết luận hoặc giải thích khác biệt
+- C. Luôn xoá kết luận của file B
+- D. Tăng temperature và chạy lại
 
-- **A.** Auto-approve based on raw 0.9 score; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Publish conflicting reports separately without reconciliation; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Ask generator to reassert correctness; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Calibrate and request review where risk/uncertainty high; kèm kiểm thử lại điều kiện và ghi evidence.
+**Đáp án:** B
 
-**Đáp án: D**
+**Giải thích:** Hoà giải làm rõ điểm khác biệt thực sự và cho báo cáo nhất quán. A để mâu thuẫn tồn tại. C có thể bỏ sót trường hợp thật sự vô hại hoặc ngược lại. D thêm ngẫu nhiên.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+#### Q2. Sau khi hoà giải, phát hiện hai kết luận mâu thuẫn là do tiêu chí trong prompt mơ hồ. Việc nên làm tiếp theo?
+- A. Bỏ qua, vì đã có kết luận cuối
+- B. Thêm tiêu chí rõ hơn và ví dụ ca biên vào prompt, rồi ghi nhận pattern để theo dõi
+- C. Tắt hoàn toàn nhóm finding đó vĩnh viễn
+- D. Chuyển mọi finding về lỗi mức thấp
 
-- **A:** **Sai.** Đây chính là bẫy "Auto-approve based on raw 0.9 score" được nêu ở cơ chế Confidence routing calibration. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Cross-pass contradiction**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Independent reviewer**, không giải quyết được yêu cầu cốt lõi "Low confidence routes to humans; calibrated scores use labeled validation data" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Low confidence routes to humans; calibrated scores use labeled validation data. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+**Đáp án:** B
 
-**Exam heuristic:** Nếu đề xuất hiện "Security finding has uncertain race condition hypothesis", ưu tiên phân biệt `Confidence routing calibration` với các lựa chọn mô tả chuyện khác.
-
-### Q08. Một reviewer nêu giải pháp **Publish conflicting reports separately without reconciliation**. Đánh giá chính xác nhất là gì?
-
-- **A.** Run adjudication and compare evidence; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Publish conflicting reports separately without reconciliation; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Ask generator to reassert correctness; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Put all files into one even larger context; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-
-**Đáp án: A**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Đúng.** Integrate findings to detect inconsistent judgments. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Publish conflicting reports separately without reconciliation" được nêu ở cơ chế Cross-pass contradiction. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Independent reviewer**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Local then global review**, không giải quyết được yêu cầu cốt lõi "Integrate findings to detect inconsistent judgments" và thiếu điều kiện kiểm chứng.
-
-**Exam heuristic:** Nếu đề xuất hiện "Same SQL pattern flagged in one file but accepted in another", ưu tiên phân biệt `Cross-pass contradiction` với các lựa chọn mô tả chuyện khác.
-
-### Q09. Trong thử nghiệm đối chứng với tình huống **Generation session praises its own flawed auth code**, tiêu chí pass phù hợp là gì?
-
-- **A.** Auto-approve based on raw 0.9 score; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Review in independent fresh invocation; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Ask generator to reassert correctness; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Put all files into one even larger context; áp dụng trực tiếp dù cơ chế sự cố khác.
-
-**Đáp án: B**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc **Confidence routing calibration**, không giải quyết được yêu cầu cốt lõi "Separate model session reduces anchoring on generated rationale" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Separate model session reduces anchoring on generated rationale. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Ask generator to reassert correctness" được nêu ở cơ chế Independent reviewer. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Local then global review**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-
-**Exam heuristic:** Nếu đề xuất hiện "Generation session praises its own flawed auth code", ưu tiên phân biệt `Independent reviewer` với các lựa chọn mô tả chuyện khác.
-
-### Q10. Để giảm lỗi tái diễn với **First files checked deeply but later files skimmed**, biện pháp nào phù hợp với cơ chế đã học?
-
-- **A.** Auto-approve based on raw 0.9 score; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Publish conflicting reports separately without reconciliation; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Parallel file reviews, then contract consistency pass; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Put all files into one even larger context; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-
-**Đáp án: C**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc cơ chế **Confidence routing calibration**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Cross-pass contradiction**, không giải quyết được yêu cầu cốt lõi "Focused per-file passes plus cross-file integration avoids attention dilution" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Focused per-file passes plus cross-file integration avoids attention dilution. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Put all files into one even larger context" được nêu ở cơ chế Local then global review. Không đảm bảo xử lý được case và dễ che mất failure mode.
-
-**Exam heuristic:** Nếu đề xuất hiện "First files checked deeply but later files skimmed", ưu tiên phân biệt `Local then global review` với các lựa chọn mô tả chuyện khác.
-
-## 6. Lab / Bài thực hành tự kiểm tra
-
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "Generation session praises its own flawed auth code".
-
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Review in independent fresh invocation.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
-
-## 7. Cheat sheet / Ôn nhanh
-
-- **Independent reviewer:** Separate model session reduces anchoring on generated rationale. ✓ Review in independent fresh invocation. ✗ Ask generator to reassert correctness.
-- **Local then global review:** Focused per-file passes plus cross-file integration avoids attention dilution. ✓ Parallel file reviews, then contract consistency pass. ✗ Put all files into one even larger context.
-- **Confidence routing calibration:** Low confidence routes to humans; calibrated scores use labeled validation data. ✓ Calibrate and request review where risk/uncertainty high. ✗ Auto-approve based on raw 0.9 score.
-- **Cross-pass contradiction:** Integrate findings to detect inconsistent judgments. ✓ Run adjudication and compare evidence. ✗ Publish conflicting reports separately without reconciliation.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/4-prompt-engineering/4-6-multi-pass-review
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Mâu thuẫn là tín hiệu cải tiến: làm rõ tiêu chí và ví dụ ở biên. A bỏ lỡ cơ hội. C và D loại bỏ giá trị thay vì sửa nguyên nhân.

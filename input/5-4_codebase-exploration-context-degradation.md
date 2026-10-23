@@ -1,326 +1,245 @@
 # 5.4 — Codebase Exploration & Context Degradation
 
-> Domain 5: Context Management & Reliability · Tỷ trọng toàn domain: 15%
-> Source lesson: https://claudecertificationguide.com/learn/5-context-management/5-4-codebase-exploration
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+Khi dùng Claude (đặc biệt trong Claude Code) để khám phá một codebase lớn, phiên làm việc dài sẽ chất đầy kết quả `grep`, nội dung file, log lệnh. Càng nhiều, ngữ cảnh càng nhiễu và **chất lượng suy luận suy giảm** (context degradation): model quên tên class/hàm cụ thể đã thấy trước đó và bắt đầu nói chung chung hoặc đoán.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Codebase Exploration & Context Degradation**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Bài này dạy cách nhận ra triệu chứng và bốn công cụ đối phó: **scratchpad ngoài ngữ cảnh**, **subagent cô lập khám phá**, **tóm tắt theo giai đoạn / `/compact`**, và **tham chiếu chính xác có mục tiêu**. Quy tắc nhớ nhanh: **đừng để thông tin quan trọng chỉ sống trong ngữ cảnh; ghi ra ngoài, giao việc ồn ào cho subagent, và nén có chủ đích.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Nhận diện suy giảm ngữ cảnh
 
-### 2.1. Context degradation symptoms
+### Trọng tâm
 
-**Principle (EN):** Generic patterns replace previously known exact symbols as conversation grows.
+Dấu hiệu điển hình: model **thay tên cụ thể bằng mô tả chung** ("repository class" thay vì `OrderRepository.findById`), lặp lại việc đã làm, hoặc mâu thuẫn với phát hiện trước đó.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **generic patterns replace previously known exact symbols as conversation grows**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** Agent forgets OrderRepository.findById after long exploration.
+Trong phiên khám phá dài, ngữ cảnh chứa hàng trăm kết quả công cụ. Mặc dù chưa chạm giới hạn cứng, thông tin quan trọng cũ bị chôn giữa nhiều dữ liệu mới (liên hệ hiện tượng lost in the middle ở bài 5.1), và model ưu tiên các mẫu chung hơn chi tiết đã đọc từ lâu.
 
-**Recommended implementation:** Restore factual scratchpad and targeted references.
+Các triệu chứng thực tế:
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Ask to think harder with no evidence.
+- Trích dẫn "mẫu chung" thay vì ký hiệu chính xác: nói "service layer thường có hàm findById" thay vì chỉ ra `OrderRepository.findById` ở file nào.
+- **Hỏi lại** điều đã khám phá hoặc **đọc lại** cùng một file nhiều lần.
+- Đề xuất sửa code mâu thuẫn với cấu trúc đã tìm thấy.
+- Câu trả lời mơ hồ, thiếu đường dẫn và tên cụ thể.
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Agent forgets OrderRepository.findById after long exploration".
-- Decision: áp dụng nguyên tắc **Context degradation symptoms** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Restore factual scratchpad and targeted references" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Biện pháp đúng khi thấy triệu chứng: **phục hồi dữ kiện thực** — ghi lại class, đường dẫn, chuỗi phụ thuộc đã xác nhận vào một nơi ổn định và đưa lại vào ngữ cảnh một cách có mục tiêu (K2, K4). Cách sai: nhắc model "hãy suy nghĩ kỹ hơn" mà không cung cấp bằng chứng nào, vì điều thiếu là **thông tin chính xác trong tầm chú ý**, không phải nỗ lực suy luận.
 
-### 2.2. External scratchpad
+Việc tăng kích thước cửa sổ không phải thuốc chữa: nhiều ngữ cảnh hơn mà không có tổ chức có thể làm vấn đề nặng thêm.
 
-**Principle (EN):** Persist classes, paths, dependency chains and findings outside context.
+### Keyword
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **persist classes, paths, dependency chains and findings outside context**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+- `context degradation` — chất lượng suy luận giảm khi ngữ cảnh dài và nhiễu
+- `generic pattern` — mẫu chung chung thay thế ký hiệu cụ thể
+- `exact symbol` — tên class/hàm/đường dẫn chính xác
+- `redundant re-read` — đọc lại không cần thiết thông tin đã biết
+- `grounding` — neo câu trả lời vào dữ kiện thực đã xác nhận
 
-**Case study / Tình huống:** Multi-day refactor needs stable architecture notes.
+### Bẫy đề thi
 
-**Recommended implementation:** Write structured scratchpad and reread before decisions.
+- ✗ Bảo model "suy nghĩ kỹ hơn" khi nó bắt đầu nói chung chung ⇒ ✓ Cung cấp lại dữ kiện chính xác (scratchpad, tham chiếu có mục tiêu)
+- ✗ Coi triệu chứng chỉ xuất hiện khi chạm giới hạn token ⇒ ✓ Suy giảm xảy ra sớm hơn, khi ngữ cảnh dài và nhiễu
+- ✗ Chỉ cần model có context lớn hơn ⇒ ✓ Cần tổ chức thông tin, không chỉ tăng dung lượng
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Depend on implicit memory of old tool result.
+### Câu hỏi
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Multi-day refactor needs stable architecture notes".
-- Decision: áp dụng nguyên tắc **External scratchpad** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Write structured scratchpad and reread before decisions" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+#### Q1. Sau 2 giờ khám phá, agent trả lời "lớp repository thường có hàm tìm theo ID" thay vì nói rõ `OrderRepository.findById` mà nó đã đọc lúc đầu. Điều này cho thấy gì và nên làm gì?
+- A. Model bị lỗi, cần khởi động lại toàn bộ môi trường
+- B. Suy giảm ngữ cảnh; phục hồi dữ kiện chính xác từ ghi chú và đưa lại có mục tiêu
+- C. Cần yêu cầu model suy nghĩ kỹ hơn trong prompt tiếp theo
+- D. Chỉ cần tăng nhiệt độ lấy mẫu
 
-### 2.3. Subagent isolation
+**Đáp án:** B
 
-**Principle (EN):** Verbose exploration in isolated agents keeps coordinator concise.
+**Giải thích:** Đây là triệu chứng thay ký hiệu cụ thể bằng mẫu chung, cách chữa là cung cấp lại dữ kiện đã xác nhận. A quá mức và mất tiến trình. C không thêm thông tin nào. D không liên quan đến độ chính xác của ký hiệu.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **verbose exploration in isolated agents keeps coordinator concise**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+#### Q2. Dấu hiệu nào sau đây KHÔNG phải triệu chứng điển hình của suy giảm ngữ cảnh trong phiên khám phá?
+- A. Đọc lại cùng một file nhiều lần
+- B. Đề xuất sửa code mâu thuẫn với cấu trúc đã khám phá
+- C. Trả lời bằng mô tả chung thay vì đường dẫn cụ thể
+- D. Trích dẫn đúng đường dẫn và hàm đã tìm thấy trước đó
 
-**Case study / Tình huống:** Main session overflows with grep and read outputs.
+**Đáp án:** D
 
-**Recommended implementation:** Delegate bounded discovery and return focused summary.
+**Giải thích:** Trích dẫn chính xác là dấu hiệu ngữ cảnh còn tốt. A, B, C đều là biểu hiện khi dữ kiện cũ bị mờ đi.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Append all raw discovery to main session.
+## K2. Scratchpad ngoài ngữ cảnh
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Main session overflows with grep and read outputs".
-- Decision: áp dụng nguyên tắc **Subagent isolation** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Delegate bounded discovery and return focused summary" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+### Trọng tâm
 
-### 2.4. Compact and phase summaries
+Ghi các phát hiện then chốt (class, đường dẫn, chuỗi phụ thuộc, quyết định) vào **file ngoài ngữ cảnh** và **đọc lại trước khi ra quyết định**, thay vì dựa vào trí nhớ về kết quả công cụ cũ.
 
-**Principle (EN):** Summarize stable findings between phases while retaining precise references.
+### Giải thích
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **summarize stable findings between phases while retaining precise references**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+Ngữ cảnh là bộ nhớ làm việc hạn chế và tạm thời; **file** là bộ nhớ bền. Với refactor nhiều ngày hoặc khám phá lớn, hãy duy trì một file như `NOTES.md` hoặc `architecture-notes.md` có cấu trúc:
 
-**Case study / Tình huống:** Phase 2 agent repeats Phase 1 architectural exploration.
-
-**Recommended implementation:** Inject phase summary with file references; use /compact as needed.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Start agents without previous findings.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Phase 2 agent repeats Phase 1 architectural exploration".
-- Decision: áp dụng nguyên tắc **Compact and phase summaries** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Inject phase summary with file references; use /compact as needed" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-## 3. Ví dụ thiết kế / Worked engineering example
-
-**Problem:** Agent forgets OrderRepository.findById after long exploration.
-
-**Bad design:** Ask to think harder with no evidence.
-
-**Better design:** Restore factual scratchpad and targeted references.
-
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
-
-### Walkthrough: decision trace / Luồng xử lý
-
-```text
-INPUT  : Agent forgets OrderRepository.findById after long exploration.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Restore factual scratchpad and targeted references.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
+```markdown
+Kiến trúc đã xác nhận:
+- Entry: src/api/orders.ts -> OrderService.create
+- OrderService -> OrderRepository.findById (src/repo/order_repo.ts:42)
+Quyết định:
+- Giữ interface OrderRepository, chỉ đổi cài đặt cache
+Việc còn lại:
+- [ ] cập nhật test tích hợp
 ```
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+Lợi ích:
 
-## 4. Exam traps / Bẫy dễ nhầm
+- **Sống sót qua nén ngữ cảnh** và qua phiên mới: sau `/compact` hay khi mở phiên khác, chỉ cần đọc lại file.
+- Là **nguồn sự thật** có thể kiểm tra, sửa và chia sẻ.
+- Buộc cô đọng: ghi ký hiệu chính xác và vị trí thay vì văn xuôi.
 
-1. **Bẫy Context degradation symptoms:** "Ask to think harder with no evidence" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở context degradation symptoms, rồi chọn "Restore factual scratchpad and targeted references".
+Quy trình: khi xác nhận một phát hiện thì ghi ngay; trước bước quan trọng thì đọc lại phần liên quan. Trong Claude Code, `CLAUDE.md` cũng đóng vai trò ghi nhớ bền, nhưng dành cho quy ước dự án; ghi chú khám phá tạm thời nên nằm ở file riêng.
 
-2. **Bẫy External scratchpad:** "Depend on implicit memory of old tool result" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở external scratchpad, rồi chọn "Write structured scratchpad and reread before decisions".
+Điều cần tránh: tin rằng model sẽ "nhớ" một kết quả tool đã xuất hiện từ rất lâu trước đó.
 
-3. **Bẫy Subagent isolation:** "Append all raw discovery to main session" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở subagent isolation, rồi chọn "Delegate bounded discovery and return focused summary".
+### Keyword
 
-4. **Bẫy Compact and phase summaries:** "Start agents without previous findings" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở compact and phase summaries, rồi chọn "Inject phase summary with file references; use /compact as needed".
+- `scratchpad` — file ghi chú ngoài ngữ cảnh lưu phát hiện then chốt
+- `persistent memory` — bộ nhớ bền, tồn tại qua các lần nén/phiên
+- `source of truth` — nguồn sự thật được tham chiếu khi quyết định
+- `architecture notes` — ghi chú kiến trúc đã xác nhận
+- `working memory` — bộ nhớ làm việc tạm thời (chính là ngữ cảnh)
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+### Bẫy đề thi
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+- ✗ Dựa vào việc model nhớ kết quả công cụ cũ ⇒ ✓ Ghi ra file và đọc lại trước khi quyết định
+- ✗ Ghi scratchpad một lần ở cuối dự án ⇒ ✓ Ghi ngay khi xác nhận phát hiện, cập nhật liên tục
+- ✗ Ghi ghi chú bằng văn xuôi dài ⇒ ✓ Ghi ký hiệu, đường dẫn, quyết định có cấu trúc
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **Agent forgets OrderRepository.findById after long exploration**. Phương án nào phù hợp nhất?
+### Câu hỏi
 
-- **A.** Restore factual scratchpad and targeted references; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Ask to think harder with no evidence; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Depend on implicit memory of old tool result; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Append all raw discovery to main session; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+#### Q1. Một refactor kéo dài nhiều ngày, qua nhiều phiên. Mỗi sáng agent phải khám phá lại kiến trúc từ đầu. Cải tiến hiệu quả nhất?
+- A. Bắt đầu mỗi phiên bằng prompt dài mô tả lại toàn bộ từ trí nhớ của bạn
+- B. Chạy phiên liên tục không bao giờ đóng
+- C. Yêu cầu agent ghi kiến trúc đã xác nhận vào file ghi chú và đọc file này khi bắt đầu phiên
+- D. Chỉ dựa vào lịch sử hội thoại của phiên trước
 
-**Đáp án: A**
+**Đáp án:** C
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Giải thích:** File ghi chú là bộ nhớ bền, có cấu trúc và dùng lại được qua phiên. A tốn công và dễ sai. B không khả thi và vẫn gặp suy giảm. D phụ thuộc lịch sử có thể bị mờ hoặc không còn.
 
-- **A:** **Đúng.** Generic patterns replace previously known exact symbols as conversation grows. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Ask to think harder with no evidence" được nêu ở cơ chế Context degradation symptoms. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **External scratchpad**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Subagent isolation**, không giải quyết được yêu cầu cốt lõi "Generic patterns replace previously known exact symbols as conversation grows" và thiếu điều kiện kiểm chứng.
+#### Q2. Khi nào nên đọc lại scratchpad?
+- A. Trước khi đưa ra quyết định thay đổi quan trọng hoặc sau khi nén ngữ cảnh
+- B. Không bao giờ, vì model đã nhớ
+- C. Chỉ khi kết thúc dự án
+- D. Chỉ khi có lỗi biên dịch
 
-**Exam heuristic:** Nếu đề xuất hiện "Agent forgets OrderRepository.findById after long exploration", ưu tiên phân biệt `Context degradation symptoms` với các lựa chọn mô tả chuyện khác.
+**Đáp án:** A
 
-### Q02. Một kỹ sư đề xuất **Depend on implicit memory of old tool result** cho tình huống: Multi-day refactor needs stable architecture notes. Cần phản biện thế nào?
+**Giải thích:** Đọc lại trước quyết định để neo vào dữ kiện thực, và sau nén để khôi phục chi tiết. B, C, D bỏ lỡ thời điểm quan trọng.
 
-- **A.** Start agents without previous findings; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Write structured scratchpad and reread before decisions; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Depend on implicit memory of old tool result; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Append all raw discovery to main session; áp dụng trực tiếp dù cơ chế sự cố khác.
+## K3. Cô lập khám phá bằng subagent
 
-**Đáp án: B**
+### Trọng tâm
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Giao các tác vụ khám phá **nhiều output** (grep, đọc nhiều file) cho **subagent** có ngữ cảnh riêng, chỉ nhận lại **bản tóm tắt tập trung**. Ngữ cảnh phiên chính nhờ đó gọn.
 
-- **A:** **Sai.** Phương án thuộc **Compact and phase summaries**, không giải quyết được yêu cầu cốt lõi "Persist classes, paths, dependency chains and findings outside context" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Persist classes, paths, dependency chains and findings outside context. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Depend on implicit memory of old tool result" được nêu ở cơ chế External scratchpad. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Subagent isolation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+### Giải thích
 
-**Exam heuristic:** Nếu đề xuất hiện "Multi-day refactor needs stable architecture notes", ưu tiên phân biệt `External scratchpad` với các lựa chọn mô tả chuyện khác.
+Mỗi subagent chạy với **cửa sổ ngữ cảnh riêng**. Nếu bạn nhờ subagent "tìm mọi nơi dùng `PaymentGateway` và liệt kê các điểm gọi", nó có thể chạy hàng chục `grep` và đọc hàng chục file, nhưng phiên chính chỉ nhận lại vài chục dòng kết quả. Dữ liệu thô nằm lại và được bỏ đi cùng subagent.
 
-### Q03. Nếu sự cố **Main session overflows with grep and read outputs** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+Khi dùng:
 
-- **A.** Start agents without previous findings; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Ask to think harder with no evidence; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Delegate bounded discovery and return focused summary; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Append all raw discovery to main session; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+- Câu hỏi khám phá có phạm vi rõ ràng ("map the auth flow", "tìm các caller của X").
+- Cần đọc nhiều tài liệu nhưng chỉ cần kết luận.
+- Muốn giữ phiên chính tập trung vào ra quyết định và chỉnh sửa.
 
-**Đáp án: C**
+Lưu ý thiết kế:
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- Ghi rõ **đầu ra mong muốn**: danh sách file:dòng, tóm tắt vai trò, không chép nguyên nội dung.
+- Subagent không thấy ngữ cảnh phiên chính, nên **truyền đủ thông tin cần thiết** trong prompt giao việc (xem bài 1.3).
+- Nếu kết quả trả về vẫn quá dài, ngữ cảnh chính vẫn phình: cần giới hạn độ dài báo cáo.
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Compact and phase summaries**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Context degradation symptoms**, không giải quyết được yêu cầu cốt lõi "Verbose exploration in isolated agents keeps coordinator concise" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Verbose exploration in isolated agents keeps coordinator concise. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Append all raw discovery to main session" được nêu ở cơ chế Subagent isolation. Không đảm bảo xử lý được case và dễ che mất failure mode.
+Trong Claude Code, các subagent như Explore phục vụ đúng mục đích này. Ngược lại, nạp trực tiếp mọi output thô vào phiên chính sẽ làm suy giảm nhanh (K1).
 
-**Exam heuristic:** Nếu đề xuất hiện "Main session overflows with grep and read outputs", ưu tiên phân biệt `Subagent isolation` với các lựa chọn mô tả chuyện khác.
+### Keyword
 
-### Q04. Để viết acceptance criteria cho tình huống **Phase 2 agent repeats Phase 1 architectural exploration**, lựa chọn nào thể hiện ranh giới đúng?
+- `subagent isolation` — mỗi subagent có ngữ cảnh riêng, tách khỏi phiên chính
+- `bounded discovery` — khám phá có phạm vi và mục tiêu rõ ràng
+- `focused summary` — bản tóm tắt tập trung, chỉ gồm điều cần
+- `verbose output` — đầu ra dài dòng (grep, đọc file)
+- `Explore subagent` — subagent chuyên khám phá trong Claude Code
 
-- **A.** Start agents without previous findings; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Ask to think harder with no evidence; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Depend on implicit memory of old tool result; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Inject phase summary with file references; use /compact as needed; kèm kiểm thử lại điều kiện và ghi evidence.
+### Bẫy đề thi
 
-**Đáp án: D**
+- ✗ Chạy mọi grep/read trực tiếp trong phiên chính ⇒ ✓ Giao cho subagent và nhận tóm tắt
+- ✗ Subagent trả nguyên văn mọi file đã đọc ⇒ ✓ Yêu cầu báo cáo ngắn gọn có file:dòng
+- ✗ Giả định subagent tự biết bối cảnh phiên chính ⇒ ✓ Truyền rõ mục tiêu và thông tin cần thiết trong prompt
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Câu hỏi
 
-- **A:** **Sai.** Đây chính là bẫy "Start agents without previous findings" được nêu ở cơ chế Compact and phase summaries. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Context degradation symptoms**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **External scratchpad**, không giải quyết được yêu cầu cốt lõi "Summarize stable findings between phases while retaining precise references" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Summarize stable findings between phases while retaining precise references. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+#### Q1. Phiên chính đã đầy kết quả grep và nội dung file sau khi tìm các điểm gọi của một hàm. Lần tới nên làm thế nào để giữ phiên chính gọn?
+- A. Giao việc tìm kiếm cho subagent và chỉ nhận danh sách điểm gọi kèm tóm tắt
+- B. Đọc từng file một trong phiên chính
+- C. Giảm số file trong repo
+- D. Tăng giới hạn token đầu ra
 
-**Exam heuristic:** Nếu đề xuất hiện "Phase 2 agent repeats Phase 1 architectural exploration", ưu tiên phân biệt `Compact and phase summaries` với các lựa chọn mô tả chuyện khác.
+**Đáp án:** A
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Ask to think harder with no evidence**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+**Giải thích:** Subagent có ngữ cảnh riêng nên output thô không làm bẩn phiên chính. B làm ngữ cảnh phình hơn. C không thực tế. D không liên quan input.
 
-- **A.** Restore factual scratchpad and targeted references; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Ask to think harder with no evidence; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Depend on implicit memory of old tool result; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Append all raw discovery to main session; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+#### Q2. Subagent khám phá trả về nguyên văn nội dung 30 file đã đọc. Vấn đề là gì?
+- A. Không có vấn đề, càng nhiều thông tin càng tốt
+- B. Subagent không được phép đọc file
+- C. Lợi ích cô lập bị mất vì ngữ cảnh chính vẫn bị chất đầy; cần yêu cầu báo cáo tập trung
+- D. Subagent sẽ luôn thất bại
 
-**Đáp án: A**
+**Đáp án:** C
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Giải thích:** Giá trị của subagent là cô đọng kết quả. Trả nguyên văn đưa gánh nặng trở lại phiên chính. A bỏ qua mục đích cô lập. B, D không đúng.
 
-- **A:** **Đúng.** Generic patterns replace previously known exact symbols as conversation grows. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Ask to think harder with no evidence" được nêu ở cơ chế Context degradation symptoms. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **External scratchpad**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Subagent isolation**, không giải quyết được yêu cầu cốt lõi "Generic patterns replace previously known exact symbols as conversation grows" và thiếu điều kiện kiểm chứng.
+## K4. Tóm tắt theo giai đoạn và `/compact`
 
-**Exam heuristic:** Nếu đề xuất hiện "Agent forgets OrderRepository.findById after long exploration", ưu tiên phân biệt `Context degradation symptoms` với các lựa chọn mô tả chuyện khác.
+### Trọng tâm
 
-### Q06. Sau khi audit phát hiện **Multi-day refactor needs stable architecture notes**, điều gì là cải tiến có thể kiểm chứng?
+Giữa các giai đoạn, **tóm tắt phát hiện ổn định cùng tham chiếu chính xác** và đưa vào giai đoạn sau; dùng `/compact` khi cần nén phiên. Đừng khởi động agent mới mà không mang theo kết quả giai đoạn trước.
 
-- **A.** Start agents without previous findings; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Write structured scratchpad and reread before decisions; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Depend on implicit memory of old tool result; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Append all raw discovery to main session; áp dụng trực tiếp dù cơ chế sự cố khác.
+### Giải thích
 
-**Đáp án: B**
+Công việc lớn thường chia giai đoạn: (1) khám phá kiến trúc, (2) thiết kế thay đổi, (3) cài đặt, (4) kiểm thử. Nếu agent giai đoạn 2 bắt đầu trắng, nó sẽ **lặp lại khám phá của giai đoạn 1**, tốn thời gian và có thể đi đến kết luận khác.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Cách làm:
 
-- **A:** **Sai.** Phương án thuộc **Compact and phase summaries**, không giải quyết được yêu cầu cốt lõi "Persist classes, paths, dependency chains and findings outside context" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Persist classes, paths, dependency chains and findings outside context. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Depend on implicit memory of old tool result" được nêu ở cơ chế External scratchpad. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Subagent isolation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+- Cuối mỗi giai đoạn, tạo **phase summary**: kiến trúc, quyết định, file/ký hiệu quan trọng, câu hỏi còn mở. Lưu vào scratchpad (K2) hoặc đưa vào prompt giai đoạn sau.
+- Summary phải chứa **tham chiếu chính xác** (đường dẫn, tên hàm), không chỉ mô tả chung. Đây là cùng nguyên tắc với case facts ở bài 5.1.
+- Trong Claude Code, lệnh **`/compact`** nén lịch sử hội thoại thành bản tóm tắt để giải phóng ngữ cảnh. Có thể kèm chỉ dẫn về điều cần giữ lại. Vì nén có mất mát, hãy đảm bảo dữ kiện then chốt đã nằm trong file ghi chú trước khi compact.
+- Khi bắt đầu phiên mới cho giai đoạn tiếp theo, đưa vào summary thay vì lịch sử đầy đủ.
 
-**Exam heuristic:** Nếu đề xuất hiện "Multi-day refactor needs stable architecture notes", ưu tiên phân biệt `External scratchpad` với các lựa chọn mô tả chuyện khác.
+So sánh: scratchpad lưu **sự thật bền**; phase summary là **bản chuyển giao** giữa giai đoạn; `/compact` là **nén tại chỗ**. Chúng bổ sung nhau chứ không thay thế.
 
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Main session overflows with grep and read outputs**, nên chọn gì?
+### Keyword
 
-- **A.** Start agents without previous findings; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Ask to think harder with no evidence; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Delegate bounded discovery and return focused summary; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Append all raw discovery to main session; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+- `phase summary` — bản tóm tắt cuối mỗi giai đoạn để chuyển giao
+- `/compact` — lệnh Claude Code nén lịch sử hội thoại thành bản tóm tắt
+- `context handoff` — chuyển giao ngữ cảnh sang agent/phiên khác
+- `open questions` — câu hỏi còn bỏ ngỏ cần giải quyết tiếp
+- `lossy compression` — nén có mất mát chi tiết
 
-**Đáp án: C**
+### Bẫy đề thi
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- ✗ Khởi động agent giai đoạn sau mà không mang kết quả trước ⇒ ✓ Chèn phase summary có tham chiếu chính xác
+- ✗ `/compact` khi dữ kiện then chốt chỉ nằm trong hội thoại ⇒ ✓ Ghi dữ kiện ra file trước khi nén
+- ✗ Phase summary chỉ mô tả chung chung ⇒ ✓ Gồm đường dẫn, tên ký hiệu, quyết định, câu hỏi mở
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Compact and phase summaries**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Context degradation symptoms**, không giải quyết được yêu cầu cốt lõi "Verbose exploration in isolated agents keeps coordinator concise" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Verbose exploration in isolated agents keeps coordinator concise. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Append all raw discovery to main session" được nêu ở cơ chế Subagent isolation. Không đảm bảo xử lý được case và dễ che mất failure mode.
+### Câu hỏi
 
-**Exam heuristic:** Nếu đề xuất hiện "Main session overflows with grep and read outputs", ưu tiên phân biệt `Subagent isolation` với các lựa chọn mô tả chuyện khác.
+#### Q1. Agent giai đoạn 2 (thiết kế) lặp lại toàn bộ việc khám phá kiến trúc mà giai đoạn 1 đã làm. Cách khắc phục?
+- A. Bảo agent làm nhanh hơn
+- B. Dùng model lớn hơn cho giai đoạn 2
+- C. Bỏ giai đoạn 1 ở lần chạy sau
+- D. Đưa phase summary của giai đoạn 1 (kiến trúc, tham chiếu file, quyết định) vào prompt giai đoạn 2
 
-### Q08. Một reviewer nêu giải pháp **Start agents without previous findings**. Đánh giá chính xác nhất là gì?
+**Đáp án:** D
 
-- **A.** Start agents without previous findings; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Ask to think harder with no evidence; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Depend on implicit memory of old tool result; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Inject phase summary with file references; use /compact as needed; kèm kiểm thử lại điều kiện và ghi evidence.
+**Giải thích:** Chuyển giao kết quả đã xác nhận tránh lặp việc. A, B không cung cấp thông tin mới. C làm mất nền tảng cần thiết.
 
-**Đáp án: D**
+#### Q2. Trước khi chạy `/compact` trong một phiên khám phá dài, bước nào là thận trọng nhất?
+- A. Xóa file ghi chú cho đỡ rối
+- B. Ghi các phát hiện then chốt (đường dẫn, ký hiệu, quyết định) ra file ghi chú
+- C. Không làm gì vì compact luôn bảo toàn mọi chi tiết
+- D. Khởi động lại máy
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** B
 
-- **A:** **Sai.** Đây chính là bẫy "Start agents without previous findings" được nêu ở cơ chế Compact and phase summaries. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Context degradation symptoms**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **External scratchpad**, không giải quyết được yêu cầu cốt lõi "Summarize stable findings between phases while retaining precise references" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Summarize stable findings between phases while retaining precise references. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-
-**Exam heuristic:** Nếu đề xuất hiện "Phase 2 agent repeats Phase 1 architectural exploration", ưu tiên phân biệt `Compact and phase summaries` với các lựa chọn mô tả chuyện khác.
-
-### Q09. Trong thử nghiệm đối chứng với tình huống **Agent forgets OrderRepository.findById after long exploration**, tiêu chí pass phù hợp là gì?
-
-- **A.** Restore factual scratchpad and targeted references; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Ask to think harder with no evidence; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Depend on implicit memory of old tool result; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Append all raw discovery to main session; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-
-**Đáp án: A**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Đúng.** Generic patterns replace previously known exact symbols as conversation grows. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Ask to think harder with no evidence" được nêu ở cơ chế Context degradation symptoms. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **External scratchpad**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Subagent isolation**, không giải quyết được yêu cầu cốt lõi "Generic patterns replace previously known exact symbols as conversation grows" và thiếu điều kiện kiểm chứng.
-
-**Exam heuristic:** Nếu đề xuất hiện "Agent forgets OrderRepository.findById after long exploration", ưu tiên phân biệt `Context degradation symptoms` với các lựa chọn mô tả chuyện khác.
-
-### Q10. Để giảm lỗi tái diễn với **Multi-day refactor needs stable architecture notes**, biện pháp nào phù hợp với cơ chế đã học?
-
-- **A.** Start agents without previous findings; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Write structured scratchpad and reread before decisions; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Depend on implicit memory of old tool result; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Append all raw discovery to main session; áp dụng trực tiếp dù cơ chế sự cố khác.
-
-**Đáp án: B**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc **Compact and phase summaries**, không giải quyết được yêu cầu cốt lõi "Persist classes, paths, dependency chains and findings outside context" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Persist classes, paths, dependency chains and findings outside context. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Depend on implicit memory of old tool result" được nêu ở cơ chế External scratchpad. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Subagent isolation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-
-**Exam heuristic:** Nếu đề xuất hiện "Multi-day refactor needs stable architecture notes", ưu tiên phân biệt `External scratchpad` với các lựa chọn mô tả chuyện khác.
-
-## 6. Lab / Bài thực hành tự kiểm tra
-
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "Agent forgets OrderRepository.findById after long exploration".
-
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Restore factual scratchpad and targeted references.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
-
-## 7. Cheat sheet / Ôn nhanh
-
-- **Context degradation symptoms:** Generic patterns replace previously known exact symbols as conversation grows. ✓ Restore factual scratchpad and targeted references. ✗ Ask to think harder with no evidence.
-- **External scratchpad:** Persist classes, paths, dependency chains and findings outside context. ✓ Write structured scratchpad and reread before decisions. ✗ Depend on implicit memory of old tool result.
-- **Subagent isolation:** Verbose exploration in isolated agents keeps coordinator concise. ✓ Delegate bounded discovery and return focused summary. ✗ Append all raw discovery to main session.
-- **Compact and phase summaries:** Summarize stable findings between phases while retaining precise references. ✓ Inject phase summary with file references; use /compact as needed. ✗ Start agents without previous findings.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/5-context-management/5-4-codebase-exploration
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Nén có mất mát nên dữ kiện cần giữ phải nằm ở nơi bền. A phá nguồn sự thật. C sai về bản chất nén. D không liên quan.

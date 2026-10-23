@@ -1,326 +1,252 @@
 # 3.1 — CLAUDE.md Hierarchy, Scoping, and Modular Organisation
 
-> Domain 3: Claude Code Configuration & Workflows · Tỷ trọng toàn domain: 20%
-> Source lesson: https://claudecertificationguide.com/learn/3-claude-code-config/3-1-claude-md-hierarchy
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+**CLAUDE.md** là file Markdown mà Claude Code tự đọc vào context ở đầu phiên để biết quy ước, lệnh build/test và kiến trúc của dự án. Điểm khó không nằm ở việc viết file, mà ở việc **đặt đúng chỗ (scope)**: cá nhân hay cả team, toàn repo hay riêng một module, một file lớn hay nhiều file nhỏ được import.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **CLAUDE.md Hierarchy, Scoping, and Modular Organisation**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Đề thi thường cho một tình huống (đồng đội không thấy quy ước, quy tắc của module này bị áp sang module khác, file CLAUDE.md phình to, hai file mâu thuẫn nhau) rồi hỏi nên đặt/sửa ở đâu. Quy tắc nhớ nhanh: **quy ước của team → CLAUDE.md của project được commit; quy ước riêng một thư mục → CLAUDE.md lồng trong thư mục đó; file quá dài → chia bằng `@path`; yêu cầu bắt buộc → không dựa vào CLAUDE.md mà dùng settings/hook.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Các tầng CLAUDE.md: cá nhân và project
 
-### 2.1. Personal and project guidance
+### Trọng tâm
 
-**Principle (EN):** ~/.claude/CLAUDE.md personal; root or .claude/CLAUDE.md shared.
+`~/.claude/CLAUDE.md` là tầng **cá nhân** (chỉ máy bạn); `CLAUDE.md` ở gốc repo hoặc `.claude/CLAUDE.md` là tầng **project** được commit để cả team dùng chung. Quy ước của team phải nằm ở tầng project.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **~/.claude/CLAUDE.md personal; root or .claude/CLAUDE.md shared**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** Team wants standard unit test conventions.
+Claude Code nạp nhiều file hướng dẫn theo từng tầng, mỗi tầng có phạm vi và người thấy khác nhau:
 
-**Recommended implementation:** Commit project CLAUDE.md.
+| Vị trí | Phạm vi | Chia sẻ qua git? |
+|---|---|---|
+| Managed policy (do tổ chức/IT triển khai) | Mọi người dùng trên máy | Không, do IT quản lý |
+| `~/.claude/CLAUDE.md` | Mọi dự án của riêng bạn | Không |
+| `./CLAUDE.md` hoặc `./.claude/CLAUDE.md` | Cả project | **Có**, nếu commit |
+| `./CLAUDE.local.md` | Sở thích cá nhân trong một project | Không (thường đưa vào `.gitignore`) |
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Put conventions only in personal home file.
+Lý do thiết kế: một số hướng dẫn mang tính cá nhân (ví dụ "trả lời tôi bằng tiếng Việt", editor ưa thích), một số là hợp đồng của nhóm (quy ước đặt tên test, lệnh chạy lint, cấu trúc thư mục). Nếu hợp đồng của nhóm chỉ nằm ở `~/.claude/CLAUDE.md` của một người thì **chỉ người đó** được Claude làm theo; đồng đội clone repo về sẽ nhận code do Claude sinh ra theo quy ước khác, và CI/PR review sẽ phát hiện sai lệch. Ngược lại, commit CLAUDE.md vào repo thì mỗi người clone về là có cùng hướng dẫn, được review như code và có lịch sử thay đổi.
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Team wants standard unit test conventions".
-- Decision: áp dụng nguyên tắc **Personal and project guidance** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Commit project CLAUDE.md" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Ví dụ: team muốn mọi unit test dùng Jest, đặt tên `*.test.ts`, mock bằng `jest.mock`. Cách đúng là thêm mục "Testing conventions" vào CLAUDE.md gốc repo rồi commit. Lệnh `/init` có thể sinh bản nháp CLAUDE.md từ việc phân tích codebase, bạn chỉnh lại rồi commit.
 
-### 2.2. Directory-specific guidance
+Lưu ý bản chất: nội dung CLAUDE.md được nạp như **context** (hướng dẫn mà model cố gắng làm theo), không phải cấu hình được cưỡng chế. Vì vậy nên viết cụ thể, kiểm chứng được ("dùng `pnpm test`" tốt hơn "test cẩn thận").
 
-**Principle (EN):** Nested CLAUDE.md applies to relevant subtree.
+### Keyword
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **nested CLAUDE.md applies to relevant subtree**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+- `~/.claude/CLAUDE.md` — file hướng dẫn cấp người dùng, áp cho mọi dự án của riêng bạn
+- `project CLAUDE.md` — CLAUDE.md ở gốc repo hoặc `.claude/`, commit để chia sẻ cho team
+- `CLAUDE.local.md` — hướng dẫn cá nhân riêng một project, không commit
+- `/init` — lệnh sinh bản nháp CLAUDE.md từ codebase
+- `shared conventions` — quy ước dùng chung của nhóm, cần version-control cùng code
+- `memory file` — cách gọi các file CLAUDE.md được nạp vào context mỗi phiên
 
-**Case study / Tình huống:** API module needs different error practices from frontend.
+### Bẫy đề thi
 
-**Recommended implementation:** Use package-local CLAUDE.md.
+- ✗ Đặt quy ước của team trong `~/.claude/CLAUDE.md` của một người ⇒ ✓ Đặt ở CLAUDE.md của project và commit vào repo
+- ✗ Nghĩ rằng đồng đội tự "thừa hưởng" file home của bạn khi clone repo ⇒ ✓ File ở thư mục home chỉ có hiệu lực trên máy của chính bạn
+- ✗ Coi CLAUDE.md là cơ chế bắt buộc như cấu hình ⇒ ✓ Nó là context hướng dẫn; muốn cưỡng chế phải dùng settings/hook (xem K3)
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Repeat API rules globally for all packages.
+### Câu hỏi
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "API module needs different error practices from frontend".
-- Decision: áp dụng nguyên tắc **Directory-specific guidance** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Use package-local CLAUDE.md" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+#### Q1. Một team 8 người muốn mọi test do Claude Code sinh ra đều theo cùng quy ước (Jest, đặt tên `*.test.ts`). Tech lead đã ghi quy ước này vào `~/.claude/CLAUDE.md` trên máy mình, nhưng PR của các thành viên khác vẫn sai quy ước. Cách sửa đúng là gì?
+- A. Gửi file `~/.claude/CLAUDE.md` của tech lead qua chat để mỗi người chép vào thư mục home của mình
+- B. Chuyển quy ước vào CLAUDE.md ở gốc repo (hoặc `.claude/CLAUDE.md`) và commit
+- C. Đặt quy ước vào `CLAUDE.local.md` của tech lead rồi push lên repo
+- D. Thêm quy ước vào prompt đầu tiên mỗi khi ai đó mở phiên Claude Code
 
-### 2.3. No guaranteed precedence
+**Đáp án:** B
 
-**Principle (EN):** Loaded instruction files concatenate; conflicting rules are not deterministic overrides.
+**Giải thích:** CLAUDE.md của project được commit là cách chuẩn để chia sẻ hướng dẫn: ai clone repo cũng có cùng nội dung, và nó được review/version cùng code. A thủ công, dễ lệch phiên bản và không đi theo repo. C sai vì `CLAUDE.local.md` được thiết kế cho sở thích cá nhân, thường nằm trong `.gitignore`. D phụ thuộc vào việc mỗi người nhớ gõ lại, không bền vững.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **loaded instruction files concatenate; conflicting rules are not deterministic overrides**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+#### Q2. Bạn muốn Claude luôn trả lời bằng tiếng Việt khi làm việc với bạn trên mọi dự án, nhưng không muốn ép đồng đội làm theo. Nên đặt chỉ dẫn ở đâu?
+- A. CLAUDE.md ở gốc repo, commit vào nhánh chính
+- B. `.claude/CLAUDE.md` của từng repo, rồi commit
+- C. Trong code comment ở đầu mỗi file nguồn
+- D. `~/.claude/CLAUDE.md` của bạn
 
-**Case study / Tình huống:** User and repo CLAUDE.md disagree on required process.
+**Đáp án:** D
 
-**Recommended implementation:** Resolve contradiction or enforce invariant via settings/hook.
+**Giải thích:** Đây là sở thích cá nhân áp cho mọi dự án của riêng bạn, đúng vai trò của file cấp người dùng trong thư mục home. A và B sẽ áp chỉ dẫn lên toàn team vì được commit. C không phải nơi Claude Code nạp hướng dẫn và làm bẩn code.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Assume most-specific file deterministically wins.
+## K2. CLAUDE.md theo thư mục (directory-specific)
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "User and repo CLAUDE.md disagree on required process".
-- Decision: áp dụng nguyên tắc **No guaranteed precedence** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Resolve contradiction or enforce invariant via settings/hook" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+### Trọng tâm
 
-### 2.4. Modular @path imports
+CLAUDE.md đặt trong một thư mục con chỉ phục vụ **cây thư mục đó**. Quy tắc riêng của module nên nằm trong CLAUDE.md của module, không nhân bản lên gốc repo.
 
-**Principle (EN):** Split reusable project standards across imported Markdown files.
+### Giải thích
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **split reusable project standards across imported Markdown files**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+Trong monorepo, các phần của hệ thống thường có quy ước khác nhau: module `api/` yêu cầu mọi lỗi trả về theo một schema và log có correlation ID; module `frontend/` lại quan tâm đến accessibility và cách đặt tên component. Nếu nhét tất cả vào CLAUDE.md gốc, mọi phiên đều nạp cả hai bộ quy tắc, tốn context và có nguy cơ model áp quy ước của API vào code frontend.
 
-**Case study / Tình huống:** Root CLAUDE.md grows to hundreds of lines.
+Cơ chế nạp: khi bạn khởi động Claude Code, nó nạp CLAUDE.md từ thư mục làm việc hiện tại **và các thư mục cha** (đi lên tới gốc). Còn CLAUDE.md nằm trong **thư mục con** thì được nạp **theo nhu cầu**, khi Claude đọc/làm việc với file thuộc cây thư mục đó. Nhờ vậy:
 
-**Recommended implementation:** Reference focused standards using @./path.md.
+- `packages/api/CLAUDE.md` chỉ "kích hoạt" khi Claude đụng đến `packages/api/**`.
+- `packages/web/CLAUDE.md` tương tự cho frontend.
+- CLAUDE.md gốc chứa những gì áp cho toàn repo (lệnh build, quy ước commit, kiến trúc tổng thể).
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Use fictional @import keyword.
+Ví dụ cấu trúc:
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Root CLAUDE.md grows to hundreds of lines".
-- Decision: áp dụng nguyên tắc **Modular @path imports** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Reference focused standards using @./path.md" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-## 3. Ví dụ thiết kế / Worked engineering example
-
-**Problem:** Team wants standard unit test conventions.
-
-**Bad design:** Put conventions only in personal home file.
-
-**Better design:** Commit project CLAUDE.md.
-
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
-
-### Walkthrough: decision trace / Luồng xử lý
-
-```text
-INPUT  : Team wants standard unit test conventions.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Commit project CLAUDE.md.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
+```
+repo/
+├── CLAUDE.md                 # quy ước chung toàn repo
+├── packages/
+│   ├── api/CLAUDE.md         # chuẩn xử lý lỗi, logging cho API
+│   └── web/CLAUDE.md         # quy ước component, a11y
 ```
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+So với `.claude/rules` có `paths` (bài 3.3): CLAUDE.md theo thư mục gắn với **vị trí** (một cây thư mục), còn path-specific rules gắn với **mẫu file** (glob) có thể rải rác nhiều thư mục. Khi tiêu chí là "mọi file `*.test.ts` ở khắp nơi" thì glob phù hợp hơn; khi tiêu chí là "riêng module api" thì CLAUDE.md lồng nhau là đủ.
 
-## 4. Exam traps / Bẫy dễ nhầm
+### Keyword
 
-1. **Bẫy Personal and project guidance:** "Put conventions only in personal home file" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở personal and project guidance, rồi chọn "Commit project CLAUDE.md".
+- `nested CLAUDE.md` — CLAUDE.md đặt trong thư mục con, chỉ áp cho cây thư mục đó
+- `monorepo` — một repo chứa nhiều package/module với quy ước khác nhau
+- `on-demand loading` — nạp khi cần: file con chỉ vào context khi Claude làm việc trong thư mục đó
+- `parent directory walk` — việc nạp CLAUDE.md từ thư mục hiện tại đi lên các thư mục cha
+- `context budget` — ngân sách context; càng nạp nhiều hướng dẫn thừa càng tốn
+- `scoping` — giới hạn phạm vi áp dụng của một hướng dẫn
 
-2. **Bẫy Directory-specific guidance:** "Repeat API rules globally for all packages" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở directory-specific guidance, rồi chọn "Use package-local CLAUDE.md".
+### Bẫy đề thi
 
-3. **Bẫy No guaranteed precedence:** "Assume most-specific file deterministically wins" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở no guaranteed precedence, rồi chọn "Resolve contradiction or enforce invariant via settings/hook".
+- ✗ Lặp quy tắc của API vào CLAUDE.md gốc để áp cho mọi package ⇒ ✓ Đặt CLAUDE.md riêng trong thư mục của module đó
+- ✗ Tạo CLAUDE.md ở thư mục con và mong nó luôn được nạp cho mọi tác vụ trong repo ⇒ ✓ Nó chỉ áp cho công việc trong cây thư mục đó
+- ✗ Dùng CLAUDE.md lồng nhau cho loại file rải rác khắp repo ⇒ ✓ Dùng `.claude/rules` với `paths` glob (bài 3.3)
 
-4. **Bẫy Modular @path imports:** "Use fictional @import keyword" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở modular @path imports, rồi chọn "Reference focused standards using @./path.md".
+### Câu hỏi
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+#### Q1. Monorepo có `packages/api` (yêu cầu mọi lỗi theo schema thống nhất) và `packages/web` (React). Claude liên tục áp quy ước xử lý lỗi của API vào code React. Hiện toàn bộ quy ước nằm trong một CLAUDE.md gốc dài. Cách khắc phục phù hợp nhất?
+- A. Giữ nguyên file gốc nhưng thêm câu "chỉ áp dụng quy ước lỗi cho API, không cho web" in đậm
+- B. Chuyển quy ước lỗi của API sang `packages/api/CLAUDE.md`, giữ ở gốc chỉ phần chung
+- C. Copy quy ước API vào CLAUDE.md của mọi package để model luôn nhìn thấy
+- D. Xoá hẳn quy ước API khỏi repo và nhắc lại bằng tay mỗi lần làm việc với API
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+**Đáp án:** B
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **Team wants standard unit test conventions**. Phương án nào phù hợp nhất?
+**Giải thích:** CLAUDE.md theo thư mục đặt quy tắc đúng phạm vi và chỉ nạp khi làm việc trong cây thư mục đó, giảm nhiễu cho frontend. A vẫn nạp mọi thứ vào mọi phiên và dựa vào model tự phân biệt. C làm tệ hơn: nhân bản và đưa quy ước API vào web. D bỏ mất tri thức dùng chung.
 
-- **A.** Repeat API rules globally for all packages; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Assume most-specific file deterministically wins; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Commit project CLAUDE.md; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Put conventions only in personal home file; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+#### Q2. Một repo có quy ước test riêng cho `*.test.ts` nằm rải rác ở bảy module khác nhau. Một kỹ sư đề xuất tạo CLAUDE.md trong từng thư mục module. Nhận xét nào đúng nhất?
+- A. Hợp lý, vì CLAUDE.md lồng nhau là cách duy nhất để giới hạn phạm vi
+- B. Sai, vì CLAUDE.md con không bao giờ được nạp
+- C. Chỉ cần một CLAUDE.md gốc, vì Claude tự suy ra quy ước từ tên file
+- D. Kém tối ưu, vì tiêu chí là loại file rải rác; path-specific rule với glob `**/*.test.ts` phù hợp hơn
 
-**Đáp án: C**
+**Đáp án:** D
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Giải thích:** CLAUDE.md lồng nhau gắn với vị trí thư mục nên phải nhân bản bảy lần. Rule có `paths` glob gắn với mẫu file nên một file phủ cả bảy module. A sai vì còn lựa chọn rule. B sai vì file con được nạp theo nhu cầu. C không đáng tin vì model không tự biết quy ước riêng của team.
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Directory-specific guidance**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **No guaranteed precedence**, không giải quyết được yêu cầu cốt lõi "~/.claude/CLAUDE.md personal; root or .claude/CLAUDE.md shared" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** ~/.claude/CLAUDE.md personal; root or .claude/CLAUDE.md shared. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Put conventions only in personal home file" được nêu ở cơ chế Personal and project guidance. Không đảm bảo xử lý được case và dễ che mất failure mode.
+## K3. Không có precedence đảm bảo giữa các file
 
-**Exam heuristic:** Nếu đề xuất hiện "Team wants standard unit test conventions", ưu tiên phân biệt `Personal and project guidance` với các lựa chọn mô tả chuyện khác.
+### Trọng tâm
 
-### Q02. Một kỹ sư đề xuất **Repeat API rules globally for all packages** cho tình huống: API module needs different error practices from frontend. Cần phản biện thế nào?
+Các file CLAUDE.md được nạp **cộng dồn vào context**; không có cơ chế "file cụ thể hơn luôn thắng". Khi hai file mâu thuẫn, hành vi không xác định, nên phải **gỡ mâu thuẫn**, và yêu cầu bắt buộc phải **cưỡng chế bằng settings/hook**.
 
-- **A.** Repeat API rules globally for all packages; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Assume most-specific file deterministically wins; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Use fictional @import keyword; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Use package-local CLAUDE.md; kèm kiểm thử lại điều kiện và ghi evidence.
+### Giải thích
 
-**Đáp án: D**
+Nhiều người suy diễn CLAUDE.md giống CSS hay cấu hình phân cấp: file gần hơn ghi đè file xa hơn. Thực tế, tất cả nội dung được nối vào context như văn bản để model đọc. Model sẽ cố dung hòa các chỉ dẫn, nhưng khi hai chỉ dẫn đối lập (ví dụ file người dùng nói "luôn tạo PR draft", file repo nói "không bao giờ mở PR, chỉ push nhánh") thì không có quy tắc tất định nào quyết định bên thắng. Kết quả có thể khác nhau giữa các lần chạy.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Hệ quả thực hành:
 
-- **A:** **Sai.** Đây chính là bẫy "Repeat API rules globally for all packages" được nêu ở cơ chế Directory-specific guidance. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **No guaranteed precedence**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Modular @path imports**, không giải quyết được yêu cầu cốt lõi "Nested CLAUDE.md applies to relevant subtree" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Nested CLAUDE.md applies to relevant subtree. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+1. **Rà soát mâu thuẫn**: định kỳ đọc các tầng CLAUDE.md (user, project, thư mục con) để đảm bảo không đối nghịch; dùng `/memory` để xem file nào đang được nạp.
+2. **Phân vai rõ**: mỗi quy tắc có một "nhà" duy nhất, tránh lặp ở nhiều tầng với biến thể khác nhau.
+3. **Cưỡng chế cái bắt buộc ở lớp khác**: nếu một điều kiện phải luôn đúng (không được sửa thư mục `migrations/` đã ship, không được chạy lệnh nguy hiểm), đừng trông vào văn bản trong CLAUDE.md. Dùng `permissions` trong settings (allow/deny), **hook** (ví dụ PreToolUse chặn lệnh), hoặc kiểm tra trong CI.
 
-**Exam heuristic:** Nếu đề xuất hiện "API module needs different error practices from frontend", ưu tiên phân biệt `Directory-specific guidance` với các lựa chọn mô tả chuyện khác.
+Nguyên lý chung của kỳ thi: hướng dẫn trong prompt/context là **xác suất**; cơ chế ở lớp code/cấu hình mới là **đảm bảo**. Nếu đề nhấn mạnh "phải luôn", "không bao giờ", "tuân thủ bắt buộc" thì đáp án thường là hook/settings/CI chứ không phải viết rõ hơn trong CLAUDE.md.
 
-### Q03. Nếu sự cố **User and repo CLAUDE.md disagree on required process** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+### Keyword
 
-- **A.** Resolve contradiction or enforce invariant via settings/hook; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Assume most-specific file deterministically wins; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Use fictional @import keyword; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Put conventions only in personal home file; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+- `no deterministic precedence` — không có thứ tự ưu tiên xác định giữa các file CLAUDE.md
+- `concatenation` — các file được nối vào context, không ghi đè nhau
+- `conflicting instructions` — chỉ dẫn mâu thuẫn giữa các tầng
+- `hook` — đoạn lệnh chạy ở điểm cố định của vòng đời, dùng để cưỡng chế chính sách
+- `permissions deny` — quy tắc trong settings để chặn tool/lệnh một cách chắc chắn
+- `/memory` — lệnh xem và sửa các file memory (CLAUDE.md) đang được nạp
+- `enforcement` — cưỡng chế bằng cơ chế, khác với "hướng dẫn" bằng lời
 
-**Đáp án: A**
+### Bẫy đề thi
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- ✗ Giả định file CLAUDE.md gần nhất/cụ thể nhất luôn ghi đè file khác ⇒ ✓ Không có override tất định; hãy gỡ mâu thuẫn
+- ✗ Thêm "IMPORTANT, NEVER..." in hoa vào CLAUDE.md để đảm bảo tuân thủ ⇒ ✓ Dùng hook/settings/CI cho yêu cầu bắt buộc
+- ✗ Để cả file user và file repo cùng quy định một việc theo hai cách ⇒ ✓ Mỗi quy tắc có một nơi duy nhất
 
-- **A:** **Đúng.** Loaded instruction files concatenate; conflicting rules are not deterministic overrides. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Assume most-specific file deterministically wins" được nêu ở cơ chế No guaranteed precedence. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Modular @path imports**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Personal and project guidance**, không giải quyết được yêu cầu cốt lõi "Loaded instruction files concatenate; conflicting rules are not deterministic overrides" và thiếu điều kiện kiểm chứng.
+### Câu hỏi
 
-**Exam heuristic:** Nếu đề xuất hiện "User and repo CLAUDE.md disagree on required process", ưu tiên phân biệt `No guaranteed precedence` với các lựa chọn mô tả chuyện khác.
+#### Q1. File `~/.claude/CLAUDE.md` của một dev ghi "luôn tạo commit message tiếng Việt", còn CLAUDE.md của repo ghi "commit message bắt buộc tiếng Anh, theo Conventional Commits". Dev này báo Claude lúc viết tiếng Việt lúc tiếng Anh. Giải thích và cách xử lý nào đúng?
+- A. Bug ngẫu nhiên của model; tăng nhiệt độ sampling xuống 0 sẽ sửa
+- B. File ở home luôn thắng nên Claude phải luôn viết tiếng Việt; chỉ cần khởi động lại
+- C. Hai chỉ dẫn mâu thuẫn được nối vào context và không có precedence xác định; cần xoá mâu thuẫn, và nếu bắt buộc thì kiểm tra bằng hook/CI
+- D. File repo luôn thắng vì cụ thể hơn; mâu thuẫn không bao giờ gây vấn đề
 
-### Q04. Để viết acceptance criteria cho tình huống **Root CLAUDE.md grows to hundreds of lines**, lựa chọn nào thể hiện ranh giới đúng?
+**Đáp án:** C
 
-- **A.** Repeat API rules globally for all packages; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Reference focused standards using @./path.md; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Use fictional @import keyword; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Put conventions only in personal home file; áp dụng trực tiếp dù cơ chế sự cố khác.
+**Giải thích:** CLAUDE.md không có cơ chế ghi đè tất định, nên chỉ dẫn đối nghịch cho kết quả không ổn định. Cách đúng là loại bỏ mâu thuẫn và, vì quy ước commit là bắt buộc, thêm kiểm tra bằng hook (ví dụ commit-msg) hoặc CI. A sai vì vấn đề nằm ở nội dung mâu thuẫn. B và D đều khẳng định một thứ tự ưu tiên không được đảm bảo.
 
-**Đáp án: B**
+#### Q2. Policy công ty: Claude Code tuyệt đối không được sửa thư mục `db/migrations/` đã release. Hiện policy chỉ được viết trong CLAUDE.md và thỉnh thoảng bị vi phạm. Thay đổi nào đáng tin cậy nhất?
+- A. Viết lại câu cấm bằng chữ in hoa và lặp ở ba file CLAUDE.md
+- B. Thêm hook PreToolUse/quy tắc deny trong settings chặn chỉnh sửa vào đường dẫn đó
+- C. Thêm ví dụ về việc không sửa migrations vào CLAUDE.md
+- D. Nhắc Claude "hãy cẩn thận" ở đầu mỗi phiên làm việc
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** B
 
-- **A:** **Sai.** Phương án thuộc **Directory-specific guidance**, không giải quyết được yêu cầu cốt lõi "Split reusable project standards across imported Markdown files" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Split reusable project standards across imported Markdown files. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Use fictional @import keyword" được nêu ở cơ chế Modular @path imports. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Personal and project guidance**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+**Giải thích:** Yêu cầu "tuyệt đối" cần cơ chế cưỡng chế ở lớp cấu hình/code: hook hoặc permissions deny sẽ chặn tool call bất kể model "nghĩ" gì. A, C, D đều chỉ là thêm văn bản vào context, vẫn mang tính xác suất, và việc lặp ở nhiều file còn có thể gây thêm mâu thuẫn.
 
-**Exam heuristic:** Nếu đề xuất hiện "Root CLAUDE.md grows to hundreds of lines", ưu tiên phân biệt `Modular @path imports` với các lựa chọn mô tả chuyện khác.
+## K4. Chia nhỏ CLAUDE.md bằng `@path` imports
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Put conventions only in personal home file**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+### Trọng tâm
 
-- **A.** Repeat API rules globally for all packages; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Assume most-specific file deterministically wins; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Commit project CLAUDE.md; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Put conventions only in personal home file; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+Khi CLAUDE.md phình to, hãy tách thành các file Markdown tập trung rồi tham chiếu bằng cú pháp **`@path/to/file.md`**. Không có từ khóa `@import`.
 
-**Đáp án: C**
+### Giải thích
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+CLAUDE.md dài hàng trăm dòng gây hai vấn đề: khó bảo trì (nhiều người sửa cùng file, dễ mâu thuẫn) và tốn context vì mọi thứ nạp ở đầu mỗi phiên, kể cả phần ít liên quan. Giải pháp của Claude Code là **import**: trong CLAUDE.md viết một dòng bắt đầu bằng `@` theo sau là đường dẫn, và nội dung file đó được đưa vào cùng context.
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Directory-specific guidance**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **No guaranteed precedence**, không giải quyết được yêu cầu cốt lõi "~/.claude/CLAUDE.md personal; root or .claude/CLAUDE.md shared" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** ~/.claude/CLAUDE.md personal; root or .claude/CLAUDE.md shared. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Put conventions only in personal home file" được nêu ở cơ chế Personal and project guidance. Không đảm bảo xử lý được case và dễ che mất failure mode.
+```markdown
+# Project guide
+Xem tổng quan kiến trúc: @docs/architecture.md
+Quy ước test: @docs/standards/testing.md
+Quy ước Git: @docs/standards/git-workflow.md
+Sở thích cá nhân của tôi: @~/.claude/my-project-preferences.md
+```
 
-**Exam heuristic:** Nếu đề xuất hiện "Team wants standard unit test conventions", ưu tiên phân biệt `Personal and project guidance` với các lựa chọn mô tả chuyện khác.
+Điểm cần nhớ:
 
-### Q06. Sau khi audit phát hiện **API module needs different error practices from frontend**, điều gì là cải tiến có thể kiểm chứng?
+- Cú pháp là `@đường/dẫn`; đường dẫn tương đối được tính **so với file chứa lệnh import**, và cũng có thể trỏ đến thư mục home (`@~/...`).
+- Import có thể lồng nhau nhưng độ sâu có giới hạn (vài tầng), nên đừng thiết kế chuỗi import quá dài.
+- Mục tiêu chính là **tổ chức module hóa và tái sử dụng** (một file chuẩn dùng cho nhiều dự án, hoặc để từng nhóm sở hữu một file). Import không phải cơ chế "nạp có điều kiện": file được import vẫn vào context khi file cha được nạp. Nếu muốn chỉ nạp khi chạm tới một loại file nhất định, dùng path-specific rules (bài 3.3).
+- Không tồn tại `@import file.md`, `#include` hay `import:` trong CLAUDE.md; các đáp án dạng này trong đề là cú pháp bịa.
 
-- **A.** Repeat API rules globally for all packages; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Assume most-specific file deterministically wins; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Use fictional @import keyword; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Use package-local CLAUDE.md; kèm kiểm thử lại điều kiện và ghi evidence.
+Quy trình hợp lý: giữ CLAUDE.md gốc ngắn (lệnh thường dùng, mục lục), đẩy chi tiết vào file con theo chủ đề; mỗi chủ đề một file để review và sở hữu rõ ràng.
 
-**Đáp án: D**
+### Keyword
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- `@path import` — cú pháp `@đường/dẫn` trong CLAUDE.md để đưa nội dung file khác vào context
+- `modular organisation` — tổ chức module hóa hướng dẫn thành nhiều file nhỏ
+- `relative path resolution` — đường dẫn import tính từ vị trí file chứa dòng import
+- `import depth limit` — giới hạn số tầng import lồng nhau
+- `single source of truth` — một nguồn chuẩn duy nhất cho mỗi quy tắc
+- `fictional @import` — từ khóa không tồn tại, hay xuất hiện làm đáp án nhiễu
 
-- **A:** **Sai.** Đây chính là bẫy "Repeat API rules globally for all packages" được nêu ở cơ chế Directory-specific guidance. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **No guaranteed precedence**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Modular @path imports**, không giải quyết được yêu cầu cốt lõi "Nested CLAUDE.md applies to relevant subtree" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Nested CLAUDE.md applies to relevant subtree. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+### Bẫy đề thi
 
-**Exam heuristic:** Nếu đề xuất hiện "API module needs different error practices from frontend", ưu tiên phân biệt `Directory-specific guidance` với các lựa chọn mô tả chuyện khác.
+- ✗ Viết `@import docs/testing.md` hoặc `#include` ⇒ ✓ Dùng `@docs/testing.md`
+- ✗ Nghĩ import chỉ nạp file khi cần ⇒ ✓ File import vào context cùng file cha; muốn nạp theo loại file dùng `paths` rules
+- ✗ Giải quyết CLAUDE.md quá dài bằng cách cắt bỏ quy ước ⇒ ✓ Tách thành các file tập trung và import
 
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **User and repo CLAUDE.md disagree on required process**, nên chọn gì?
+### Câu hỏi
 
-- **A.** Resolve contradiction or enforce invariant via settings/hook; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Assume most-specific file deterministically wins; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Use fictional @import keyword; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Put conventions only in personal home file; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+#### Q1. CLAUDE.md gốc đã lên 600 dòng gồm kiến trúc, quy ước test, quy ước Git, hướng dẫn deploy; nhiều người sửa gây xung đột merge. Cách tổ chức lại tốt nhất?
+- A. Đổi tên thành `CLAUDE_FULL.md` để Claude đọc chậm hơn
+- B. Xoá các phần ít dùng và nhớ trong đầu
+- C. Tách mỗi chủ đề thành file riêng trong `docs/` và tham chiếu bằng `@docs/<file>.md` từ CLAUDE.md ngắn gọn
+- D. Dùng cú pháp `@import docs/testing.md` để tải mô-đun
 
-**Đáp án: A**
+**Đáp án:** C
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Giải thích:** Tách theo chủ đề và dùng `@path` giúp mỗi file có chủ sở hữu, giảm xung đột merge và dễ bảo trì. A không giải quyết gì. B làm mất tri thức của team. D dùng từ khóa không tồn tại; cú pháp đúng chỉ là `@đường/dẫn`.
 
-- **A:** **Đúng.** Loaded instruction files concatenate; conflicting rules are not deterministic overrides. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Assume most-specific file deterministically wins" được nêu ở cơ chế No guaranteed precedence. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Modular @path imports**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Personal and project guidance**, không giải quyết được yêu cầu cốt lõi "Loaded instruction files concatenate; conflicting rules are not deterministic overrides" và thiếu điều kiện kiểm chứng.
+#### Q2. Một dev nói: "Tôi import `@docs/terraform.md` vào CLAUDE.md, vậy nó chỉ được nạp khi Claude sửa file `.tf`, đúng không?" Câu trả lời chính xác?
+- A. Đúng, import luôn có điều kiện theo loại file
+- B. Sai; file import vào context cùng CLAUDE.md. Muốn nạp có điều kiện theo file thì dùng `.claude/rules` với `paths`
+- C. Đúng, nhưng chỉ khi file có đuôi `.md`
+- D. Sai; import chỉ hoạt động nếu dùng đường dẫn tuyệt đối
 
-**Exam heuristic:** Nếu đề xuất hiện "User and repo CLAUDE.md disagree on required process", ưu tiên phân biệt `No guaranteed precedence` với các lựa chọn mô tả chuyện khác.
+**Đáp án:** B
 
-### Q08. Một reviewer nêu giải pháp **Use fictional @import keyword**. Đánh giá chính xác nhất là gì?
-
-- **A.** Repeat API rules globally for all packages; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Reference focused standards using @./path.md; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Use fictional @import keyword; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Put conventions only in personal home file; áp dụng trực tiếp dù cơ chế sự cố khác.
-
-**Đáp án: B**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc **Directory-specific guidance**, không giải quyết được yêu cầu cốt lõi "Split reusable project standards across imported Markdown files" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Split reusable project standards across imported Markdown files. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Use fictional @import keyword" được nêu ở cơ chế Modular @path imports. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Personal and project guidance**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-
-**Exam heuristic:** Nếu đề xuất hiện "Root CLAUDE.md grows to hundreds of lines", ưu tiên phân biệt `Modular @path imports` với các lựa chọn mô tả chuyện khác.
-
-### Q09. Trong thử nghiệm đối chứng với tình huống **Team wants standard unit test conventions**, tiêu chí pass phù hợp là gì?
-
-- **A.** Repeat API rules globally for all packages; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Assume most-specific file deterministically wins; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Commit project CLAUDE.md; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Put conventions only in personal home file; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-
-**Đáp án: C**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc cơ chế **Directory-specific guidance**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **No guaranteed precedence**, không giải quyết được yêu cầu cốt lõi "~/.claude/CLAUDE.md personal; root or .claude/CLAUDE.md shared" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** ~/.claude/CLAUDE.md personal; root or .claude/CLAUDE.md shared. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Put conventions only in personal home file" được nêu ở cơ chế Personal and project guidance. Không đảm bảo xử lý được case và dễ che mất failure mode.
-
-**Exam heuristic:** Nếu đề xuất hiện "Team wants standard unit test conventions", ưu tiên phân biệt `Personal and project guidance` với các lựa chọn mô tả chuyện khác.
-
-### Q10. Để giảm lỗi tái diễn với **API module needs different error practices from frontend**, biện pháp nào phù hợp với cơ chế đã học?
-
-- **A.** Repeat API rules globally for all packages; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Assume most-specific file deterministically wins; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Use fictional @import keyword; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Use package-local CLAUDE.md; kèm kiểm thử lại điều kiện và ghi evidence.
-
-**Đáp án: D**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Đây chính là bẫy "Repeat API rules globally for all packages" được nêu ở cơ chế Directory-specific guidance. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **No guaranteed precedence**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Modular @path imports**, không giải quyết được yêu cầu cốt lõi "Nested CLAUDE.md applies to relevant subtree" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Nested CLAUDE.md applies to relevant subtree. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-
-**Exam heuristic:** Nếu đề xuất hiện "API module needs different error practices from frontend", ưu tiên phân biệt `Directory-specific guidance` với các lựa chọn mô tả chuyện khác.
-
-## 6. Lab / Bài thực hành tự kiểm tra
-
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "Team wants standard unit test conventions".
-
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Commit project CLAUDE.md.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
-
-## 7. Cheat sheet / Ôn nhanh
-
-- **Personal and project guidance:** ~/.claude/CLAUDE.md personal; root or .claude/CLAUDE.md shared. ✓ Commit project CLAUDE.md. ✗ Put conventions only in personal home file.
-- **Directory-specific guidance:** Nested CLAUDE.md applies to relevant subtree. ✓ Use package-local CLAUDE.md. ✗ Repeat API rules globally for all packages.
-- **No guaranteed precedence:** Loaded instruction files concatenate; conflicting rules are not deterministic overrides. ✓ Resolve contradiction or enforce invariant via settings/hook. ✗ Assume most-specific file deterministically wins.
-- **Modular @path imports:** Split reusable project standards across imported Markdown files. ✓ Reference focused standards using @./path.md. ✗ Use fictional @import keyword.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/3-claude-code-config/3-1-claude-md-hierarchy
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** `@path` phục vụ module hóa/tái sử dụng chứ không thêm điều kiện. Điều kiện theo loại file là vai trò của path-specific rules. A và C gán cho import một khả năng nó không có. D bịa ra một ràng buộc; đường dẫn tương đối (so với file chứa import) vẫn dùng được.

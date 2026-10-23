@@ -1,326 +1,250 @@
 # 1.3 — Subagent Invocation and Context Passing
 
-> Domain 1: Agentic Architecture & Orchestration · Tỷ trọng toàn domain: 27%
-> Source lesson: https://claudecertificationguide.com/learn/1-agentic-architecture/1-3-subagent-invocation-context
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+Bài này nói về **cơ chế kỹ thuật để coordinator gọi subagent** trong Agent SDK: cấp quyền spawn, truyền ngữ cảnh có cấu trúc, chạy song song, và chọn giữa fork với resume. Nếu bài 1.2 trả lời "nên chia agent thế nào", bài 1.3 trả lời "gọi chúng ra sao cho đúng".
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Subagent Invocation and Context Passing**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Đề thi thích hỏi các lỗi cụ thể: subagent được định nghĩa nhưng không bao giờ chạy; kết quả đúng nhưng mất trích dẫn; hai việc độc lập lại chạy tuần tự; hai hướng thử nghiệm bị trộn vào một lịch sử. Quy tắc nhớ nhanh: **cấp quyền spawn, truyền dữ liệu có cấu trúc kèm nguồn, gọi song song khi độc lập, fork khi cần nhánh rẽ.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Quyền spawn subagent: `Task`/`Agent` trong `allowedTools`
 
-### 2.1. Task/Agent spawning permission
+### Trọng tâm
 
-**Principle (EN):** Coordinator needs Task or Agent in allowedTools for spawning.
+Coordinator chỉ có thể khởi chạy subagent khi tool dùng để spawn (tên là `Task`, ở một số phiên bản gọi là `Agent`) nằm trong `allowedTools`. Định nghĩa subagent mà không cấp quyền này thì subagent không bao giờ chạy.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **coordinator needs Task or Agent in allowedTools for spawning**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** Defined subagent never launches.
+Trong Agent SDK, việc gọi subagent thực chất là Claude **gọi một tool** (tool spawn). Như mọi tool, nó phải được cho phép. Bạn thường làm hai việc riêng biệt:
 
-**Recommended implementation:** Enable Agent/Task on coordinator and define agent role.
+1. **Định nghĩa subagent**: mô tả vai trò (`description` để Claude biết khi nào dùng), system prompt riêng, tập tool mà subagent được phép dùng, và có thể cả model.
+2. **Cấp quyền cho coordinator** gọi tool spawn bằng cách đưa nó vào `allowedTools`.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Only improve descriptive prompt.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Defined subagent never launches".
-- Decision: áp dụng nguyên tắc **Task/Agent spawning permission** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Enable Agent/Task on coordinator and define agent role" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.2. Structured evidence handoff
-
-**Principle (EN):** Pass claim plus URL, document title, page and confidence.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **pass claim plus URL, document title, page and confidence**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Synthesis returns correct facts without citations.
-
-**Recommended implementation:** Keep source metadata with each finding.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Pass only polished prose.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Synthesis returns correct facts without citations".
-- Decision: áp dụng nguyên tắc **Structured evidence handoff** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Keep source metadata with each finding" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.3. Parallel independent delegation
-
-**Principle (EN):** Multiple independent Agent calls can execute concurrently.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **multiple independent Agent calls can execute concurrently**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Search and local document analysis have no dependency.
-
-**Recommended implementation:** Dispatch both concurrently and merge after completion.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Wait for search before starting independent analysis.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Search and local document analysis have no dependency".
-- Decision: áp dụng nguyên tắc **Parallel independent delegation** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Dispatch both concurrently and merge after completion" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.4. Fork versus resume
-
-**Principle (EN):** Fork branches common baseline, resume continues same history.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **fork branches common baseline, resume continues same history**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Team compares two refactor approaches after initial audit.
-
-**Recommended implementation:** Fork independent branches.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Resume one session and mix both experiments.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Team compares two refactor approaches after initial audit".
-- Decision: áp dụng nguyên tắc **Fork versus resume** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Fork independent branches" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-## 3. Ví dụ thiết kế / Worked engineering example
-
-**Problem:** Defined subagent never launches.
-
-**Bad design:** Only improve descriptive prompt.
-
-**Better design:** Enable Agent/Task on coordinator and define agent role.
-
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
-
-### Walkthrough: decision trace / Luồng xử lý
-
-```text
-INPUT  : Defined subagent never launches.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Enable Agent/Task on coordinator and define agent role.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
+```python
+options = ClaudeAgentOptions(
+    allowed_tools=["Read", "Task"],          # Task = quyền spawn subagent
+    agents={
+        "code-reviewer": AgentDefinition(
+            description="Review code for bugs and security issues",
+            prompt="You are a strict code reviewer...",
+            tools=["Read", "Grep"],          # tool của subagent, giới hạn hẹp
+        )
+    },
+)
 ```
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+Tình huống đề thi: "Subagent `code-reviewer` đã định nghĩa đầy đủ nhưng coordinator không bao giờ gọi nó." Nguyên nhân phổ biến nhất là thiếu `Task`/`Agent` trong `allowedTools`. Viết thêm mô tả vào prompt không thay thế được quyền kỹ thuật. Ngoài ra, `description` của subagent quan trọng cho việc **Claude tự quyết định khi nào dùng**, nên mô tả mơ hồ cũng khiến subagent ít được gọi, nhưng đó là vấn đề thứ hai sau quyền spawn.
 
-## 4. Exam traps / Bẫy dễ nhầm
+Lưu ý nhỏ: tập `tools` của subagent nên theo nguyên tắc **least privilege**; reviewer chỉ cần đọc thì không cấp quyền ghi.
 
-1. **Bẫy Task/Agent spawning permission:** "Only improve descriptive prompt" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở task/agent spawning permission, rồi chọn "Enable Agent/Task on coordinator and define agent role".
+### Keyword
 
-2. **Bẫy Structured evidence handoff:** "Pass only polished prose" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở structured evidence handoff, rồi chọn "Keep source metadata with each finding".
+- `allowedTools` — danh sách tool mà agent được phép dùng
+- `Task` / `Agent` tool — tool dùng để spawn subagent
+- `AgentDefinition` — định nghĩa của subagent: mô tả, prompt, tool, model
+- `description` — mô tả giúp Claude quyết định khi nào gọi subagent
+- `least privilege` — chỉ cấp quyền tối thiểu cần thiết
+- `spawn` — khởi chạy một subagent mới
 
-3. **Bẫy Parallel independent delegation:** "Wait for search before starting independent analysis" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở parallel independent delegation, rồi chọn "Dispatch both concurrently and merge after completion".
+### Bẫy đề thi
 
-4. **Bẫy Fork versus resume:** "Resume one session and mix both experiments" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở fork versus resume, rồi chọn "Fork independent branches".
+- ✗ Subagent không chạy nên viết prompt mô tả kỹ hơn ⇒ ✓ Kiểm tra `Task`/`Agent` có trong `allowedTools` của coordinator
+- ✗ Nghĩ cứ định nghĩa subagent là coordinator tự gọi được ⇒ ✓ Phải cấp quyền gọi tool spawn
+- ✗ Cho subagent toàn bộ tool của coordinator cho tiện ⇒ ✓ Giới hạn tool theo vai trò (least privilege)
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+### Câu hỏi
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+#### Q1. Nhóm định nghĩa subagent `security-auditor` với mô tả rõ ràng, nhưng khi chạy coordinator luôn tự xử lý và không bao giờ gọi nó. `allowedTools` của coordinator hiện là `["Read", "Grep"]`. Việc nên làm đầu tiên?
+- A. Viết lại system prompt của coordinator dài hơn
+- B. Đổi sang model lớn hơn
+- C. Thêm tool spawn (`Task`/`Agent`) vào `allowedTools` của coordinator
+- D. Thêm `Write` vào `allowedTools`
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **Defined subagent never launches**. Phương án nào phù hợp nhất?
+**Đáp án:** C
 
-- **A.** Enable Agent/Task on coordinator and define agent role; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Only improve descriptive prompt; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Pass only polished prose; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Wait for search before starting independent analysis; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+**Giải thích:** Không có quyền spawn thì coordinator không thể khởi chạy subagent. A chỉ là cải thiện mô tả, không cấp quyền kỹ thuật. B không liên quan. D cấp quyền ghi, không liên quan đến spawn.
 
-**Đáp án: A**
+#### Q2. Bạn muốn subagent `doc-reader` chỉ để đọc tài liệu. Cấu hình nào đúng nguyên tắc thiết kế?
+- A. Cấp cho nó mọi tool của hệ thống để linh hoạt
+- B. Chỉ cho các tool đọc như `Read` và `Grep`
+- C. Không cấp tool nào và hy vọng nó tự đọc được file
+- D. Cấp `Bash` để nó có thể làm mọi thứ
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** B
 
-- **A:** **Đúng.** Coordinator needs Task or Agent in allowedTools for spawning. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Only improve descriptive prompt" được nêu ở cơ chế Task/Agent spawning permission. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Structured evidence handoff**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Parallel independent delegation**, không giải quyết được yêu cầu cốt lõi "Coordinator needs Task or Agent in allowedTools for spawning" và thiếu điều kiện kiểm chứng.
+**Giải thích:** Least privilege: vai trò đọc thì chỉ cần tool đọc, giảm rủi ro hành động ngoài ý muốn. A và D vượt quá nhu cầu. C làm subagent không thể thực hiện nhiệm vụ.
 
-**Exam heuristic:** Nếu đề xuất hiện "Defined subagent never launches", ưu tiên phân biệt `Task/Agent spawning permission` với các lựa chọn mô tả chuyện khác.
+## K2. Truyền bằng chứng có cấu trúc (structured evidence handoff)
 
-### Q02. Một kỹ sư đề xuất **Pass only polished prose** cho tình huống: Synthesis returns correct facts without citations. Cần phản biện thế nào?
+### Trọng tâm
 
-- **A.** Resume one session and mix both experiments; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Keep source metadata with each finding; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Pass only polished prose; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Wait for search before starting independent analysis; áp dụng trực tiếp dù cơ chế sự cố khác.
+Khi giao dữ liệu giữa các agent, truyền **claim kèm metadata nguồn** (URL, tên tài liệu, trang, độ tin cậy) dạng có cấu trúc, không chỉ đoạn văn đã được trau chuốt.
 
-**Đáp án: B**
+### Giải thích
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Khi researcher trả về một đoạn văn mượt như "Thị trường tăng 12% năm 2024", mọi thứ chỉ còn là văn xuôi; nguồn đã mất. Synthesizer nhận được đoạn đó không thể trích dẫn, không thể đánh giá độ tin cậy, và không thể phát hiện hai nguồn mâu thuẫn. Kết quả: báo cáo "đúng sự kiện nhưng không có citation".
 
-- **A:** **Sai.** Phương án thuộc **Fork versus resume**, không giải quyết được yêu cầu cốt lõi "Pass claim plus URL, document title, page and confidence" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Pass claim plus URL, document title, page and confidence. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Pass only polished prose" được nêu ở cơ chế Structured evidence handoff. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Parallel independent delegation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+Giải pháp là yêu cầu subagent trả về **dữ liệu có cấu trúc** và coordinator giữ nguyên cấu trúc đó khi chuyển tiếp:
 
-**Exam heuristic:** Nếu đề xuất hiện "Synthesis returns correct facts without citations", ưu tiên phân biệt `Structured evidence handoff` với các lựa chọn mô tả chuyện khác.
+```json
+{
+  "claim": "Thị trường tăng 12% năm 2024",
+  "source_url": "https://example.com/report",
+  "document_title": "Market Report 2024",
+  "page": 14,
+  "confidence": "high"
+}
+```
 
-### Q03. Nếu sự cố **Search and local document analysis have no dependency** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+Lợi ích: (1) synthesizer có thể trích dẫn chính xác; (2) coordinator có thể lọc theo độ tin cậy hoặc ưu tiên nguồn; (3) khi hai claim mâu thuẫn, cả hai nguồn đều còn đó để giải quyết thay vì bị "san phẳng" thành một câu; (4) dễ kiểm tra và test bằng code vì có schema.
 
-- **A.** Resume one session and mix both experiments; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Only improve descriptive prompt; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Dispatch both concurrently and merge after completion; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Wait for search before starting independent analysis; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+Điểm cần phân biệt với bài 1.2: ở 1.2 nhấn mạnh subagent không thừa hưởng ngữ cảnh; ở đây nhấn mạnh **hình thức** của thứ được truyền (có cấu trúc, kèm provenance) và việc giữ metadata xuyên suốt chuỗi.
 
-**Đáp án: C**
+### Keyword
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- `structured output` — đầu ra theo schema xác định (ví dụ JSON), dễ xử lý bằng code
+- `claim` — một khẳng định cụ thể cần được chứng minh
+- `source metadata` — thông tin nguồn: URL, tiêu đề, trang
+- `confidence` — mức độ tin cậy gắn với một claim
+- `citation` — trích dẫn nguồn trong báo cáo cuối
+- `conflicting sources` — các nguồn mâu thuẫn nhau về cùng một sự kiện
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Fork versus resume**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Task/Agent spawning permission**, không giải quyết được yêu cầu cốt lõi "Multiple independent Agent calls can execute concurrently" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Multiple independent Agent calls can execute concurrently. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Wait for search before starting independent analysis" được nêu ở cơ chế Parallel independent delegation. Không đảm bảo xử lý được case và dễ che mất failure mode.
+### Bẫy đề thi
 
-**Exam heuristic:** Nếu đề xuất hiện "Search and local document analysis have no dependency", ưu tiên phân biệt `Parallel independent delegation` với các lựa chọn mô tả chuyện khác.
+- ✗ Chỉ chuyển đoạn văn tóm tắt đã mượt ⇒ ✓ Chuyển claim cùng metadata nguồn có cấu trúc
+- ✗ Muốn có citation thì thêm câu "hãy trích dẫn" vào prompt synthesizer ⇒ ✓ Bảo đảm dữ liệu đầu vào đã chứa nguồn
+- ✗ Gộp hai nguồn mâu thuẫn thành một câu trung bình ⇒ ✓ Giữ cả hai claim kèm nguồn để giải quyết minh bạch
 
-### Q04. Để viết acceptance criteria cho tình huống **Team compares two refactor approaches after initial audit**, lựa chọn nào thể hiện ranh giới đúng?
+### Câu hỏi
 
-- **A.** Resume one session and mix both experiments; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Only improve descriptive prompt; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Pass only polished prose; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Fork independent branches; kèm kiểm thử lại điều kiện và ghi evidence.
+#### Q1. Pipeline có researcher và synthesizer. Báo cáo cuối luôn đúng nội dung nhưng không có citation. Researcher hiện trả về một đoạn văn tóm tắt. Sửa thế nào?
+- A. Yêu cầu synthesizer đoán lại nguồn
+- B. Giảm độ dài báo cáo
+- C. Thêm bước người dùng tự điền nguồn sau cùng
+- D. Cho researcher trả về danh sách claim kèm URL, tiêu đề, trang và độ tin cậy, và giữ nguyên khi chuyển cho synthesizer
 
-**Đáp án: D**
+**Đáp án:** D
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Giải thích:** Citation chỉ có khi metadata nguồn đi cùng claim. A dẫn tới bịa nguồn. B và C không giải quyết nguyên nhân.
 
-- **A:** **Sai.** Đây chính là bẫy "Resume one session and mix both experiments" được nêu ở cơ chế Fork versus resume. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Task/Agent spawning permission**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Structured evidence handoff**, không giải quyết được yêu cầu cốt lõi "Fork branches common baseline, resume continues same history" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Fork branches common baseline, resume continues same history. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+#### Q2. Hai researcher trả về hai con số khác nhau cho cùng một chỉ số. Cách xử lý tốt nhất ở bước tổng hợp?
+- A. Lấy trung bình hai con số và bỏ nguồn
+- B. Giữ cả hai claim kèm nguồn và độ tin cậy, rồi giải quyết hoặc nêu rõ mâu thuẫn
+- C. Chọn ngẫu nhiên một con số
+- D. Bỏ cả hai vì không nhất quán
 
-**Exam heuristic:** Nếu đề xuất hiện "Team compares two refactor approaches after initial audit", ưu tiên phân biệt `Fork versus resume` với các lựa chọn mô tả chuyện khác.
+**Đáp án:** B
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Only improve descriptive prompt**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+**Giải thích:** Dữ liệu có cấu trúc cho phép đánh giá nguồn và trình bày minh bạch. A tạo số không có thật. C thiếu căn cứ. D mất thông tin hữu ích.
 
-- **A.** Enable Agent/Task on coordinator and define agent role; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Only improve descriptive prompt; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Pass only polished prose; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Wait for search before starting independent analysis; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+## K3. Gọi song song các subagent độc lập
 
-**Đáp án: A**
+### Trọng tâm
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Các lời gọi subagent **không phụ thuộc nhau** nên được phát ra đồng thời (nhiều lời gọi spawn trong cùng một lượt) và hợp nhất kết quả sau khi tất cả hoàn tất.
 
-- **A:** **Đúng.** Coordinator needs Task or Agent in allowedTools for spawning. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Only improve descriptive prompt" được nêu ở cơ chế Task/Agent spawning permission. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Structured evidence handoff**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Parallel independent delegation**, không giải quyết được yêu cầu cốt lõi "Coordinator needs Task or Agent in allowedTools for spawning" và thiếu điều kiện kiểm chứng.
+### Giải thích
 
-**Exam heuristic:** Nếu đề xuất hiện "Defined subagent never launches", ưu tiên phân biệt `Task/Agent spawning permission` với các lựa chọn mô tả chuyện khác.
+Nếu coordinator cần (1) tìm kiếm web và (2) phân tích tài liệu nội bộ, và việc (2) không cần kết quả của (1), thì không có lý do để chờ. Claude có thể phát ra **nhiều tool call `Task`/`Agent` trong một response**; chúng chạy đồng thời. Tổng thời gian xấp xỉ thời gian của việc chậm nhất, thay vì tổng các việc.
 
-### Q06. Sau khi audit phát hiện **Synthesis returns correct facts without citations**, điều gì là cải tiến có thể kiểm chứng?
+Quy trình đúng:
 
-- **A.** Resume one session and mix both experiments; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Keep source metadata with each finding; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Pass only polished prose; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Wait for search before starting independent analysis; áp dụng trực tiếp dù cơ chế sự cố khác.
+1. Xác định đồ thị phụ thuộc: việc nào cần đầu ra của việc nào.
+2. Các việc **độc lập** → gọi đồng thời trong cùng một lượt.
+3. Các việc **phụ thuộc** → gọi theo thứ tự (ví dụ synthesizer phải chờ kết quả của cả hai).
+4. Coordinator hợp nhất sau khi đã nhận đủ kết quả.
 
-**Đáp án: B**
+Sai lầm kép: chạy tuần tự những việc độc lập (lãng phí độ trễ) và ngược lại, cố song song hóa việc có phụ thuộc (việc sau thiếu đầu vào). Cũng cần nhớ: song song không làm tăng độ chính xác, chỉ giảm độ trễ; và mỗi subagent vẫn tốn token riêng nên tổng chi phí không giảm.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Keyword
 
-- **A:** **Sai.** Phương án thuộc **Fork versus resume**, không giải quyết được yêu cầu cốt lõi "Pass claim plus URL, document title, page and confidence" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Pass claim plus URL, document title, page and confidence. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Pass only polished prose" được nêu ở cơ chế Structured evidence handoff. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Parallel independent delegation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+- `parallel execution` — thực thi đồng thời nhiều tác vụ
+- `dependency` — quan hệ phụ thuộc: tác vụ B cần đầu ra của A
+- `fan-out / fan-in` — tỏa ra nhiều nhánh rồi gom kết quả về
+- `latency` — độ trễ tổng thời gian chờ
+- `sequential execution` — thực thi tuần tự từng bước
+- `independent tasks` — các tác vụ không phụ thuộc nhau
 
-**Exam heuristic:** Nếu đề xuất hiện "Synthesis returns correct facts without citations", ưu tiên phân biệt `Structured evidence handoff` với các lựa chọn mô tả chuyện khác.
+### Bẫy đề thi
 
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Search and local document analysis have no dependency**, nên chọn gì?
+- ✗ Chờ web search xong mới bắt đầu phân tích tài liệu nội bộ dù hai việc độc lập ⇒ ✓ Phát hai lời gọi đồng thời rồi hợp nhất
+- ✗ Song song hóa cả synthesizer với researcher ⇒ ✓ Việc phụ thuộc phải chờ đầu ra của việc trước
+- ✗ Tin rằng song song giảm chi phí token ⇒ ✓ Song song giảm độ trễ, không giảm tổng token
 
-- **A.** Resume one session and mix both experiments; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Only improve descriptive prompt; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Dispatch both concurrently and merge after completion; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Wait for search before starting independent analysis; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+### Câu hỏi
 
-**Đáp án: C**
+#### Q1. Coordinator cần tìm tin tức mới trên web và đối chiếu với báo cáo nội bộ có sẵn trong thư mục. Hai việc không cần dữ liệu của nhau. Cách gọi tối ưu?
+- A. Chạy search trước, xong mới chạy phân tích báo cáo nội bộ
+- B. Chạy hai subagent đồng thời rồi hợp nhất kết quả sau khi cả hai xong
+- C. Gộp cả hai thành một subagent duy nhất
+- D. Chạy báo cáo nội bộ trước, bỏ web search
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** B
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Fork versus resume**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Task/Agent spawning permission**, không giải quyết được yêu cầu cốt lõi "Multiple independent Agent calls can execute concurrently" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Multiple independent Agent calls can execute concurrently. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Wait for search before starting independent analysis" được nêu ở cơ chế Parallel independent delegation. Không đảm bảo xử lý được case và dễ che mất failure mode.
+**Giải thích:** Việc độc lập nên chạy đồng thời để giảm độ trễ. A lãng phí thời gian chờ. C mất lợi ích chuyên biệt. D bỏ mất một nguồn cần thiết.
 
-**Exam heuristic:** Nếu đề xuất hiện "Search and local document analysis have no dependency", ưu tiên phân biệt `Parallel independent delegation` với các lựa chọn mô tả chuyện khác.
+#### Q2. Pipeline gồm researcher A, researcher B và synthesizer cần kết quả của cả hai. Cách nào đúng?
+- A. Chạy cả ba đồng thời ngay từ đầu
+- B. Chạy A rồi B rồi synthesizer, tuần tự hoàn toàn
+- C. Chạy A và B đồng thời, đợi cả hai xong rồi mới gọi synthesizer
+- D. Chạy synthesizer trước và đưa kết quả cho A, B
 
-### Q08. Một reviewer nêu giải pháp **Resume one session and mix both experiments**. Đánh giá chính xác nhất là gì?
+**Đáp án:** C
 
-- **A.** Resume one session and mix both experiments; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Only improve descriptive prompt; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Pass only polished prose; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Fork independent branches; kèm kiểm thử lại điều kiện và ghi evidence.
+**Giải thích:** A và B độc lập nên song song; synthesizer phụ thuộc cả hai nên phải chờ. A khiến synthesizer thiếu đầu vào. B chậm không cần thiết. D đảo ngược phụ thuộc.
 
-**Đáp án: D**
+## K4. Fork và resume: khi nào dùng cái nào
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Trọng tâm
 
-- **A:** **Sai.** Đây chính là bẫy "Resume one session and mix both experiments" được nêu ở cơ chế Fork versus resume. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Task/Agent spawning permission**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Structured evidence handoff**, không giải quyết được yêu cầu cốt lõi "Fork branches common baseline, resume continues same history" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Fork branches common baseline, resume continues same history. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+**Resume** tiếp tục đúng một lịch sử phiên. **Fork** tạo nhánh mới từ một baseline chung để thử các hướng khác nhau mà không trộn lẫn.
 
-**Exam heuristic:** Nếu đề xuất hiện "Team compares two refactor approaches after initial audit", ưu tiên phân biệt `Fork versus resume` với các lựa chọn mô tả chuyện khác.
+### Giải thích
 
-### Q09. Trong thử nghiệm đối chứng với tình huống **Defined subagent never launches**, tiêu chí pass phù hợp là gì?
+Hai thao tác này cùng xuất phát từ một phiên đã có, nhưng mục đích khác nhau:
 
-- **A.** Enable Agent/Task on coordinator and define agent role; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Only improve descriptive prompt; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Pass only polished prose; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Wait for search before starting independent analysis; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+| | Resume | Fork |
+|---|---|---|
+| Hành vi | Tiếp tục cùng lịch sử, nối thêm vào | Sao chép baseline thành phiên mới độc lập |
+| Phù hợp | Làm tiếp một việc đang dở | So sánh nhiều hướng từ cùng điểm xuất phát |
+| Rủi ro | Trộn thí nghiệm nếu dùng cho nhiều hướng | Tốn thêm token cho mỗi nhánh |
 
-**Đáp án: A**
+Tình huống: nhóm đã kiểm toán codebase (baseline), giờ muốn so sánh hai phương án refactor. Nếu resume một phiên duy nhất và thử lần lượt hai phương án, lịch sử của phương án A sẽ lẫn vào phương án B và làm nhiễu phân tích. Cách đúng: **fork hai nhánh độc lập** từ phiên kiểm toán; mỗi nhánh thừa hưởng toàn bộ hiểu biết ban đầu nhưng phát triển riêng; sau đó so sánh kết quả.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Fork tiết kiệm công sức hơn tạo phiên mới hoàn toàn (không phải kiểm toán lại), và giữ cô lập tốt hơn resume. Ngược lại, nếu chỉ tiếp tục một công việc tuyến tính, resume là đủ và rẻ hơn.
 
-- **A:** **Đúng.** Coordinator needs Task or Agent in allowedTools for spawning. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Only improve descriptive prompt" được nêu ở cơ chế Task/Agent spawning permission. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Structured evidence handoff**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Parallel independent delegation**, không giải quyết được yêu cầu cốt lõi "Coordinator needs Task or Agent in allowedTools for spawning" và thiếu điều kiện kiểm chứng.
+### Keyword
 
-**Exam heuristic:** Nếu đề xuất hiện "Defined subagent never launches", ưu tiên phân biệt `Task/Agent spawning permission` với các lựa chọn mô tả chuyện khác.
+- `resume` — tiếp tục một phiên với lịch sử hiện có
+- `fork` — tạo nhánh phiên mới từ một baseline chung
+- `baseline` — trạng thái chung làm điểm xuất phát cho các nhánh
+- `session` — một chuỗi hội thoại và trạng thái làm việc được lưu
+- `isolated branch` — nhánh độc lập, không ảnh hưởng nhánh khác
+- `parallel exploration` — thăm dò đồng thời nhiều hướng giải quyết
 
-### Q10. Để giảm lỗi tái diễn với **Synthesis returns correct facts without citations**, biện pháp nào phù hợp với cơ chế đã học?
+### Bẫy đề thi
 
-- **A.** Resume one session and mix both experiments; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Keep source metadata with each finding; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Pass only polished prose; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Wait for search before starting independent analysis; áp dụng trực tiếp dù cơ chế sự cố khác.
+- ✗ Resume một phiên và thử hai phương án lần lượt trong đó ⇒ ✓ Fork hai nhánh độc lập từ baseline
+- ✗ Dùng fork cho mọi trường hợp kể cả việc tuyến tính ⇒ ✓ Việc tuyến tính chỉ cần resume
+- ✗ Tạo phiên hoàn toàn mới và lặp lại phần kiểm toán ban đầu ⇒ ✓ Fork để tái sử dụng baseline đã có
 
-**Đáp án: B**
+### Câu hỏi
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+#### Q1. Sau khi kiểm toán một dịch vụ, nhóm muốn thử hai hướng refactor (tách module và viết lại bằng framework mới) và so sánh công bằng. Cách nào phù hợp nhất?
+- A. Resume phiên cũ, thử hướng một rồi thử hướng hai trong cùng lịch sử
+- B. Tạo hai phiên hoàn toàn mới và lặp lại kiểm toán
+- C. Chỉ thử một hướng và bỏ hướng còn lại
+- D. Fork hai nhánh từ phiên kiểm toán, mỗi nhánh thử một hướng
 
-- **A:** **Sai.** Phương án thuộc **Fork versus resume**, không giải quyết được yêu cầu cốt lõi "Pass claim plus URL, document title, page and confidence" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Pass claim plus URL, document title, page and confidence. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Pass only polished prose" được nêu ở cơ chế Structured evidence handoff. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Parallel independent delegation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+**Đáp án:** D
 
-**Exam heuristic:** Nếu đề xuất hiện "Synthesis returns correct facts without citations", ưu tiên phân biệt `Structured evidence handoff` với các lựa chọn mô tả chuyện khác.
+**Giải thích:** Fork giữ baseline và cô lập hai thí nghiệm. A làm lịch sử lẫn lộn. B tốn công kiểm toán lại. C bỏ qua yêu cầu so sánh.
 
-## 6. Lab / Bài thực hành tự kiểm tra
+#### Q2. Hôm qua bạn dừng giữa chừng khi đang viết tài liệu một module và không có thay đổi gì mới trong repo. Hôm nay muốn làm tiếp. Nên dùng?
+- A. Fork để tạo nhánh mới
+- B. Resume phiên đó để tiếp tục với ngữ cảnh sẵn có
+- C. Xoá phiên và bắt đầu lại
+- D. Tạo ba nhánh fork song song
 
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "Defined subagent never launches".
+**Đáp án:** B
 
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Enable Agent/Task on coordinator and define agent role.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
-
-## 7. Cheat sheet / Ôn nhanh
-
-- **Task/Agent spawning permission:** Coordinator needs Task or Agent in allowedTools for spawning. ✓ Enable Agent/Task on coordinator and define agent role. ✗ Only improve descriptive prompt.
-- **Structured evidence handoff:** Pass claim plus URL, document title, page and confidence. ✓ Keep source metadata with each finding. ✗ Pass only polished prose.
-- **Parallel independent delegation:** Multiple independent Agent calls can execute concurrently. ✓ Dispatch both concurrently and merge after completion. ✗ Wait for search before starting independent analysis.
-- **Fork versus resume:** Fork branches common baseline, resume continues same history. ✓ Fork independent branches. ✗ Resume one session and mix both experiments.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/1-agentic-architecture/1-3-subagent-invocation-context
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Công việc tuyến tính chưa đổi gì nên resume là tự nhiên và rẻ nhất. A và D thừa vì không cần so sánh hướng. C bỏ mất ngữ cảnh còn hợp lệ.

@@ -216,129 +216,72 @@
     return toc;
   }
 
-  /* ---------- Render bài học: tách markdown theo khuôn mẫu → giao diện gọn ---------- */
+  /* ---------- Render bài học (định dạng: Tổng quan → K1..Kn → Tóm tắt) ---------- */
   // Inline: escape + `code`, **bold**.
-  const inl = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
-  const plain = (s) => String(s ?? "").replace(/\*\*/g, "").trim();
-  const field = (block, label) => (block.match(new RegExp("\\*\\*" + label + "[^*]*:\\*\\*\\s*(.+)")) || [])[1]?.trim() || "";
-  const splitBy = (text, re) => { const parts = text.split(re); return parts.slice(1); };
-  // Đuôi chung chung gắn vào các lựa chọn của câu luyện tập — không mang kiến thức.
-  const OPT_FILLER = /;\s*(kèm kiểm thử lại điều kiện và ghi evidence|kỳ vọng mô hình tự hiểu và sửa vấn đề|áp dụng trực tiếp dù cơ chế sự cố khác|bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn)\.?\s*$/;
+  // Tách code span trước để `**/*.ts` không bị hiểu nhầm là bold.
+  const inl = (s) => esc(s).split(/(`[^`]+`)/).map((t, i) => (i % 2 ? `<code>${t.slice(1, -1)}</code>` : t.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>"))).join("");
+  const md2 = (s) => marked.parse(String(s ?? "").trim());
+  const bullets = (text) => String(text ?? "").split("\n").filter((l) => /^\s*-\s+/.test(l)).map((l) => l.replace(/^\s*-\s+/, "").trim());
 
-  function cleanReason(text, verdict) {
-    const t = plain(text);
-    if (verdict === "Đúng") return t.replace(/\s*Đây là hành động tác động trực tiếp.*$/, "");
-    const trap = t.match(/bẫy "([^"]+)" được nêu ở cơ chế (.+?)\./);
-    if (trap) return `Bẫy của cơ chế “${trap[2]}”: không xử lý được case này.`;
-    const other = t.match(/Phương án thuộc (?:cơ chế )?(.+?)(?:\.|,)/);
-    if (other) return `Thuộc cơ chế “${other[1]}” — không giải quyết đúng case đang hỏi.`;
-    return t;
+  function renderQuestions(text, md2) {
+    return String(text ?? "").split(/^#### /m).slice(1).map((q, i) => {
+      const first = q.search(/^- [A-D]\.\s/m);
+      const stem = q.slice(0, first < 0 ? q.length : first).replace(/^Q\d+\.\s*/, "");
+      const opts = [...q.matchAll(/^- ([A-D])\.\s*(.+)$/gm)];
+      const answer = (q.match(/\*\*Đáp án:\*\*\s*([A-D])/) || [])[1] || "";
+      const exp = (q.match(/\*\*Giải thích:\*\*\s*([\s\S]*)$/) || [])[1] || "";
+      return `<div class="practice-q" data-answer="${answer}">
+        <div class="qstem"><span class="num">Câu ${i + 1}</span>${md2(stem)}</div>
+        <ul class="opts-list">${opts.map((o) => `<li data-k="${o[1]}"><span class="k">${o[1]}</span><span>${inl(o[2])}</span></li>`).join("")}</ul>
+        <details><summary>Xem đáp án &amp; giải thích</summary>
+          <p class="ans">Đáp án đúng: <b>${answer}</b></p>${md2(exp)}</details></div>`;
+    }).join("");
   }
 
-  function renderLesson(md) {
-    md = md.replace(/\r\n?/g, "\n");
-    const parts = md.split(/^## /m);
-    if (parts.length < 9) return null; // không đúng khuôn mẫu → dùng marked
-    const head = parts[0];
-    const titleM = head.match(/^#\s*(\d+\.\d+)\s*[—-]\s*(.+)/m);
-    if (!titleM) return null;
-    const sec = {};
-    parts.slice(1).forEach((p) => { const n = (p.match(/^(\d+)\./) || [])[1]; if (n) sec[n] = p.replace(/^.*\n/, ""); });
-    const source = (head.match(/https?:\/\/\S+/) || [])[0];
+  // Che nội dung trong ``` ``` để dòng bắt đầu bằng "#" trong code không bị tách nhầm thành heading.
+  const maskFences = (md, fences) => md.replace(/```[\s\S]*?```/g, (m) => `\u0001${fences.push(m) - 1}\u0001`);
+  const unmask = (s, fences) => s.replace(/\u0001(\d+)\u0001/g, (_, i) => fences[+i]);
+
+  function renderLesson(rawMd) {
+    const fences = [];
+    const md = maskFences(rawMd.replace(/\r\n?/g, "\n"), fences);
+    const md2 = (s) => marked.parse(unmask(String(s ?? "").trim(), fences));
+    const titleM = md.match(/^#\s*(\d+\.\d+)\s*[—-]\s*(.+)/m);
+    const blocks = md.split(/^## /m).slice(1);
+    if (!titleM || !blocks.some((b) => /^K\d+\./.test(b))) return null; // bài chưa theo định dạng mới → dùng marked
     const toc = [];
-    const section = (n, title, body, cls = "") => {
-      const id = "sec-" + n; toc.push({ id, text: title });
-      return `<section class="ls ${cls}" id="${id}"><h2>${title}</h2>${body}</section>`;
-    };
     let html = `<h1><span class="code-tag">${esc(titleM[1])}</span>${esc(titleM[2].trim())}</h1>`;
 
-    // 1. Mục tiêu
-    if (sec[1]) html += section(1, "Mục tiêu bài học", `<div class="callout">${inl(sec[1].trim().replace(/\n+/g, " "))}</div>`);
-
-    // 2. Kiến thức cốt lõi
-    if (sec[2]) {
-      const cards = splitBy(sec[2], /^### /m).map((b) => {
-        const name = b.split("\n")[0].replace(/^\d+\.\d+\.\s*/, "");
-        const [num] = b.split("\n")[0].match(/^\d+\.\d+/) || [""];
-        return `<div class="concept-card"><h3><span class="num">${esc(num)}</span>${esc(name)}</h3>
-          <p class="principle">${inl(field(b, "Principle"))}</p>
-          <p class="case"><span class="lbl">Tình huống</span>${inl(field(b, "Case study"))}</p>
-          <div class="do-dont">
-            <div class="do"><span class="lbl">✓ Nên làm</span>${inl(field(b, "Recommended"))}</div>
-            <div class="dont"><span class="lbl">✗ Sai lầm</span>${inl(field(b, "Incorrect"))}</div>
-          </div></div>`;
-      }).join("");
-      html += section(2, "Kiến thức cốt lõi", cards);
-    }
-
-    // 3. Ví dụ thiết kế
-    if (sec[3]) {
-      const s = sec[3];
-      const steps = [...s.matchAll(/^\d+\.\s+(.+)$/gm)].map((m) => `<li>${inl(m[1])}</li>`).join("");
-      const trace = (s.match(/```[a-z]*\n([\s\S]*?)```/) || [])[1]?.trim();
-      const why = (s.match(/\*\*Tại sao cách này đúng:\*\*\s*(.+)/) || [])[1];
-      html += section(3, "Ví dụ thiết kế", `
-        <div class="flow">
-          <div><span class="lbl">Vấn đề</span>${inl(field(s, "Problem"))}</div>
-          <div class="bad"><span class="lbl">✗ Thiết kế sai</span>${inl(field(s, "Bad design"))}</div>
-          <div class="good"><span class="lbl">✓ Thiết kế tốt hơn</span>${inl(field(s, "Better design"))}</div>
-        </div>
-        ${steps ? `<h3>Các bước triển khai</h3><ol>${steps}</ol>` : ""}
-        ${trace ? `<details class="more"><summary>Luồng xử lý (decision trace)</summary><pre><code>${esc(trace)}</code></pre></details>` : ""}
-        ${why ? `<p class="note"><b>Vì sao đúng:</b> ${inl(why)}</p>` : ""}`);
-    }
-
-    // 4. Bẫy
-    if (sec[4]) {
-      const items = [...sec[4].matchAll(/^\d+\.\s+\*\*Bẫy ([^:*]+):\*\*\s*(.+)$/gm)].map((m) => {
-        const q = [...m[2].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
-        if (q.length < 2) return `<li class="trap"><b>${esc(m[1])}</b><p>${inl(m[2])}</p></li>`;
-        return `<li class="trap"><b>${esc(m[1])}</b>
-          <div class="do-dont"><div class="dont"><span class="lbl">✗ Dễ nhầm</span>${esc(q[0])}</div>
-          <div class="do"><span class="lbl">✓ Chọn</span>${esc(q[q.length - 1])}</div></div></li>`;
-      }).join("");
-      html += section(4, "Bẫy thường gặp", items ? `<ul class="traps">${items}</ul>` : `<div>${marked.parse(sec[4])}</div>`);
-    }
-
-    // 5. Luyện tập
-    if (sec[5]) {
-      const qs = splitBy(sec[5], /^### Q/m).map((b) => {
-        const lines = b.split("\n");
-        const [, no, title] = lines[0].match(/^(\d+)\.\s*(.+)/) || [];
-        const opts = [...b.matchAll(/^- \*\*([A-D])\.\*\*\s*(.+)$/gm)].map((m) => ({ k: m[1], t: m[2].replace(OPT_FILLER, "") }));
-        const answer = (b.match(/Đáp án:\s*([A-D])/) || [])[1];
-        const why = [...b.matchAll(/^- \*\*([A-D]):\*\*\s*\*\*(Đúng|Sai)\.\*\*\s*(.+)$/gm)]
-          .map((m) => `<li class="${m[2] === "Đúng" ? "ok" : "bad"}"><b>${m[1]}. ${m[2]}</b> — ${esc(cleanReason(m[3], m[2]))}</li>`).join("");
-        const tip = (b.match(/\*\*Exam heuristic:\*\*\s*(.+)/) || [])[1];
-        return `<div class="practice-q" data-answer="${answer}"><h3><span class="num">Q${no}</span>${inl(title)}</h3>
-          <ul class="opts-list">${opts.map((o) => `<li data-k="${o.k}"><span class="k">${o.k}</span><span>${inl(o.t)}</span></li>`).join("")}</ul>
-          <details><summary>Xem đáp án &amp; giải thích</summary>
-            <p class="ans">Đáp án đúng: <b>${answer}</b></p><ul class="why">${why}</ul>
-            ${tip ? `<p class="note">💡 ${inl(tip)}</p>` : ""}</details></div>`;
-      }).join("");
-      html += section(5, "Luyện tập", `<p class="sub">Bấm vào một đáp án để kiểm tra ngay.</p>${qs}`);
-    }
-
-    // 6. Lab
-    if (sec[6]) {
-      const task = (sec[6].match(/\*\*Bài tập:\*\*\s*(.+)/) || [])[1];
-      const steps = [...sec[6].matchAll(/^\d+\.\s+(.+)$/gm)].map((m) => `<li>${inl(m[1])}</li>`).join("");
-      html += section(6, "Bài thực hành", `${task ? `<p>${inl(task)}</p>` : ""}<ol>${steps}</ol>`);
-    }
-
-    // 7. Cheat sheet
-    if (sec[7]) {
-      const rows = [...sec[7].matchAll(/^- \*\*([^:*]+):\*\*\s*(.+?)\s*✓\s*(.+?)\s*✗\s*(.+)$/gm)].map((m) =>
-        `<tr><th>${esc(m[1])}</th><td>${inl(m[2])}</td><td class="ok">${inl(m[3])}</td><td class="bad">${inl(m[4])}</td></tr>`).join("");
-      html += section(7, "Ôn nhanh", rows
-        ? `<div class="table-wrap"><table class="cheat"><thead><tr><th>Khái niệm</th><th>Nguyên tắc</th><th>✓ Nên</th><th>✗ Tránh</th></tr></thead><tbody>${rows}</tbody></table></div>`
-        : marked.parse(sec[7]));
-    }
-
-    // 8. Nguồn
-    if (sec[8]) {
-      const limit = (sec[8].match(/\*\*Giới hạn:\*\*\s*(.+)/) || [])[1];
-      html += section(8, "Nguồn & lưu ý", `<p class="small">${source ? `Nguồn: <a href="${esc(source)}" target="_blank" rel="noopener">${esc(source)}</a>` : ""}</p>${limit ? `<p class="small">${inl(limit)}</p>` : ""}`, "foot");
+    for (const b of blocks) {
+      const nl = b.indexOf("\n");
+      const heading = b.slice(0, nl).trim(), body = b.slice(nl + 1);
+      const km = heading.match(/^(K\d+)\.\s*(.+)/);
+      if (km) {
+        const id = km[1].toLowerCase();
+        toc.push({ id, text: `${km[1]}. ${km[2]}` });
+        const subs = {};
+        body.split(/^### /m).slice(1).forEach((x) => { const k = x.indexOf("\n"); subs[x.slice(0, k).trim().toLowerCase()] = x.slice(k + 1).trim(); });
+        const kw = bullets(subs["keyword"]).map((l) => {
+          const [term, ...rest] = l.split(/\s+[—–]\s+/);
+          return `<tr><th>${esc(term.replace(/`/g, ""))}</th><td>${inl(rest.join(" — "))}</td></tr>`;
+        }).join("");
+        const traps = bullets(subs["bẫy đề thi"]).map((l) => {
+          const [bad, good] = l.split("⇒");
+          return good
+            ? `<li class="trap"><div class="do-dont"><div class="dont"><span class="lbl">✗ Dễ nhầm</span>${inl(bad.replace(/^✗\s*/, ""))}</div><div class="do"><span class="lbl">✓ Đúng</span>${inl(good.replace(/^\s*✓\s*/, ""))}</div></div></li>`
+            : `<li class="trap">${inl(l)}</li>`;
+        }).join("");
+        html += `<section class="ls k-card" id="${id}">
+          <h2><span class="num">${km[1]}</span>${esc(km[2])}</h2>
+          ${subs["trọng tâm"] ? `<div class="focus"><span class="lbl">Kiến thức trọng tâm</span>${md2(subs["trọng tâm"])}</div>` : ""}
+          ${subs["giải thích"] ? `<div class="k-sec"><h3>Giải thích chi tiết</h3>${md2(subs["giải thích"])}</div>` : ""}
+          ${kw ? `<div class="k-sec"><h3>Keyword</h3><div class="table-wrap"><table class="kw"><tbody>${kw}</tbody></table></div></div>` : ""}
+          ${traps ? `<div class="k-sec"><h3>Bẫy đề thi</h3><ul class="traps">${traps}</ul></div>` : ""}
+          ${subs["câu hỏi"] ? `<div class="k-sec"><h3>Câu hỏi luyện tập</h3>${renderQuestions(subs["câu hỏi"], md2)}</div>` : ""}
+        </section>`;
+      } else if (/^Tổng quan/i.test(heading)) {
+        html += `<section class="ls" id="overview"><div class="callout">${md2(body)}</div></section>`;
+      }
     }
     return { html, toc };
   }

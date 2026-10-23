@@ -1,326 +1,259 @@
 # 4.3 — Structured Output with Tool Use
 
-> Domain 4: Prompt Engineering & Structured Output · Tỷ trọng toàn domain: 20%
-> Source lesson: https://claudecertificationguide.com/learn/4-prompt-engineering/4-3-structured-output
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+Khi cần model trả về dữ liệu có cấu trúc (JSON để ghi vào database, gọi API khác), cách đáng tin nhất trong hệ sinh thái Claude là **tool use với JSON schema**: bạn định nghĩa một "tool" mà tham số chính là cấu trúc dữ liệu mong muốn, model "gọi" tool đó và bạn lấy `input` của lời gọi làm kết quả. Cách này tốt hơn nhiều so với việc xin "hãy trả JSON" rồi parse văn bản.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Structured Output with Tool Use**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Đề thi xoay quanh bốn ý: schema chỉ đảm bảo **hình dạng** chứ không đảm bảo **đúng sự thật**; chọn `tool_choice` nào (`auto`, `any`, tool cụ thể); cách thiết kế trường **optional/nullable** để không ép model bịa; và dùng giá trị **`unclear`/`other`** cho ca mơ hồ. Quy tắc nhớ nhanh: **schema đảm bảo cú pháp, không đảm bảo ngữ nghĩa; thiết kế schema sao cho "không biết" là một đáp án hợp lệ.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Schema đảm bảo cấu trúc, không đảm bảo ngữ nghĩa
 
-### 2.1. Tool schema versus semantics
+### Trọng tâm
 
-**Principle (EN):** Schema constrains types/shape, not factual or arithmetic correctness.
+Tool use với JSON schema loại bỏ lỗi cú pháp và sai kiểu, nhưng **giá trị vẫn có thể sai** (tổng tiền không khớp, ngày vô lý). Cần validator bằng code cho phần ngữ nghĩa.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **schema constrains types/shape, not factual or arithmetic correctness**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** Invoice JSON well-formed but total wrong.
+Khi bạn khai báo tool với `input_schema` (JSON Schema), model sinh tham số theo schema đó: đúng tên field, đúng kiểu, có đủ field bắt buộc, giá trị enum nằm trong tập cho phép. Nhờ vậy bạn không phải xử lý JSON thiếu dấu ngoặc hay field bị đổi tên như khi parse văn bản tự do.
 
-**Recommended implementation:** Validate sums using deterministic code.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Declare every JSON schema-valid output accurate.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Invoice JSON well-formed but total wrong".
-- Decision: áp dụng nguyên tắc **Tool schema versus semantics** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Validate sums using deterministic code" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.2. tool_choice auto any named
-
-**Principle (EN):** auto permits prose, any forces one available tool, named forces one specified.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **auto permits prose, any forces one available tool, named forces one specified**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Must extract unknown document category as structured record.
-
-**Recommended implementation:** Choose any among typed extractors.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Choose auto and hope for JSON.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Must extract unknown document category as structured record".
-- Decision: áp dụng nguyên tắc **tool_choice auto any named** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Choose any among typed extractors" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.3. Nullable optional fields
-
-**Principle (EN):** Missing input must not pressure invented required values.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **missing input must not pressure invented required values**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Contract has no delivery date.
-
-**Recommended implementation:** Allow null/optional with explicit missing semantics.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Make date required and guess.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Contract has no delivery date".
-- Decision: áp dụng nguyên tắc **Nullable optional fields** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Allow null/optional with explicit missing semantics" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.4. Ambiguity enums
-
-**Principle (EN):** Use unclear or other+detail to express uncertainty.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **use unclear or other+detail to express uncertainty**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Input does not fit enum invoice/receipt.
-
-**Recommended implementation:** Return unclear or other plus detail.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Invent nearest confident category.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Input does not fit enum invoice/receipt".
-- Decision: áp dụng nguyên tắc **Ambiguity enums** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Return unclear or other plus detail" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-## 3. Ví dụ thiết kế / Worked engineering example
-
-**Problem:** Invoice JSON well-formed but total wrong.
-
-**Bad design:** Declare every JSON schema-valid output accurate.
-
-**Better design:** Validate sums using deterministic code.
-
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
-
-### Walkthrough: decision trace / Luồng xử lý
-
-```text
-INPUT  : Invoice JSON well-formed but total wrong.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Validate sums using deterministic code.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
+```python
+tools = [{
+    "name": "record_invoice",
+    "description": "Ghi lại thông tin hoá đơn đã trích xuất",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "invoice_no": {"type": "string"},
+            "line_items": {"type": "array", "items": {"type": "number"}},
+            "total": {"type": "number"},
+        },
+        "required": ["invoice_no", "line_items", "total"],
+    },
+}]
 ```
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+Nhưng schema chỉ nói "total là số", không nói "total phải bằng tổng line_items". Model vẫn có thể đưa ra `line_items = [100, 200]` và `total = 350` (đúng kiểu, sai nghĩa). Một output **schema-valid** không đồng nghĩa với **đúng**.
 
-## 4. Exam traps / Bẫy dễ nhầm
+Vì vậy cần hai tầng:
 
-1. **Bẫy Tool schema versus semantics:** "Declare every JSON schema-valid output accurate" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở tool schema versus semantics, rồi chọn "Validate sums using deterministic code".
+1. **Schema** để chắc chắn về hình dạng (cú pháp, kiểu, trường bắt buộc).
+2. **Validator bằng code** để kiểm tra ngữ nghĩa: tổng bằng tổng thành phần, ngày kết thúc sau ngày bắt đầu, mã nằm trong danh mục thật... Nếu fail, đưa vào vòng retry có phản hồi (xem 4.4).
 
-2. **Bẫy tool_choice auto any named:** "Choose auto and hope for JSON" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở tool_choice auto any named, rồi chọn "Choose any among typed extractors".
+Không nên tin vào việc "model sinh theo schema nên chắc chắn đúng", và cũng không nên dùng prompt để bắt model tự cộng chính xác khi có thể dùng code.
 
-3. **Bẫy Nullable optional fields:** "Make date required and guess" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở nullable optional fields, rồi chọn "Allow null/optional with explicit missing semantics".
+### Keyword
 
-4. **Bẫy Ambiguity enums:** "Invent nearest confident category" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở ambiguity enums, rồi chọn "Return unclear or other plus detail".
+- `tool use` — cơ chế cho model gọi tool; dùng cả để lấy output có cấu trúc
+- `input_schema` — JSON Schema mô tả tham số của tool, tức cấu trúc đầu ra mong muốn
+- `schema-valid` — hợp lệ về hình dạng theo schema, chưa chắc đúng về nội dung
+- `syntax error vs semantic error` — lỗi cú pháp (hình dạng) khác lỗi ngữ nghĩa (nội dung sai)
+- `required field` — trường bắt buộc phải có trong output
+- `semantic validation` — kiểm tra ý nghĩa nội dung, thường bằng code
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+### Bẫy đề thi
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+- ✗ Output đã qua schema nên chắc chắn chính xác ⇒ ✓ Schema chỉ đảm bảo hình dạng; cần validator kiểm tra tổng, ngày, quy tắc nghiệp vụ
+- ✗ Xin "trả JSON" trong prompt và parse text là đủ tin cậy ⇒ ✓ Dùng tool use với JSON schema để ép cấu trúc
+- ✗ Dùng prompt bắt model "cộng chính xác" thay cho code ⇒ ✓ Phép tính xác định nên do code kiểm tra
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **Invoice JSON well-formed but total wrong**. Phương án nào phù hợp nhất?
+### Câu hỏi
 
-- **A.** Make date required and guess; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Validate sums using deterministic code; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Declare every JSON schema-valid output accurate; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Choose auto and hope for JSON; áp dụng trực tiếp dù cơ chế sự cố khác.
+#### Q1. Pipeline dùng tool use với schema để trích xuất hoá đơn. Kết quả luôn là JSON hợp lệ, nhưng một số hoá đơn có `total` khác tổng các `line_items`. Cách khắc phục phù hợp nhất?
+- A. Thêm `"minimum": 0` vào schema của `total`
+- B. Thêm bước validator bằng code so sánh `total` với tổng `line_items`, và xử lý khi lệch
+- C. Chuyển sang trả JSON dạng văn bản tự do
+- D. Tin kết quả vì đã qua schema
 
-**Đáp án: B**
+**Đáp án:** B
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Giải thích:** Lỗi này là ngữ nghĩa nên phải kiểm tra bằng code. A không kiểm tra quan hệ giữa các trường. C làm mất lợi ích của schema. D chính là cái bẫy "schema-valid = đúng".
 
-- **A:** **Sai.** Phương án thuộc **Nullable optional fields**, không giải quyết được yêu cầu cốt lõi "Schema constrains types/shape, not factual or arithmetic correctness" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Schema constrains types/shape, not factual or arithmetic correctness. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Declare every JSON schema-valid output accurate" được nêu ở cơ chế Tool schema versus semantics. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **tool_choice auto any named**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+#### Q2. Điều nào schema JSON trong tool use KHÔNG thể đảm bảo?
+- A. Trường `invoice_no` là chuỗi
+- B. Trường bắt buộc không bị thiếu
+- C. Giá trị `status` thuộc tập enum cho phép
+- D. Ngày hết hạn thực sự đúng với nội dung tài liệu gốc
 
-**Exam heuristic:** Nếu đề xuất hiện "Invoice JSON well-formed but total wrong", ưu tiên phân biệt `Tool schema versus semantics` với các lựa chọn mô tả chuyện khác.
+**Đáp án:** D
 
-### Q02. Một kỹ sư đề xuất **Choose auto and hope for JSON** cho tình huống: Must extract unknown document category as structured record. Cần phản biện thế nào?
+**Giải thích:** Schema kiểm soát hình dạng (kiểu, trường bắt buộc, enum) nhưng không biết tài liệu gốc nói gì. A, B, C đều là ràng buộc hình dạng mà schema xử lý.
 
-- **A.** Make date required and guess; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Invent nearest confident category; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Choose any among typed extractors; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Choose auto and hope for JSON; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+## K2. Chọn `tool_choice`: `auto`, `any`, hoặc tool cụ thể
 
-**Đáp án: C**
+### Trọng tâm
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+`auto` cho phép model trả văn bản thay vì gọi tool; `any` buộc model gọi **một trong các tool** đã cho; chỉ định tên tool buộc gọi **đúng tool đó**. Cần đầu ra có cấu trúc chắc chắn thì không dùng `auto`.
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Nullable optional fields**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Ambiguity enums**, không giải quyết được yêu cầu cốt lõi "auto permits prose, any forces one available tool, named forces one specified" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** auto permits prose, any forces one available tool, named forces one specified. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Choose auto and hope for JSON" được nêu ở cơ chế tool_choice auto any named. Không đảm bảo xử lý được case và dễ che mất failure mode.
+### Giải thích
 
-**Exam heuristic:** Nếu đề xuất hiện "Must extract unknown document category as structured record", ưu tiên phân biệt `tool_choice auto any named` với các lựa chọn mô tả chuyện khác.
+Tham số `tool_choice` điều khiển việc model có phải dùng tool không:
 
-### Q03. Nếu sự cố **Contract has no delivery date** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+| Giá trị | Hành vi | Khi dùng |
+|---|---|---|
+| `{"type": "auto"}` | Model tự quyết: gọi tool hoặc trả văn bản | Agent hội thoại thông thường |
+| `{"type": "any"}` | Phải gọi một tool, model chọn tool nào | Có nhiều extractor theo loại tài liệu, chưa biết loại nào |
+| `{"type": "tool", "name": "..."}` | Phải gọi đúng tool này | Luôn cần một cấu trúc cụ thể; ép bước đầu của pipeline |
 
-- **A.** Make date required and guess; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Invent nearest confident category; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Declare every JSON schema-valid output accurate; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Allow null/optional with explicit missing semantics; kèm kiểm thử lại điều kiện và ghi evidence.
+Ví dụ: hệ thống nhận tài liệu chưa biết loại (hoá đơn, hợp đồng, biên nhận), mỗi loại có một tool trích xuất với schema riêng. Dùng `auto` thì model có thể trả lời bằng văn bản ("đây có vẻ là hoá đơn...") và bạn không có bản ghi có cấu trúc. Dùng `any` thì chắc chắn có một lời gọi tool, và model chọn extractor phù hợp. Nếu bước nào cũng phải ra đúng một cấu trúc (ví dụ luôn `extract_metadata` trước), dùng tên tool cụ thể.
 
-**Đáp án: D**
+Lưu ý: với `any` hoặc tool cụ thể, model sẽ **không viết text giải thích trước tool call**; nếu muốn có lập luận, hãy đưa một trường như `reasoning` vào schema. Và ép tool bằng `tool_choice` chắc chắn hơn nhiều so với dặn "luôn gọi tool" trong prompt.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Keyword
 
-- **A:** **Sai.** Đây chính là bẫy "Make date required and guess" được nêu ở cơ chế Nullable optional fields. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Ambiguity enums**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Tool schema versus semantics**, không giải quyết được yêu cầu cốt lõi "Missing input must not pressure invented required values" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Missing input must not pressure invented required values. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+- `tool_choice` — tham số điều khiển việc model có bắt buộc gọi tool hay không
+- `auto` — model tự quyết định gọi tool hay trả văn bản
+- `any` — bắt buộc gọi một tool bất kỳ trong danh sách
+- `forced tool` — chỉ định đích danh tool bắt buộc gọi
+- `forced tool selection` — buộc chọn tool bằng cấu hình thay vì bằng prompt
+- `typed extractor` — tool trích xuất có schema riêng cho từng loại tài liệu
 
-**Exam heuristic:** Nếu đề xuất hiện "Contract has no delivery date", ưu tiên phân biệt `Nullable optional fields` với các lựa chọn mô tả chuyện khác.
+### Bẫy đề thi
 
-### Q04. Để viết acceptance criteria cho tình huống **Input does not fit enum invoice/receipt**, lựa chọn nào thể hiện ranh giới đúng?
+- ✗ Dùng `auto` và hy vọng model trả JSON ⇒ ✓ Dùng `any` hoặc chỉ định tool khi bắt buộc có output có cấu trúc
+- ✗ Dùng tool cụ thể khi chưa biết loại tài liệu ⇒ ✓ Dùng `any` để model chọn trong các extractor
+- ✗ Dặn trong prompt "luôn gọi tool" thay cho `tool_choice` ⇒ ✓ Dùng cấu hình `tool_choice` để bảo đảm
 
-- **A.** Return unclear or other plus detail; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Invent nearest confident category; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Declare every JSON schema-valid output accurate; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Choose auto and hope for JSON; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+### Câu hỏi
 
-**Đáp án: A**
+#### Q1. Hệ thống nhận tài liệu có thể là hoá đơn, hợp đồng hoặc biên nhận; mỗi loại có một tool trích xuất riêng, và mọi kết quả đều phải là bản ghi có cấu trúc. Cấu hình `tool_choice` nào phù hợp?
+- A. `auto`
+- B. `any`
+- C. Chỉ định tool `extract_invoice`
+- D. Không truyền `tools`, chỉ dặn trong prompt
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** B
 
-- **A:** **Đúng.** Use unclear or other+detail to express uncertainty. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Invent nearest confident category" được nêu ở cơ chế Ambiguity enums. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Tool schema versus semantics**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **tool_choice auto any named**, không giải quyết được yêu cầu cốt lõi "Use unclear or other+detail to express uncertainty" và thiếu điều kiện kiểm chứng.
+**Giải thích:** `any` buộc phải gọi một tool và để model chọn extractor đúng. A cho phép trả văn bản. C sai với hợp đồng và biên nhận. D không có bảo đảm cấu trúc.
 
-**Exam heuristic:** Nếu đề xuất hiện "Input does not fit enum invoice/receipt", ưu tiên phân biệt `Ambiguity enums` với các lựa chọn mô tả chuyện khác.
+#### Q2. Bước đầu của pipeline luôn phải chạy tool `extract_metadata` trước mọi bước khác. Cách đáng tin cậy nhất?
+- A. Viết trong prompt "Hãy luôn gọi extract_metadata trước"
+- B. Dùng `tool_choice` `auto`
+- C. Dùng `tool_choice` chỉ định `{"type": "tool", "name": "extract_metadata"}`
+- D. Dùng `any` và hy vọng model chọn đúng
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Declare every JSON schema-valid output accurate**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+**Đáp án:** C
 
-- **A.** Make date required and guess; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Validate sums using deterministic code; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Declare every JSON schema-valid output accurate; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Choose auto and hope for JSON; áp dụng trực tiếp dù cơ chế sự cố khác.
+**Giải thích:** Chỉ định tên tool bảo đảm bằng cấu hình rằng tool này được gọi. A phụ thuộc prompt. B cho phép bỏ qua tool. D vẫn để model chọn tool khác.
 
-**Đáp án: B**
+## K3. Trường optional và nullable để không ép model bịa
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Trọng tâm
 
-- **A:** **Sai.** Phương án thuộc **Nullable optional fields**, không giải quyết được yêu cầu cốt lõi "Schema constrains types/shape, not factual or arithmetic correctness" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Schema constrains types/shape, not factual or arithmetic correctness. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Declare every JSON schema-valid output accurate" được nêu ở cơ chế Tool schema versus semantics. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **tool_choice auto any named**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+Trường có thể vắng trong tài liệu phải là **optional hoặc nullable** (với ý nghĩa "không có" rõ ràng); đừng đặt `required` cho dữ liệu không phải lúc nào cũng tồn tại.
 
-**Exam heuristic:** Nếu đề xuất hiện "Invoice JSON well-formed but total wrong", ưu tiên phân biệt `Tool schema versus semantics` với các lựa chọn mô tả chuyện khác.
+### Giải thích
 
-### Q06. Sau khi audit phát hiện **Must extract unknown document category as structured record**, điều gì là cải tiến có thể kiểm chứng?
+Khi schema đánh dấu một trường là bắt buộc, model **buộc phải điền một giá trị** cho nó. Nếu tài liệu (ví dụ hợp đồng) không hề có ngày giao hàng mà `delivery_date` là `required` kiểu string, model chỉ còn cách đoán một ngày hoặc lấy ngày bất kỳ cho đúng hình dạng. Đây là hallucination do chính thiết kế schema gây ra: model làm đúng yêu cầu của bạn, nhưng yêu cầu đó sai.
 
-- **A.** Make date required and guess; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Invent nearest confident category; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Choose any among typed extractors; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Choose auto and hope for JSON; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+Thiết kế an toàn:
 
-**Đáp án: C**
+```json
+"delivery_date": {
+  "type": ["string", "null"],
+  "description": "Ngày giao theo hợp đồng (YYYY-MM-DD). null nếu tài liệu không nêu."
+}
+```
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- Chỉ đưa vào `required` những trường chắc chắn luôn có.
+- Với trường có thể vắng: cho phép `null` (hoặc bỏ khỏi `required`) và **nêu rõ trong `description`** rằng vắng thì trả `null`, không đoán.
+- Khi xử lý ở downstream, `null` được hiểu là "tài liệu không nói", khác với chuỗi rỗng hay giá trị mặc định giả như "1970-01-01".
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Nullable optional fields**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Ambiguity enums**, không giải quyết được yêu cầu cốt lõi "auto permits prose, any forces one available tool, named forces one specified" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** auto permits prose, any forces one available tool, named forces one specified. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Choose auto and hope for JSON" được nêu ở cơ chế tool_choice auto any named. Không đảm bảo xử lý được case và dễ che mất failure mode.
+Điều này khớp nguyên tắc chung: để thiếu dữ liệu là trạng thái hợp lệ và được ghi nhận, thay vì được che đi bằng dữ liệu bịa.
 
-**Exam heuristic:** Nếu đề xuất hiện "Must extract unknown document category as structured record", ưu tiên phân biệt `tool_choice auto any named` với các lựa chọn mô tả chuyện khác.
+### Keyword
 
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Contract has no delivery date**, nên chọn gì?
+- `optional field` — trường không bắt buộc phải có trong output
+- `nullable` — trường cho phép giá trị `null`
+- `required` — danh sách trường bắt buộc trong JSON Schema
+- `hallucination` — model tạo ra thông tin không có căn cứ
+- `missing data semantics` — quy ước về ý nghĩa khi dữ liệu vắng (ví dụ `null` = không có trong tài liệu)
+- `field description` — mô tả của trường, nơi hướng dẫn model cách xử lý khi không có dữ liệu
 
-- **A.** Make date required and guess; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Invent nearest confident category; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Declare every JSON schema-valid output accurate; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Allow null/optional with explicit missing semantics; kèm kiểm thử lại điều kiện và ghi evidence.
+### Bẫy đề thi
 
-**Đáp án: D**
+- ✗ Đánh dấu mọi trường là `required` cho "đầy đủ" ⇒ ✓ Trường có thể vắng nên optional/nullable
+- ✗ Dùng giá trị mặc định giả (ngày mặc định, chuỗi "N/A" lẫn lộn) cho dữ liệu thiếu ⇒ ✓ Dùng `null` với ý nghĩa rõ ràng
+- ✗ Quy lỗi bịa giá trị cho model thay vì schema ⇒ ✓ Kiểm tra xem schema có ép trường bắt buộc không
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Câu hỏi
 
-- **A:** **Sai.** Đây chính là bẫy "Make date required and guess" được nêu ở cơ chế Nullable optional fields. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Ambiguity enums**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Tool schema versus semantics**, không giải quyết được yêu cầu cốt lõi "Missing input must not pressure invented required values" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Missing input must not pressure invented required values. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+#### Q1. Một số hợp đồng không nêu ngày giao hàng, nhưng model vẫn điền một ngày nghe hợp lý. Schema hiện có `delivery_date` là `required` kiểu string. Nguyên nhân và cách sửa?
+- A. Model bị lỗi; tăng temperature
+- B. Nên thêm ví dụ few-shot với nhiều ngày khác nhau
+- C. Schema ép phải có giá trị; đổi sang nullable/optional và ghi rõ "null nếu tài liệu không nêu"
+- D. Dùng `tool_choice` chỉ định tool để thoát tình trạng này
 
-**Exam heuristic:** Nếu đề xuất hiện "Contract has no delivery date", ưu tiên phân biệt `Nullable optional fields` với các lựa chọn mô tả chuyện khác.
+**Đáp án:** C
 
-### Q08. Một reviewer nêu giải pháp **Invent nearest confident category**. Đánh giá chính xác nhất là gì?
+**Giải thích:** Trường required buộc model phải điền gì đó. Cho phép null loại bỏ áp lực này. A không liên quan. B có thể làm bịa nhiều hơn. D không thay đổi ràng buộc required.
 
-- **A.** Return unclear or other plus detail; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Invent nearest confident category; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Declare every JSON schema-valid output accurate; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Choose auto and hope for JSON; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+#### Q2. Cách nào biểu diễn "tài liệu không có thông tin" tốt nhất trong output của tool?
+- A. `null` cho trường nullable, có mô tả rõ nghĩa
+- B. Chuỗi "unknown" ở một số tài liệu và chuỗi rỗng ở số khác
+- C. Ngày mặc định 1970-01-01
+- D. Bỏ cả document
 
-**Đáp án: A**
+**Đáp án:** A
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Giải thích:** `null` có nghĩa thống nhất là "tài liệu không nêu", dễ xử lý ở downstream. B làm dữ liệu không đồng nhất. C là giá trị giả dễ bị nhầm với dữ liệu thật. D vứt bỏ cả phần thông tin còn lại.
 
-- **A:** **Đúng.** Use unclear or other+detail to express uncertainty. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Invent nearest confident category" được nêu ở cơ chế Ambiguity enums. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Tool schema versus semantics**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **tool_choice auto any named**, không giải quyết được yêu cầu cốt lõi "Use unclear or other+detail to express uncertainty" và thiếu điều kiện kiểm chứng.
+## K4. Enum có giá trị `unclear`/`other` cho ca mơ hồ
 
-**Exam heuristic:** Nếu đề xuất hiện "Input does not fit enum invoice/receipt", ưu tiên phân biệt `Ambiguity enums` với các lựa chọn mô tả chuyện khác.
+### Trọng tâm
 
-### Q09. Trong thử nghiệm đối chứng với tình huống **Invoice JSON well-formed but total wrong**, tiêu chí pass phù hợp là gì?
+Với trường enum, luôn có lối thoát như `unclear` hoặc `other` kèm trường chi tiết, để model không phải **ép vào nhãn gần nhất** khi đầu vào không khớp.
 
-- **A.** Make date required and guess; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Validate sums using deterministic code; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Declare every JSON schema-valid output accurate; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Choose auto and hope for JSON; áp dụng trực tiếp dù cơ chế sự cố khác.
+### Giải thích
 
-**Đáp án: B**
+Giả sử `document_type` có enum `["invoice", "receipt"]`. Khi gặp một đơn đặt hàng hoặc một tài liệu hỗn hợp, model buộc phải chọn một trong hai giá trị, và nó sẽ chọn "gần nhất" một cách tự tin. Kết quả trông hợp lệ (đúng enum) nhưng thực tế sai, và còn sai một cách **âm thầm**: downstream không có cách nào phân biệt ca chắc chắn với ca bị ép.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Thiết kế tốt hơn:
 
-- **A:** **Sai.** Phương án thuộc **Nullable optional fields**, không giải quyết được yêu cầu cốt lõi "Schema constrains types/shape, not factual or arithmetic correctness" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Schema constrains types/shape, not factual or arithmetic correctness. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Declare every JSON schema-valid output accurate" được nêu ở cơ chế Tool schema versus semantics. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **tool_choice auto any named**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+```json
+"document_type": {"type": "string", "enum": ["invoice", "receipt", "other", "unclear"]},
+"document_type_detail": {"type": ["string", "null"],
+  "description": "Bắt buộc mô tả ngắn khi document_type là other hoặc unclear"}
+```
 
-**Exam heuristic:** Nếu đề xuất hiện "Invoice JSON well-formed but total wrong", ưu tiên phân biệt `Tool schema versus semantics` với các lựa chọn mô tả chuyện khác.
+- `other` + `detail`: tài liệu rõ ràng là một loại **chưa có trong danh sách**; trường chi tiết ghi loại đó (giúp bạn phát hiện loại mới cần bổ sung vào enum).
+- `unclear`: không đủ thông tin để phân loại chắc chắn.
+- Các ca `other/unclear` được định tuyến cho người xem hoặc pipeline xử lý khác, thay vì đi tiếp như dữ liệu đáng tin.
 
-### Q10. Để giảm lỗi tái diễn với **Must extract unknown document category as structured record**, biện pháp nào phù hợp với cơ chế đã học?
+Đây cũng là cách biến độ không chắc chắn thành tín hiệu có cấu trúc mà code có thể xử lý, ưu việt hơn việc bảo model tự báo "tôi không chắc" bằng văn bản.
 
-- **A.** Make date required and guess; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Invent nearest confident category; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Choose any among typed extractors; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Choose auto and hope for JSON; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+### Keyword
 
-**Đáp án: C**
+- `enum` — tập giá trị cố định được phép của một trường
+- `other + detail` — giá trị "khác" kèm trường mô tả chi tiết
+- `unclear` — giá trị biểu thị không đủ căn cứ để phân loại
+- `forced fit` — bị ép vào nhãn gần nhất dù không thật sự khớp
+- `silent misclassification` — phân loại sai mà không có dấu hiệu cảnh báo
+- `extensible schema` — schema dễ mở rộng khi phát hiện loại mới
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Bẫy đề thi
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Nullable optional fields**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Ambiguity enums**, không giải quyết được yêu cầu cốt lõi "auto permits prose, any forces one available tool, named forces one specified" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** auto permits prose, any forces one available tool, named forces one specified. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Choose auto and hope for JSON" được nêu ở cơ chế tool_choice auto any named. Không đảm bảo xử lý được case và dễ che mất failure mode.
+- ✗ Enum đóng chỉ gồm các loại đã biết ⇒ ✓ Thêm `other` (kèm detail) và `unclear` cho ca ngoài danh sách hoặc mơ hồ
+- ✗ Bảo model chọn nhãn gần nhất rồi tin kết quả ⇒ ✓ Cho phép trả `unclear` để chuyển người xem
+- ✗ Thêm `other` nhưng không có trường mô tả ⇒ ✓ Kèm `detail` để biết đó là loại gì
 
-**Exam heuristic:** Nếu đề xuất hiện "Must extract unknown document category as structured record", ưu tiên phân biệt `tool_choice auto any named` với các lựa chọn mô tả chuyện khác.
+### Câu hỏi
 
-## 6. Lab / Bài thực hành tự kiểm tra
+#### Q1. Trường `document_type` có enum `invoice`/`receipt`. Khi gặp đơn đặt hàng, model vẫn trả `invoice` rất tự tin. Thiết kế nào xử lý tốt nhất?
+- A. Thêm vào prompt "hãy rất cẩn thận khi phân loại"
+- B. Thêm `other` kèm trường `detail` và `unclear` vào enum, định tuyến các ca này cho người xem
+- C. Bỏ trường `document_type`
+- D. Dùng `auto` thay vì `any`
 
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "Invoice JSON well-formed but total wrong".
+**Đáp án:** B
 
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Validate sums using deterministic code.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
+**Giải thích:** Enum đóng ép model chọn nhãn gần nhất; thêm lối thoát giúp lộ ra ca không khớp. A chỉ dặn mơ hồ. C mất thông tin phân loại. D không liên quan, còn có thể trả văn bản thay vì tool.
 
-## 7. Cheat sheet / Ôn nhanh
+#### Q2. Vì sao `other` nên đi kèm một trường mô tả chi tiết?
+- A. Để schema dài hơn cho đầy đủ
+- B. Vì JSON Schema bắt buộc
+- C. Để tăng tốc độ sinh output
+- D. Để biết tài liệu thuộc loại gì và phát hiện loại mới cần thêm vào enum
 
-- **Tool schema versus semantics:** Schema constrains types/shape, not factual or arithmetic correctness. ✓ Validate sums using deterministic code. ✗ Declare every JSON schema-valid output accurate.
-- **tool_choice auto any named:** auto permits prose, any forces one available tool, named forces one specified. ✓ Choose any among typed extractors. ✗ Choose auto and hope for JSON.
-- **Nullable optional fields:** Missing input must not pressure invented required values. ✓ Allow null/optional with explicit missing semantics. ✗ Make date required and guess.
-- **Ambiguity enums:** Use unclear or other+detail to express uncertainty. ✓ Return unclear or other plus detail. ✗ Invent nearest confident category.
+**Đáp án:** D
 
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/4-prompt-engineering/4-3-structured-output
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** `detail` biến `other` thành thông tin có thể hành động (bổ sung loại mới, xem lại ca). A, B, C không phải lý do thực tế.

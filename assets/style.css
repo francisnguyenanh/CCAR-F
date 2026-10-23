@@ -313,3 +313,20 @@ h1, h2, h3, h4 { line-height: 1.3; }
 .cheat td.ok { background: var(--ok-soft); } .cheat td.bad { background: var(--bad-soft); }
 .ls.foot { opacity: .85; }
 @media (max-width: 640px) { .do-dont { grid-template-columns: 1fr; } }
+
+/* ---------- Lesson K-cards ---------- */
+.k-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 20px 18px; margin: 22px 0; box-shadow: var(--shadow); }
+.k-card > h2 { margin: 14px 0 12px; font-size: 19px; }
+.k-card > h2 .num { background: var(--accent-soft); color: var(--accent); padding: 2px 9px; border-radius: 8px; min-width: 0; }
+.focus { background: var(--accent-soft); border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0; padding: 10px 14px; font-weight: 600; }
+.focus .lbl { color: var(--accent); } .focus p { margin: 2px 0; }
+.k-sec { margin-top: 18px; }
+.k-sec > h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 8px; }
+.k-sec > :last-child { margin-bottom: 0; }
+.kw { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.kw th, .kw td { border-bottom: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
+.kw th { width: 32%; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 600; color: var(--accent); white-space: normal; word-break: break-word; }
+.practice-q .qstem { font-weight: 600; margin-bottom: 4px; }
+.practice-q .qstem p { margin: 4px 0; }
+.k-card .practice-q { box-shadow: none; background: var(--bg); }
+.k-card .practice-q details > p { margin: 6px 0; }

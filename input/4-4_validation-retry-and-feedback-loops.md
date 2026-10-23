@@ -1,326 +1,262 @@
-# 4.4 — Validation, Retry, and Feedback Loops
+# 4.4 — Validation, Retry and Feedback Loops
 
-> Domain 4: Prompt Engineering & Structured Output · Tỷ trọng toàn domain: 20%
-> Source lesson: https://claudecertificationguide.com/learn/4-prompt-engineering/4-4-validation-retry-loops
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+Output có cấu trúc của model sẽ có lúc sai. Bài này nói về cách **phát hiện sai bằng validator** và **sửa bằng vòng retry có phản hồi** (feedback loop), đồng thời biết khi nào retry **vô ích** (dữ kiện vốn không tồn tại) và cách ghi lại các mẫu bất đồng giữa model và người duyệt để cải tiến prompt.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Validation, Retry, and Feedback Loops**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Điểm thi hay gặp: retry đúng nghĩa là gửi lại **tài liệu gốc + kết quả sai + thông báo lỗi cụ thể**, chứ không phải gọi lại y nguyên; retry không bịa ra được dữ liệu thiếu; schema hợp lệ vẫn cần validator ngữ nghĩa; và các lần người dùng bác finding là dữ liệu quý cho cải tiến. Quy tắc nhớ nhanh: **cho model biết chính xác sai ở đâu; đừng retry thứ không thể sửa; ghi lại lý do bị bác để học.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Retry có phản hồi (feedback-aware retry)
 
-### 2.1. Feedback-aware retry
+### Trọng tâm
 
-**Principle (EN):** Retry with source, bad extraction and exact validation error.
+Khi validator báo lỗi, vòng sửa phải gửi **ba thứ**: tài liệu nguồn, kết quả trích xuất sai và **thông báo lỗi cụ thể** từ validator, không chỉ chạy lại prompt cũ.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **retry with source, bad extraction and exact validation error**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** Line-item sum 450 while stated total 500.
+Gọi lại cùng một prompt chỉ cho kết quả tương tự (hoặc ngẫu nhiên khác) vì model không biết lần trước sai chỗ nào. Muốn sửa có định hướng, bạn đưa vào lượt sau:
 
-**Recommended implementation:** Send all three elements to correction pass.
+1. **Nguồn gốc**: tài liệu gốc, để model đối chiếu lại.
+2. **Kết quả sai**: bản trích xuất lần trước.
+3. **Lỗi chính xác**: ví dụ "Tổng các line_items là 450 nhưng total ghi 500. Hãy kiểm tra lại các dòng hoặc total theo tài liệu."
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Retry same prompt without error feedback.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Line-item sum 450 while stated total 500".
-- Decision: áp dụng nguyên tắc **Feedback-aware retry** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Send all three elements to correction pass" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.2. Retry effectiveness boundary
-
-**Principle (EN):** Fix recoverable mis-extractions, not absent facts.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **fix recoverable mis-extractions, not absent facts**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Document genuinely lacks department name.
-
-**Recommended implementation:** Return null/escalate instead of guessing.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Retry ten times for nonexistent value.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Document genuinely lacks department name".
-- Decision: áp dụng nguyên tắc **Retry effectiveness boundary** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Return null/escalate instead of guessing" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.3. Deterministic semantic validator
-
-**Principle (EN):** Schema-valid values still need arithmetic and business checks.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **schema-valid values still need arithmetic and business checks**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Due date earlier than issued date in extracted invoice.
-
-**Recommended implementation:** Add typed validator and explicit failure reasons.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Treat schema conformance as semantic proof.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Due date earlier than issued date in extracted invoice".
-- Decision: áp dụng nguyên tắc **Deterministic semantic validator** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Add typed validator and explicit failure reasons" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.4. Track disagreement patterns
-
-**Principle (EN):** Record detected_pattern and reviewer dismissals for refinement.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **record detected_pattern and reviewer dismissals for refinement**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Many reports of benign shadowing are rejected by developers.
-
-**Recommended implementation:** Group by pattern then improve criteria and examples.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Hide dismissal history.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Many reports of benign shadowing are rejected by developers".
-- Decision: áp dụng nguyên tắc **Track disagreement patterns** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Group by pattern then improve criteria and examples" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-## 3. Ví dụ thiết kế / Worked engineering example
-
-**Problem:** Line-item sum 450 while stated total 500.
-
-**Bad design:** Retry same prompt without error feedback.
-
-**Better design:** Send all three elements to correction pass.
-
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
-
-### Walkthrough: decision trace / Luồng xử lý
-
-```text
-INPUT  : Line-item sum 450 while stated total 500.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Send all three elements to correction pass.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
+```python
+for attempt in range(MAX_RETRIES + 1):
+    result = extract(document, feedback=errors_from_last_try)
+    errors = validate(result)        # code kiểm tra xác định
+    if not errors:
+        return result
+    messages += [
+        {"role": "assistant", "content": result_as_text},
+        {"role": "user", "content": f"Kết quả sai: {errors}. Đối chiếu lại tài liệu và sửa."},
+    ]
+return mark_for_human_review(document, result, errors)
 ```
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+Vì sao đủ cả ba? Chỉ có lỗi mà không có nguồn thì model đoán; chỉ có nguồn mà không có lỗi thì model lặp lại cùng cách đọc; thiếu bản sai thì khó biết cần sửa phần nào. Thông báo lỗi càng **cụ thể và có thể hành động** (trường nào, giá trị nào, quy tắc nào bị vi phạm) thì tỉ lệ sửa đúng càng cao.
 
-## 4. Exam traps / Bẫy dễ nhầm
+Luôn đặt **giới hạn số lần retry**, và khi hết lượt vẫn lỗi thì chuyển người xem, không âm thầm trả kết quả sai.
 
-1. **Bẫy Feedback-aware retry:** "Retry same prompt without error feedback" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở feedback-aware retry, rồi chọn "Send all three elements to correction pass".
+### Keyword
 
-2. **Bẫy Retry effectiveness boundary:** "Retry ten times for nonexistent value" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở retry effectiveness boundary, rồi chọn "Return null/escalate instead of guessing".
+- `feedback loop` — vòng lặp đưa lỗi của lần trước vào lần sau để sửa
+- `validation error message` — thông báo lỗi cụ thể do validator tạo ra
+- `retry with feedback` — thử lại có kèm phản hồi lỗi, khác với thử lại y nguyên
+- `source document` — tài liệu gốc cần đối chiếu
+- `retry limit` — giới hạn số lần thử lại
+- `human review fallback` — chuyển cho người xem khi không tự sửa được
 
-3. **Bẫy Deterministic semantic validator:** "Treat schema conformance as semantic proof" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở deterministic semantic validator, rồi chọn "Add typed validator and explicit failure reasons".
+### Bẫy đề thi
 
-4. **Bẫy Track disagreement patterns:** "Hide dismissal history" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở track disagreement patterns, rồi chọn "Group by pattern then improve criteria and examples".
+- ✗ Retry bằng đúng prompt cũ khi validator báo lỗi ⇒ ✓ Gửi nguồn + kết quả sai + lỗi cụ thể
+- ✗ Chỉ nói "kết quả sai, hãy thử lại" ⇒ ✓ Nêu rõ trường nào sai và quy tắc nào bị vi phạm
+- ✗ Retry vô hạn cho đến khi qua ⇒ ✓ Có giới hạn, hết lượt thì chuyển người xem
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+### Câu hỏi
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+#### Q1. Validator phát hiện tổng các dòng hoá đơn là 450 nhưng `total` trích ra là 500. Cách thực hiện lần retry hiệu quả nhất?
+- A. Gọi lại đúng prompt ban đầu
+- B. Gửi tài liệu gốc, bản trích xuất sai và thông báo "tổng các dòng 450 khác total 500", yêu cầu đối chiếu và sửa
+- C. Tăng `max_tokens` rồi gọi lại
+- D. Bỏ field `total`
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **Line-item sum 450 while stated total 500**. Phương án nào phù hợp nhất?
+**Đáp án:** B
 
-- **A.** Treat schema conformance as semantic proof; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Send all three elements to correction pass; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Retry same prompt without error feedback; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Retry ten times for nonexistent value; áp dụng trực tiếp dù cơ chế sự cố khác.
+**Giải thích:** B cung cấp đủ ba yếu tố để sửa có định hướng. A thường tái tạo cùng lỗi. C không liên quan nguyên nhân. D loại bỏ dữ liệu cần thiết thay vì sửa.
 
-**Đáp án: B**
+#### Q2. Sau 3 lần retry có phản hồi, extraction vẫn không qua validator. Hành vi nào phù hợp?
+- A. Trả kết quả lần cuối như thể đã hợp lệ
+- B. Tiếp tục retry cho tới khi qua, không giới hạn
+- C. Xoá kết quả và coi như tài liệu không tồn tại
+- D. Đánh dấu thất bại kèm lỗi và chuyển cho người xem
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** D
 
-- **A:** **Sai.** Phương án thuộc **Deterministic semantic validator**, không giải quyết được yêu cầu cốt lõi "Retry with source, bad extraction and exact validation error" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Retry with source, bad extraction and exact validation error. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Retry same prompt without error feedback" được nêu ở cơ chế Feedback-aware retry. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Retry effectiveness boundary**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+**Giải thích:** Hết lượt thì phải minh bạch và chuyển người xem. A là thất bại âm thầm. B có thể lặp vô hạn, tốn chi phí. C làm mất dữ liệu.
 
-**Exam heuristic:** Nếu đề xuất hiện "Line-item sum 450 while stated total 500", ưu tiên phân biệt `Feedback-aware retry` với các lựa chọn mô tả chuyện khác.
+## K2. Ranh giới hiệu quả của retry
 
-### Q02. Một kỹ sư đề xuất **Retry ten times for nonexistent value** cho tình huống: Document genuinely lacks department name. Cần phản biện thế nào?
+### Trọng tâm
 
-- **A.** Treat schema conformance as semantic proof; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Hide dismissal history; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Return null/escalate instead of guessing; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Retry ten times for nonexistent value; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+Retry chỉ sửa được lỗi **trích xuất sai dữ kiện có thật** (đọc nhầm, sai định dạng, tính sai); không tạo ra được thông tin **không có trong tài liệu**. Trường hợp đó phải trả `null` hoặc escalate.
 
-**Đáp án: C**
+### Giải thích
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Hai nhóm lỗi khác hẳn nhau:
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Deterministic semantic validator**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Track disagreement patterns**, không giải quyết được yêu cầu cốt lõi "Fix recoverable mis-extractions, not absent facts" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Fix recoverable mis-extractions, not absent facts. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Retry ten times for nonexistent value" được nêu ở cơ chế Retry effectiveness boundary. Không đảm bảo xử lý được case và dễ che mất failure mode.
+| Nhóm lỗi | Ví dụ | Retry có ích? |
+|---|---|---|
+| **Recoverable mis-extraction** | Model đọc nhầm số, bỏ sót dòng, sai định dạng ngày, đặt giá trị vào sai trường | Có, nhất là khi kèm phản hồi cụ thể |
+| **Absent information** | Tài liệu không hề ghi tên phòng ban, thiếu ngày, trang bị mất | Không, thông tin không tồn tại |
 
-**Exam heuristic:** Nếu đề xuất hiện "Document genuinely lacks department name", ưu tiên phân biệt `Retry effectiveness boundary` với các lựa chọn mô tả chuyện khác.
+Với nhóm thứ hai, mỗi lần retry chỉ làm tăng nguy cơ model **bịa** một giá trị cho đạt yêu cầu validator, nhất là khi validator đòi trường phải khác rỗng. Vòng lặp "retry mười lần cho tới khi có tên phòng ban" là cách tốt nhất để lấy về một tên phòng ban giả.
 
-### Q03. Nếu sự cố **Due date earlier than issued date in extracted invoice** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+Cách phân biệt trong thực tế:
 
-- **A.** Treat schema conformance as semantic proof; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Hide dismissal history; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Retry same prompt without error feedback; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Add typed validator and explicit failure reasons; kèm kiểm thử lại điều kiện và ghi evidence.
+- Validator nên phân biệt được "giá trị sai" với "không có bằng chứng". Ví dụ cho phép trường là `null` kèm lý do, và không coi `null` hợp lệ là lỗi để retry.
+- Nếu retry có phản hồi mà model vẫn khẳng định "không tìm thấy trong tài liệu" thì tin điều đó, trả `null` hoặc chuyển người hay nguồn dữ liệu khác bổ sung (ví dụ hệ thống khác có thông tin phòng ban).
 
-**Đáp án: D**
+Retry là công cụ sửa lỗi đọc, không phải máy tạo dữ liệu.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Keyword
 
-- **A:** **Sai.** Đây chính là bẫy "Treat schema conformance as semantic proof" được nêu ở cơ chế Deterministic semantic validator. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Track disagreement patterns**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Feedback-aware retry**, không giải quyết được yêu cầu cốt lõi "Schema-valid values still need arithmetic and business checks" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Schema-valid values still need arithmetic and business checks. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+- `recoverable error` — lỗi có thể sửa bằng cách thử lại có định hướng
+- `absent information` — thông tin vốn không có trong tài liệu
+- `fabrication` — bịa thông tin cho đủ yêu cầu
+- `escalation` — chuyển lên người hoặc nguồn khác xử lý
+- `evidence-based null` — trả `null` vì không có bằng chứng, không phải do lỗi
+- `diminishing returns` — thêm nỗ lực nhưng hiệu quả không tăng
 
-**Exam heuristic:** Nếu đề xuất hiện "Due date earlier than issued date in extracted invoice", ưu tiên phân biệt `Deterministic semantic validator` với các lựa chọn mô tả chuyện khác.
+### Bẫy đề thi
 
-### Q04. Để viết acceptance criteria cho tình huống **Many reports of benign shadowing are rejected by developers**, lựa chọn nào thể hiện ranh giới đúng?
+- ✗ Retry nhiều lần cho tới khi trường thiếu có giá trị ⇒ ✓ Dữ kiện không tồn tại thì trả `null` hoặc escalate
+- ✗ Coi mọi lỗi validator đều do model đọc sai ⇒ ✓ Phân biệt lỗi đọc (retry được) với thông tin vắng (retry vô ích)
+- ✗ Ép validator bắt trường nào cũng phải khác rỗng ⇒ ✓ Cho phép `null` có chủ đích để tránh khuyến khích bịa
 
-- **A.** Group by pattern then improve criteria and examples; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Hide dismissal history; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Retry same prompt without error feedback; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Retry ten times for nonexistent value; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+### Câu hỏi
 
-**Đáp án: A**
+#### Q1. Một số tài liệu hoàn toàn không ghi tên phòng ban, validator báo "department rỗng" và pipeline retry 10 lần. Cách thiết kế đúng hơn?
+- A. Tăng số lần retry lên 20
+- B. Cho phép `department = null` khi không có bằng chứng và chuyển ca đó cho người hoặc nguồn dữ liệu khác
+- C. Thêm vào prompt "luôn phải điền phòng ban"
+- D. Dùng giá trị mặc định "General"
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** B
 
-- **A:** **Đúng.** Record detected_pattern and reviewer dismissals for refinement. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Hide dismissal history" được nêu ở cơ chế Track disagreement patterns. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Feedback-aware retry**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Retry effectiveness boundary**, không giải quyết được yêu cầu cốt lõi "Record detected_pattern and reviewer dismissals for refinement" và thiếu điều kiện kiểm chứng.
+**Giải thích:** Thông tin vắng thì retry không giúp; trả `null` và escalate là trung thực. A, C khuyến khích bịa. D che giấu việc thiếu bằng giá trị giả.
 
-**Exam heuristic:** Nếu đề xuất hiện "Many reports of benign shadowing are rejected by developers", ưu tiên phân biệt `Track disagreement patterns` với các lựa chọn mô tả chuyện khác.
+#### Q2. Trong các lỗi sau, lỗi nào hưởng lợi nhiều nhất từ retry có phản hồi?
+- A. Hoá đơn bị cắt mất trang chứa tên khách hàng
+- B. Model đọc "1,250" thành 1.25 vì nhầm định dạng số
+- C. Hợp đồng không có điều khoản bảo hành
+- D. File PDF trống
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Retry same prompt without error feedback**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+**Đáp án:** B
 
-- **A.** Treat schema conformance as semantic proof; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Send all three elements to correction pass; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Retry same prompt without error feedback; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Retry ten times for nonexistent value; áp dụng trực tiếp dù cơ chế sự cố khác.
+**Giải thích:** Dữ kiện có trong tài liệu và model đọc sai, phản hồi lỗi giúp đọc lại đúng. A, C, D là thông tin không tồn tại nên retry không tạo ra được.
 
-**Đáp án: B**
+## K3. Validator xác định cho ngữ nghĩa và nghiệp vụ
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Trọng tâm
 
-- **A:** **Sai.** Phương án thuộc **Deterministic semantic validator**, không giải quyết được yêu cầu cốt lõi "Retry with source, bad extraction and exact validation error" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Retry with source, bad extraction and exact validation error. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Retry same prompt without error feedback" được nêu ở cơ chế Feedback-aware retry. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Retry effectiveness boundary**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+Output qua schema vẫn cần **validator bằng code** cho kiểm tra số học và quy tắc nghiệp vụ, kèm **lý do lỗi tường minh** để làm phản hồi retry.
 
-**Exam heuristic:** Nếu đề xuất hiện "Line-item sum 450 while stated total 500", ưu tiên phân biệt `Feedback-aware retry` với các lựa chọn mô tả chuyện khác.
+### Giải thích
 
-### Q06. Sau khi audit phát hiện **Document genuinely lacks department name**, điều gì là cải tiến có thể kiểm chứng?
+Schema (xem 4.3) bảo đảm hình dạng. Phần còn lại, ý nghĩa, phải kiểm bằng code vì code **xác định, rẻ, và không bị model "thuyết phục"**. Ví dụ các kiểm tra điển hình:
 
-- **A.** Treat schema conformance as semantic proof; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Hide dismissal history; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Return null/escalate instead of guessing; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Retry ten times for nonexistent value; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+- Tổng các dòng bằng `total` (cho phép sai số làm tròn nhỏ).
+- `due_date` không được trước `issue_date`.
+- Mã sản phẩm tồn tại trong danh mục; số tiền không âm; tiền tệ nằm trong tập hỗ trợ.
+- Quan hệ giữa các trường (thuế = tổng × thuế suất).
 
-**Đáp án: C**
+Thiết kế validator nên trả về **danh sách lỗi có cấu trúc**, ví dụ:
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+```python
+def validate(inv) -> list[dict]:
+    errs = []
+    if inv["due_date"] < inv["issue_date"]:
+        errs.append({"field": "due_date",
+                     "reason": "due_date sớm hơn issue_date",
+                     "values": [inv["due_date"], inv["issue_date"]]})
+    return errs
+```
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Deterministic semantic validator**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Track disagreement patterns**, không giải quyết được yêu cầu cốt lõi "Fix recoverable mis-extractions, not absent facts" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Fix recoverable mis-extractions, not absent facts. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Retry ten times for nonexistent value" được nêu ở cơ chế Retry effectiveness boundary. Không đảm bảo xử lý được case và dễ che mất failure mode.
+Nhờ có `field`, `reason` và giá trị liên quan, bạn dùng nguyên danh sách này làm phản hồi trong vòng retry (K1). Cũng không nên dùng chính model làm "trọng tài" cho phép tính khi code làm được: model tự kiểm tra bản thân dễ gật đầu với lỗi của mình.
 
-**Exam heuristic:** Nếu đề xuất hiện "Document genuinely lacks department name", ưu tiên phân biệt `Retry effectiveness boundary` với các lựa chọn mô tả chuyện khác.
+Chỉ dùng model-based check cho những tiêu chí thật sự mang tính đánh giá (ví dụ "tóm tắt có trung thực không") mà code không biểu đạt được.
 
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Due date earlier than issued date in extracted invoice**, nên chọn gì?
+### Keyword
 
-- **A.** Treat schema conformance as semantic proof; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Hide dismissal history; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Retry same prompt without error feedback; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Add typed validator and explicit failure reasons; kèm kiểm thử lại điều kiện và ghi evidence.
+- `deterministic validator` — bộ kiểm tra bằng code cho kết quả xác định
+- `business rule` — quy tắc nghiệp vụ (ví dụ hạn thanh toán sau ngày phát hành)
+- `semantic check` — kiểm tra ý nghĩa nội dung
+- `structured error` — lỗi trả về có cấu trúc: trường, lý do, giá trị
+- `rounding tolerance` — sai số làm tròn cho phép khi so sánh số
+- `self-verification` — model tự kiểm tra kết quả của chính mình, kém tin cậy hơn code
 
-**Đáp án: D**
+### Bẫy đề thi
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- ✗ Coi kết quả đã khớp schema là đã được kiểm chứng ⇒ ✓ Thêm validator ngữ nghĩa cho số học và nghiệp vụ
+- ✗ Nhờ model tự kiểm tra phép cộng của chính nó ⇒ ✓ Dùng code cho kiểm tra xác định
+- ✗ Validator chỉ trả "invalid" chung chung ⇒ ✓ Trả trường, lý do và giá trị để làm phản hồi retry
 
-- **A:** **Sai.** Đây chính là bẫy "Treat schema conformance as semantic proof" được nêu ở cơ chế Deterministic semantic validator. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Track disagreement patterns**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Feedback-aware retry**, không giải quyết được yêu cầu cốt lõi "Schema-valid values still need arithmetic and business checks" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Schema-valid values still need arithmetic and business checks. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+### Câu hỏi
 
-**Exam heuristic:** Nếu đề xuất hiện "Due date earlier than issued date in extracted invoice", ưu tiên phân biệt `Deterministic semantic validator` với các lựa chọn mô tả chuyện khác.
+#### Q1. Trích xuất hoá đơn trả JSON hợp lệ theo schema nhưng có `due_date` sớm hơn `issue_date`. Biện pháp phù hợp nhất?
+- A. Tin schema vì đã hợp lệ
+- B. Thêm ví dụ few-shot cho mọi cặp ngày có thể
+- C. Thêm validator kiểm tra thứ tự ngày, trả lỗi có cấu trúc và dùng làm phản hồi retry
+- D. Bảo model "hãy kiểm tra lại ngày" mà không có lỗi cụ thể
 
-### Q08. Một reviewer nêu giải pháp **Hide dismissal history**. Đánh giá chính xác nhất là gì?
+**Đáp án:** C
 
-- **A.** Group by pattern then improve criteria and examples; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Hide dismissal history; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Retry same prompt without error feedback; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Retry ten times for nonexistent value; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+**Giải thích:** Quy tắc ngày là xác định, nên kiểm bằng code và đưa lý do vào retry. A bỏ qua lỗi ngữ nghĩa. B không bảo đảm. D thiếu thông tin cụ thể để sửa.
 
-**Đáp án: A**
+#### Q2. Đội muốn kiểm tra tổng hoá đơn khớp các dòng. Cách đáng tin cậy nhất?
+- A. Gọi model thứ hai hỏi "tổng này có đúng không"
+- B. Yêu cầu model tự giải thích phép cộng
+- C. Dùng code cộng các dòng, so với total với sai số làm tròn nhỏ
+- D. Chấp nhận nếu model nói "tôi chắc chắn"
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** C
 
-- **A:** **Đúng.** Record detected_pattern and reviewer dismissals for refinement. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Hide dismissal history" được nêu ở cơ chế Track disagreement patterns. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Feedback-aware retry**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Retry effectiveness boundary**, không giải quyết được yêu cầu cốt lõi "Record detected_pattern and reviewer dismissals for refinement" và thiếu điều kiện kiểm chứng.
+**Giải thích:** Phép cộng là xác định, code làm chính xác và rẻ. A, B đưa mô hình vào việc không cần thiết và có thể sai. D dựa vào lời tự tin không kiểm chứng.
 
-**Exam heuristic:** Nếu đề xuất hiện "Many reports of benign shadowing are rejected by developers", ưu tiên phân biệt `Track disagreement patterns` với các lựa chọn mô tả chuyện khác.
+## K4. Theo dõi mẫu bất đồng để cải tiến (`detected_pattern` và dismissal)
 
-### Q09. Trong thử nghiệm đối chứng với tình huống **Line-item sum 450 while stated total 500**, tiêu chí pass phù hợp là gì?
+### Trọng tâm
 
-- **A.** Treat schema conformance as semantic proof; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Send all three elements to correction pass; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Retry same prompt without error feedback; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Retry ten times for nonexistent value; áp dụng trực tiếp dù cơ chế sự cố khác.
+Ghi lại cho mỗi finding một **mẫu phát hiện (`detected_pattern`)** và việc người duyệt **bác/chấp nhận**; nhóm theo pattern để biết cần chỉnh tiêu chí hay ví dụ ở đâu.
 
-**Đáp án: B**
+### Giải thích
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Khi hệ thống chạy thật, người duyệt (developer, kiểm toán viên) sẽ bác một số finding. Mỗi lần bác là **tín hiệu học** nếu bạn lưu lại có cấu trúc. Thiết kế gợi ý: mỗi finding có trường `detected_pattern` (ví dụ `variable_shadowing`, `unused_import`, `sql_concat`) và ghi nhận quyết định (`accepted` / `dismissed`, kèm lý do ngắn nếu có).
 
-- **A:** **Sai.** Phương án thuộc **Deterministic semantic validator**, không giải quyết được yêu cầu cốt lõi "Retry with source, bad extraction and exact validation error" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Retry with source, bad extraction and exact validation error. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Retry same prompt without error feedback" được nêu ở cơ chế Feedback-aware retry. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Retry effectiveness boundary**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+Sau một thời gian, nhóm theo `detected_pattern`:
 
-**Exam heuristic:** Nếu đề xuất hiện "Line-item sum 450 while stated total 500", ưu tiên phân biệt `Feedback-aware retry` với các lựa chọn mô tả chuyện khác.
+| Pattern | Số finding | Tỉ lệ bị bác | Hành động |
+|---|---|---|---|
+| `variable_shadowing` | 120 | 85% | Tinh chỉnh tiêu chí, thêm ví dụ ca vô hại (4.1, 4.2) |
+| `sql_concat` | 40 | 5% | Giữ nguyên |
 
-### Q10. Để giảm lỗi tái diễn với **Document genuinely lacks department name**, biện pháp nào phù hợp với cơ chế đã học?
+Nhờ đó bạn biết cần sửa **đúng chỗ**: pattern bị bác nhiều thì cần tiêu chí/ví dụ tốt hơn hoặc tạm tắt (4.1); pattern ít bị bác thì giữ. Ngược lại, nếu giấu lịch sử bác hoặc không gắn pattern, bạn chỉ có cảm giác chung "hệ thống nhiễu" mà không biết sửa gì, và cùng một loại báo động giả sẽ lặp đi lặp lại.
 
-- **A.** Treat schema conformance as semantic proof; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Hide dismissal history; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Return null/escalate instead of guessing; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Retry ten times for nonexistent value; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+Đây là vòng cải tiến liên tục: **phát hiện → người duyệt phản hồi → thống kê theo pattern → chỉnh prompt → đo lại**.
 
-**Đáp án: C**
+### Keyword
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- `detected_pattern` — trường ghi mẫu/loại vấn đề đã phát hiện, dùng để nhóm thống kê
+- `dismissal` — việc người duyệt bác một finding
+- `acceptance rate` — tỉ lệ finding được chấp nhận
+- `feedback signal` — dữ liệu phản hồi dùng để cải tiến
+- `continuous improvement` — cải tiến liên tục dựa trên số liệu thực tế
+- `pattern grouping` — nhóm finding theo mẫu để phân tích
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Deterministic semantic validator**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Track disagreement patterns**, không giải quyết được yêu cầu cốt lõi "Fix recoverable mis-extractions, not absent facts" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Fix recoverable mis-extractions, not absent facts. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Retry ten times for nonexistent value" được nêu ở cơ chế Retry effectiveness boundary. Không đảm bảo xử lý được case và dễ che mất failure mode.
+### Bẫy đề thi
 
-**Exam heuristic:** Nếu đề xuất hiện "Document genuinely lacks department name", ưu tiên phân biệt `Retry effectiveness boundary` với các lựa chọn mô tả chuyện khác.
+- ✗ Xoá hoặc không lưu các finding bị bác ⇒ ✓ Lưu lịch sử bác kèm `detected_pattern` để phân tích
+- ✗ Chỉnh prompt dựa trên cảm giác "nhiễu quá" ⇒ ✓ Nhóm theo pattern, sửa nhóm có tỉ lệ bác cao
+- ✗ Chỉ lưu tổng số finding ⇒ ✓ Lưu số bị bác theo từng pattern
 
-## 6. Lab / Bài thực hành tự kiểm tra
+### Câu hỏi
 
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "Line-item sum 450 while stated total 500".
+#### Q1. Developer thường xuyên bác các finding "variable shadowing" của công cụ review. Để cải tiến một cách có hệ thống, bạn nên làm gì?
+- A. Xoá các finding bị bác khỏi log cho gọn
+- B. Tắt toàn bộ công cụ
+- C. Chỉ nhắc model trong prompt "đừng báo quá nhiều"
+- D. Ghi `detected_pattern` và trạng thái bác, nhóm theo pattern để chỉnh tiêu chí và ví dụ của nhóm có tỉ lệ bác cao
 
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Send all three elements to correction pass.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
+**Đáp án:** D
 
-## 7. Cheat sheet / Ôn nhanh
+**Giải thích:** Có dữ liệu theo pattern thì sửa đúng chỗ. A xoá mất tín hiệu. B quá mức. C là chỉ dẫn mơ hồ không dựa trên dữ liệu.
 
-- **Feedback-aware retry:** Retry with source, bad extraction and exact validation error. ✓ Send all three elements to correction pass. ✗ Retry same prompt without error feedback.
-- **Retry effectiveness boundary:** Fix recoverable mis-extractions, not absent facts. ✓ Return null/escalate instead of guessing. ✗ Retry ten times for nonexistent value.
-- **Deterministic semantic validator:** Schema-valid values still need arithmetic and business checks. ✓ Add typed validator and explicit failure reasons. ✗ Treat schema conformance as semantic proof.
-- **Track disagreement patterns:** Record detected_pattern and reviewer dismissals for refinement. ✓ Group by pattern then improve criteria and examples. ✗ Hide dismissal history.
+#### Q2. Bảng thống kê cho thấy pattern `unused_import` có tỉ lệ bác 2%, còn `naming_convention` bác 90%. Kết luận hợp lý?
+- A. Cần cải thiện hoặc tạm tắt `naming_convention`, giữ `unused_import`
+- B. Cải thiện `unused_import` trước vì nó có tỉ lệ bác thấp
+- C. Hai pattern như nhau
+- D. Tắt cả hai
 
-## 8. Provenance & phạm vi
+**Đáp án:** A
 
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/4-prompt-engineering/4-4-validation-retry-loops
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Tỉ lệ bác cao cho thấy tiêu chí kém chính xác. B đảo ngược logic. C bỏ qua số liệu. D loại cả nhóm đang hoạt động tốt.

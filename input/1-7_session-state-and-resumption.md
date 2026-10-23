@@ -1,326 +1,233 @@
 # 1.7 — Session State and Resumption
 
-> Domain 1: Agentic Architecture & Orchestration · Tỷ trọng toàn domain: 27%
-> Source lesson: https://claudecertificationguide.com/learn/1-agentic-architecture/1-7-session-state-resumption
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+Công việc với agent thường kéo dài nhiều ngày: hôm nay phân tích kiến trúc, mai quay lại sửa tiếp. Bài này nói về cách **quản lý trạng thái phiên**: khi nào tiếp tục (**resume**), khi nào tách nhánh (**fork**), và đặc biệt là khi nào ngữ cảnh cũ đã **lỗi thời (stale)** nên không được tin tiếp.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Session State and Resumption**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Đề thi gài bẫy ở chỗ: resume nghe có vẻ luôn "thông minh" vì giữ được ngữ cảnh, nhưng nếu code đã đổi thì kết quả tool cũ trong lịch sử là thông tin sai mà model vẫn tin. Quy tắc nhớ nhanh: **không có thay đổi → resume; cần so sánh hướng → fork; code đã đổi → phiên mới kèm tóm tắt chọn lọc và đọc lại đúng phần đã đổi.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Resume khi công việc và dữ liệu chưa đổi
 
-### 2.1. Resume unchanged work
+### Trọng tâm
 
-**Principle (EN):** Resume retains prior tool results and analysis when still valid.
+Nếu các tài liệu đã đọc chưa thay đổi, hãy **resume** phiên có tên để giữ nguyên kết quả tool và phân tích cũ, thay vì bắt đầu lại.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **resume retains prior tool results and analysis when still valid**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** Developer returns tomorrow with no repository changes.
+Phiên làm việc lưu lịch sử hội thoại: các file đã đọc, kết quả lệnh, những kết luận trung gian. Resume nạp lại đúng lịch sử đó để bạn tiếp tục như chưa từng dừng. Với Claude Code, bạn tiếp tục phiên gần nhất bằng `--continue`, hoặc chọn một phiên cụ thể bằng `--resume`; đặt **tên phiên** có ý nghĩa giúp tìm lại dễ dàng.
 
-**Recommended implementation:** Continue named session via --resume.
+Khi nào resume là đúng:
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Restart and lose valid context.
+- Hôm qua bạn phân tích module thanh toán và dừng giữa chừng; hôm nay repo **không có commit mới** → mọi thứ model đã đọc vẫn đúng.
+- Công việc là một dòng liên tục (tiếp tục viết, tiếp tục điều tra) chứ không phải thử nhiều hướng.
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Developer returns tomorrow with no repository changes".
-- Decision: áp dụng nguyên tắc **Resume unchanged work** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Continue named session via --resume" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Lợi ích: không phải đọc lại hàng chục file (tiết kiệm token và thời gian), không mất các kết luận đã rút ra, và giữ nguyên mạch suy luận. Bắt đầu phiên mới trong trường hợp này là lãng phí: model phải khám phá lại, có thể ra kết luận khác nhau giữa các lần.
 
-### 2.2. Fork divergent investigation
+Cần ý thức giới hạn: lịch sử càng dài thì context càng đầy; phiên rất dài có thể chạm giới hạn context hoặc làm chất lượng giảm. Resume không phải là "bộ nhớ vô hạn" mà chỉ là nạp lại đoạn hội thoại đã lưu.
 
-**Principle (EN):** Fork from shared baseline isolates alternative hypotheses.
+### Keyword
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **fork from shared baseline isolates alternative hypotheses**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+- `resume` — tiếp tục phiên đã lưu với toàn bộ lịch sử
+- `--continue` — tùy chọn tiếp tục phiên gần nhất của Claude Code
+- `--resume` — tùy chọn chọn và tiếp tục một phiên cụ thể
+- `named session` — phiên được đặt tên để dễ tìm lại
+- `conversation history` — lịch sử hội thoại gồm tool use và kết quả
+- `context reuse` — tái sử dụng ngữ cảnh đã xây dựng thay vì làm lại
 
-**Case study / Tình huống:** Need compare caching versus query optimization.
+### Bẫy đề thi
 
-**Recommended implementation:** Create independent forks.
+- ✗ Bắt đầu phiên mới dù không có gì thay đổi ⇒ ✓ Resume phiên cũ để giữ phân tích còn hợp lệ
+- ✗ Coi resume là bộ nhớ không giới hạn ⇒ ✓ Resume chỉ nạp lại lịch sử đã lưu, vẫn bị giới hạn bởi context window
+- ✗ Không đặt tên phiên rồi khó tìm lại ⇒ ✓ Đặt tên phiên rõ ràng khi dự kiến quay lại
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Interleave both options into single history.
+### Câu hỏi
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Need compare caching versus query optimization".
-- Decision: áp dụng nguyên tắc **Fork divergent investigation** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Create independent forks" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+#### Q1. Hôm qua bạn dành hai giờ để model phân tích module thanh toán rồi dừng. Hôm nay repo không có thay đổi nào. Bạn muốn tiếp tục từ chỗ dừng. Nên làm gì?
+- A. Bắt đầu phiên mới và yêu cầu model đọc lại toàn bộ module
+- B. Resume phiên đã đặt tên để tiếp tục với ngữ cảnh cũ
+- C. Chép tay kết luận hôm qua vào prompt của phiên mới
+- D. Fork phiên thành ba nhánh
 
-### 2.3. Stale context remediation
+**Đáp án:** B
 
-**Principle (EN):** Changed code makes old tool results unreliable.
+**Giải thích:** Dữ liệu không đổi nên toàn bộ ngữ cảnh vẫn hợp lệ; resume tiết kiệm nhất. A và C lãng phí và có thể mất chi tiết. D không cần vì không so sánh hướng.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **changed code makes old tool results unreliable**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+#### Q2. Điều nào mô tả đúng giới hạn của resume?
+- A. Resume cho phép bộ nhớ vô hạn giữa các phiên
+- B. Resume xoá mọi lịch sử để làm mới
+- C. Resume tự cập nhật lại tất cả file đã đọc theo trạng thái mới nhất
+- D. Resume nạp lại hội thoại đã lưu nhưng vẫn bị giới hạn bởi context window
 
-**Case study / Tình huống:** Three files changed after an earlier architecture analysis.
+**Đáp án:** D
 
-**Recommended implementation:** Fresh session + curated summary + targeted reread of changed files.
+**Giải thích:** Resume chỉ khôi phục lịch sử đã có. A là hiểu lầm phổ biến. B sai bản chất. C sai vì nó không tự đọc lại file.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Blindly resume with old source excerpts.
+## K2. Fork để tách các giả thuyết khác nhau
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Three files changed after an earlier architecture analysis".
-- Decision: áp dụng nguyên tắc **Stale context remediation** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Fresh session + curated summary + targeted reread of changed files" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+### Trọng tâm
 
-### 2.4. Targeted re-analysis
+Khi cần so sánh các hướng đi từ cùng một điểm xuất phát (ví dụ caching hay tối ưu truy vấn), hãy **fork** thành các nhánh độc lập, không trộn vào một lịch sử.
 
-**Principle (EN):** Recheck changed artifacts, not unrelated codebase.
+### Giải thích
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **recheck changed artifacts, not unrelated codebase**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+Fork tạo một phiên mới là bản sao của phiên hiện tại tại thời điểm fork; từ đó mỗi nhánh đi riêng. Mọi nhánh **thừa hưởng baseline** (các hiểu biết đã có) nhưng thay đổi sau đó không ảnh hưởng nhau.
 
-**Case study / Tình huống:** Only auth.ts changed among 60 modules.
+Tình huống: sau khi profile, nhóm thấy API chậm. Có hai giả thuyết: (1) thêm cache; (2) tối ưu truy vấn SQL. Nếu làm cả hai trong cùng một lịch sử, các kết quả sẽ lẫn: thay đổi từ hướng 1 làm nhiễu số đo hướng 2, và model "nhớ" cả hai khiến lập luận lai tạp. Fork khắc phục:
 
-**Recommended implementation:** Reread auth.ts and dependent boundaries with summary of unchanged areas.
+- Nhánh A: thử cache, đo hiệu năng.
+- Nhánh B: thử tối ưu truy vấn, đo hiệu năng.
+- So sánh kết quả hai nhánh để quyết định, hoặc kết hợp có chủ đích.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Read all 60 modules again automatically.
+Fork tiết kiệm hơn bắt đầu lại hai phiên mới vì baseline (phần profile ban đầu) không cần làm lại. Nó cũng khác resume: resume nối tiếp **một** lịch sử; fork **nhân bản** lịch sử để có nhiều dòng.
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Only auth.ts changed among 60 modules".
-- Decision: áp dụng nguyên tắc **Targeted re-analysis** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Reread auth.ts and dependent boundaries with summary of unchanged areas" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Lưu ý: nhánh fork bắt đầu với cùng ngữ cảnh nên cũng mang theo cùng mức độ "cũ" của baseline. Nếu baseline đã stale, fork không chữa được điều đó (xem K3).
 
-## 3. Ví dụ thiết kế / Worked engineering example
+### Keyword
 
-**Problem:** Developer returns tomorrow with no repository changes.
+- `fork` — nhân bản phiên thành nhánh độc lập từ một điểm
+- `baseline` — điểm xuất phát chung của các nhánh
+- `hypothesis` — giả thuyết cần kiểm chứng trong điều tra
+- `isolation` — cô lập: thay đổi nhánh này không ảnh hưởng nhánh khác
+- `A/B comparison` — so sánh hai phương án trên cùng điều kiện nền
+- `history contamination` — lịch sử bị nhiễu bởi các thí nghiệm khác nhau
 
-**Bad design:** Restart and lose valid context.
+### Bẫy đề thi
 
-**Better design:** Continue named session via --resume.
+- ✗ Thử cả caching và tối ưu SQL trong cùng một phiên ⇒ ✓ Fork hai nhánh độc lập để đo riêng
+- ✗ Tạo hai phiên mới hoàn toàn để so sánh ⇒ ✓ Fork để tái sử dụng baseline đã phân tích
+- ✗ Nghĩ fork làm baseline tự động mới hơn ⇒ ✓ Fork mang theo ngữ cảnh gốc, kể cả khi đã cũ
 
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
+### Câu hỏi
 
-### Walkthrough: decision trace / Luồng xử lý
+#### Q1. Sau khi profile, bạn có hai giả thuyết cải thiện hiệu năng API: thêm Redis cache hoặc viết lại truy vấn SQL. Bạn muốn đo công bằng và không để hai thí nghiệm ảnh hưởng nhau. Cách làm?
+- A. Thử cả hai thay đổi liên tiếp trong cùng một phiên
+- B. Resume phiên và nhờ model "cân nhắc cả hai"
+- C. Fork hai nhánh từ phiên profile, mỗi nhánh thử một hướng
+- D. Bỏ phiên cũ và làm hai phiên mới từ đầu
 
-```text
-INPUT  : Developer returns tomorrow with no repository changes.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Continue named session via --resume.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
-```
+**Đáp án:** C
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+**Giải thích:** Fork cho baseline chung và cô lập thí nghiệm. A làm lẫn kết quả. B không tạo cô lập. D tốn công làm lại phần profile.
 
-## 4. Exam traps / Bẫy dễ nhầm
+#### Q2. Điểm khác nhau chính giữa fork và resume là gì?
+- A. Fork nhân bản lịch sử thành nhánh độc lập; resume tiếp tục nối vào cùng một lịch sử
+- B. Fork xoá lịch sử; resume giữ lịch sử
+- C. Fork chỉ dùng được với subagent
+- D. Hai thao tác hoàn toàn giống nhau
 
-1. **Bẫy Resume unchanged work:** "Restart and lose valid context" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở resume unchanged work, rồi chọn "Continue named session via --resume".
+**Đáp án:** A
 
-2. **Bẫy Fork divergent investigation:** "Interleave both options into single history" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở fork divergent investigation, rồi chọn "Create independent forks".
+**Giải thích:** Fork tạo dòng mới từ baseline; resume tiếp nối dòng cũ. B sai vì fork giữ baseline. C và D sai về bản chất.
 
-3. **Bẫy Stale context remediation:** "Blindly resume with old source excerpts" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở stale context remediation, rồi chọn "Fresh session + curated summary + targeted reread of changed files".
+## K3. Ngữ cảnh lỗi thời (stale context) và cách xử lý
 
-4. **Bẫy Targeted re-analysis:** "Read all 60 modules again automatically" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở targeted re-analysis, rồi chọn "Reread auth.ts and dependent boundaries with summary of unchanged areas".
+### Trọng tâm
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+Khi code đã đổi, kết quả tool cũ trong lịch sử trở nên không đáng tin. **Đừng resume mù quáng**; hãy mở phiên mới kèm bản tóm tắt chọn lọc và đọc lại các file đã thay đổi.
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+### Giải thích
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **Developer returns tomorrow with no repository changes**. Phương án nào phù hợp nhất?
+Lịch sử phiên chứa nội dung file ở thời điểm đã đọc. Nếu sau đó ba file được sửa (bởi bạn, đồng nghiệp, hay merge từ nhánh khác), thì trong context vẫn là bản cũ. Model **không biết** file đã đổi; nó sẽ tự tin dùng nội dung cũ để lập luận, gọi hàm đã bị đổi tên, hoặc phân tích kiến trúc không còn đúng. Đây là lỗi nguy hiểm vì không hề báo lỗi: kết quả trông hợp lý nhưng sai.
 
-- **A.** Continue named session via --resume; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Restart and lose valid context; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Interleave both options into single history; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Blindly resume with old source excerpts; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+Cách xử lý được khuyến nghị:
 
-**Đáp án: A**
+1. **Mở phiên mới** để không mang theo kết quả tool đã cũ.
+2. **Viết bản tóm tắt chọn lọc** (curated summary) của những kết luận vẫn đúng: quyết định thiết kế, phần không đổi, phát hiện quan trọng. Đây là thứ bạn kiểm chứng và chịu trách nhiệm, thay vì chép nguyên lịch sử.
+3. **Đọc lại có chủ đích** các file đã đổi để model có dữ liệu mới.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Một lựa chọn trung gian khi vẫn muốn resume: nói rõ cho model biết "các file X, Y, Z đã thay đổi từ lần phân tích trước" để nó đọc lại thay vì dựa vào bản cũ. Nhưng nếu thay đổi rộng, phiên mới + tóm tắt sạch hơn vì không phải mang cả đống kết quả đã lỗi thời.
 
-- **A:** **Đúng.** Resume retains prior tool results and analysis when still valid. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Restart and lose valid context" được nêu ở cơ chế Resume unchanged work. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Fork divergent investigation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Stale context remediation**, không giải quyết được yêu cầu cốt lõi "Resume retains prior tool results and analysis when still valid" và thiếu điều kiện kiểm chứng.
+Điểm mấu chốt: quyết định giữa resume và phiên mới dựa vào **mức độ hợp lệ của ngữ cảnh**, không phải sự tiện lợi.
 
-**Exam heuristic:** Nếu đề xuất hiện "Developer returns tomorrow with no repository changes", ưu tiên phân biệt `Resume unchanged work` với các lựa chọn mô tả chuyện khác.
+### Keyword
 
-### Q02. Một kỹ sư đề xuất **Interleave both options into single history** cho tình huống: Need compare caching versus query optimization. Cần phản biện thế nào?
+- `stale context` — ngữ cảnh lỗi thời, không còn khớp với trạng thái thực
+- `curated summary` — bản tóm tắt chọn lọc, đã kiểm chứng, cho phiên mới
+- `tool result` — kết quả tool trong lịch sử, là ảnh chụp tại thời điểm đọc
+- `fresh session` — phiên mới, bắt đầu với context sạch
+- `silent staleness` — lỗi thời mà không có cảnh báo nào
+- `targeted reread` — đọc lại có chủ đích các phần đã thay đổi
 
-- **A.** Read all 60 modules again automatically; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Create independent forks; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Interleave both options into single history; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Blindly resume with old source excerpts; áp dụng trực tiếp dù cơ chế sự cố khác.
+### Bẫy đề thi
 
-**Đáp án: B**
+- ✗ Resume phiên cũ và tin các đoạn mã đã đọc trước đó dù repo đã đổi ⇒ ✓ Mở phiên mới kèm tóm tắt chọn lọc và đọc lại file đã đổi
+- ✗ Nghĩ model tự phát hiện file đã đổi trong lịch sử ⇒ ✓ Phải chủ động báo hoặc cho đọc lại; model không biết
+- ✗ Chép nguyên toàn bộ lịch sử cũ vào phiên mới ⇒ ✓ Chỉ mang kết luận còn đúng, đã chọn lọc
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Câu hỏi
 
-- **A:** **Sai.** Phương án thuộc **Targeted re-analysis**, không giải quyết được yêu cầu cốt lõi "Fork from shared baseline isolates alternative hypotheses" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Fork from shared baseline isolates alternative hypotheses. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Interleave both options into single history" được nêu ở cơ chế Fork divergent investigation. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Stale context remediation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+#### Q1. Tuần trước agent phân tích kiến trúc dịch vụ. Hôm nay bạn biết ba file chính đã được refactor mạnh. Nếu resume phiên cũ và yêu cầu "tiếp tục thiết kế" thì rủi ro lớn nhất là gì?
+- A. Phiên sẽ chạy chậm hơn
+- B. Model sẽ từ chối tiếp tục
+- C. Model dùng nội dung file cũ trong lịch sử để lập luận mà không biết nó đã sai
+- D. Lịch sử sẽ tự động bị xoá
 
-**Exam heuristic:** Nếu đề xuất hiện "Need compare caching versus query optimization", ưu tiên phân biệt `Fork divergent investigation` với các lựa chọn mô tả chuyện khác.
+**Đáp án:** C
 
-### Q03. Nếu sự cố **Three files changed after an earlier architecture analysis** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+**Giải thích:** Kết quả tool cũ vẫn nằm trong context như thể còn đúng, nên kết luận có thể sai mà không có cảnh báo. A không phải rủi ro chính. B và D không phải hành vi thực tế.
 
-- **A.** Read all 60 modules again automatically; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Restart and lose valid context; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Fresh session + curated summary + targeted reread of changed files; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Blindly resume with old source excerpts; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+#### Q2. Cách xử lý nào tốt nhất cho tình huống ba file đã thay đổi từ lần phân tích trước?
+- A. Resume và hy vọng model tự nhận ra
+- B. Phiên mới với tóm tắt chọn lọc các kết luận còn đúng, rồi cho đọc lại ba file đã đổi
+- C. Xoá toàn bộ ghi chú và phân tích lại mọi thứ từ đầu
+- D. Fork phiên cũ để có ngữ cảnh rộng hơn
 
-**Đáp án: C**
+**Đáp án:** B
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Giải thích:** Tóm tắt chọn lọc giữ phần giá trị còn đúng, còn đọc lại file đảm bảo dữ liệu mới. A dựa vào may rủi. C lãng phí phần vẫn hợp lệ. D vẫn mang theo ngữ cảnh cũ.
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Targeted re-analysis**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Resume unchanged work**, không giải quyết được yêu cầu cốt lõi "Changed code makes old tool results unreliable" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Changed code makes old tool results unreliable. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Blindly resume with old source excerpts" được nêu ở cơ chế Stale context remediation. Không đảm bảo xử lý được case và dễ che mất failure mode.
+## K4. Phân tích lại có mục tiêu (targeted re-analysis)
 
-**Exam heuristic:** Nếu đề xuất hiện "Three files changed after an earlier architecture analysis", ưu tiên phân biệt `Stale context remediation` với các lựa chọn mô tả chuyện khác.
+### Trọng tâm
 
-### Q04. Để viết acceptance criteria cho tình huống **Only auth.ts changed among 60 modules**, lựa chọn nào thể hiện ranh giới đúng?
+Chỉ kiểm tra lại các thành phần **đã thay đổi** và ranh giới phụ thuộc của chúng, cùng bản tóm tắt phần không đổi; đừng đọc lại toàn bộ codebase.
 
-- **A.** Read all 60 modules again automatically; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Restart and lose valid context; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Interleave both options into single history; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Reread auth.ts and dependent boundaries with summary of unchanged areas; kèm kiểm thử lại điều kiện và ghi evidence.
+### Giải thích
 
-**Đáp án: D**
+Codebase có 60 module, chỉ `auth.ts` thay đổi. Đọc lại cả 60 module tốn nhiều token, loãng chú ý (nhớ lại bài 1.6) và hầu hết chỉ xác nhận điều đã biết. Cách hiệu quả:
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+1. **Xác định phần đã thay đổi**: dùng công cụ phiên bản (ví dụ `git diff` giữa lần phân tích trước và hiện tại).
+2. **Mở rộng đến ranh giới ảnh hưởng**: những module gọi hoặc phụ thuộc `auth.ts` (callers, interface, type chia sẻ). Thay đổi chữ ký hàm có thể làm hỏng nơi khác dù file đó không đổi.
+3. **Cung cấp tóm tắt phần không đổi** để model có bối cảnh mà không phải đọc lại.
+4. **Đọc lại có chủ đích** `auth.ts` và các ranh giới đó, rồi cập nhật kết luận.
 
-- **A:** **Sai.** Đây chính là bẫy "Read all 60 modules again automatically" được nêu ở cơ chế Targeted re-analysis. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Resume unchanged work**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Fork divergent investigation**, không giải quyết được yêu cầu cốt lõi "Recheck changed artifacts, not unrelated codebase" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Recheck changed artifacts, not unrelated codebase. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+Hai cực đoan đều sai: (a) đọc lại tất cả (lãng phí), (b) chỉ đọc đúng file đã đổi mà bỏ qua ranh giới phụ thuộc (có thể bỏ sót tác động lan truyền). Đáp án đúng nằm ở giữa: **thay đổi + vùng ảnh hưởng trực tiếp**.
 
-**Exam heuristic:** Nếu đề xuất hiện "Only auth.ts changed among 60 modules", ưu tiên phân biệt `Targeted re-analysis` với các lựa chọn mô tả chuyện khác.
+Kỹ thuật này kết hợp tự nhiên với K3: sau khi mở phiên mới và có tóm tắt, bước đọc lại được giới hạn đúng vào phần cần thiết.
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Restart and lose valid context**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+### Keyword
 
-- **A.** Continue named session via --resume; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Restart and lose valid context; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Interleave both options into single history; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Blindly resume with old source excerpts; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+- `targeted re-analysis` — phân tích lại có mục tiêu, giới hạn ở phần thay đổi
+- `git diff` — lệnh xem khác biệt giữa hai trạng thái mã nguồn
+- `blast radius` — phạm vi bị ảnh hưởng bởi một thay đổi
+- `dependents` — các thành phần phụ thuộc vào phần đã thay đổi
+- `unchanged-area summary` — tóm tắt phần không đổi để cung cấp bối cảnh
+- `change propagation` — tác động của thay đổi lan sang thành phần khác
 
-**Đáp án: A**
+### Bẫy đề thi
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- ✗ Đọc lại toàn bộ 60 module khi chỉ một file đổi ⇒ ✓ Đọc lại file đổi cùng các ranh giới phụ thuộc trực tiếp
+- ✗ Chỉ đọc đúng `auth.ts` mà bỏ qua nơi gọi nó ⇒ ✓ Thêm callers và interface liên quan vì thay đổi có thể lan truyền
+- ✗ Không dùng công cụ diff mà đoán file nào đổi ⇒ ✓ Dùng `git diff` hoặc log để xác định chính xác
 
-- **A:** **Đúng.** Resume retains prior tool results and analysis when still valid. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Restart and lose valid context" được nêu ở cơ chế Resume unchanged work. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Fork divergent investigation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Stale context remediation**, không giải quyết được yêu cầu cốt lõi "Resume retains prior tool results and analysis when still valid" và thiếu điều kiện kiểm chứng.
+### Câu hỏi
 
-**Exam heuristic:** Nếu đề xuất hiện "Developer returns tomorrow with no repository changes", ưu tiên phân biệt `Resume unchanged work` với các lựa chọn mô tả chuyện khác.
+#### Q1. Một codebase 60 module vừa có thay đổi chỉ trong `auth.ts` sau lần phân tích kiến trúc trước. Chiến lược cập nhật phân tích nào hiệu quả nhất?
+- A. Đọc lại cả 60 module
+- B. Bỏ qua thay đổi vì chỉ một file
+- C. Chỉ đọc đúng nội dung `auth.ts`, không quan tâm nơi khác
+- D. Dùng diff để xác định thay đổi, đọc lại `auth.ts` cùng các module phụ thuộc trực tiếp, kèm tóm tắt phần không đổi
 
-### Q06. Sau khi audit phát hiện **Need compare caching versus query optimization**, điều gì là cải tiến có thể kiểm chứng?
+**Đáp án:** D
 
-- **A.** Read all 60 modules again automatically; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Create independent forks; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Interleave both options into single history; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Blindly resume with old source excerpts; áp dụng trực tiếp dù cơ chế sự cố khác.
+**Giải thích:** Cách này giữ trọng tâm nhưng không bỏ sót tác động lan truyền. A tốn kém và loãng chú ý. B rủi ro. C bỏ sót callers có thể bị hỏng bởi thay đổi giao diện.
 
-**Đáp án: B**
+#### Q2. Trong `auth.ts` hàm `validateToken` đổi chữ ký (thêm tham số bắt buộc). Điều gì bạn cần đưa vào phạm vi đọc lại ngoài `auth.ts`?
+- A. Chỉ file test của `auth.ts`
+- B. Toàn bộ thư mục `docs`
+- C. Các module gọi `validateToken` và các type liên quan
+- D. Không cần gì thêm
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** C
 
-- **A:** **Sai.** Phương án thuộc **Targeted re-analysis**, không giải quyết được yêu cầu cốt lõi "Fork from shared baseline isolates alternative hypotheses" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Fork from shared baseline isolates alternative hypotheses. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Interleave both options into single history" được nêu ở cơ chế Fork divergent investigation. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Stale context remediation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-
-**Exam heuristic:** Nếu đề xuất hiện "Need compare caching versus query optimization", ưu tiên phân biệt `Fork divergent investigation` với các lựa chọn mô tả chuyện khác.
-
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Three files changed after an earlier architecture analysis**, nên chọn gì?
-
-- **A.** Read all 60 modules again automatically; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Restart and lose valid context; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Fresh session + curated summary + targeted reread of changed files; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Blindly resume with old source excerpts; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-
-**Đáp án: C**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc cơ chế **Targeted re-analysis**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Resume unchanged work**, không giải quyết được yêu cầu cốt lõi "Changed code makes old tool results unreliable" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Changed code makes old tool results unreliable. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Blindly resume with old source excerpts" được nêu ở cơ chế Stale context remediation. Không đảm bảo xử lý được case và dễ che mất failure mode.
-
-**Exam heuristic:** Nếu đề xuất hiện "Three files changed after an earlier architecture analysis", ưu tiên phân biệt `Stale context remediation` với các lựa chọn mô tả chuyện khác.
-
-### Q08. Một reviewer nêu giải pháp **Read all 60 modules again automatically**. Đánh giá chính xác nhất là gì?
-
-- **A.** Read all 60 modules again automatically; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Restart and lose valid context; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Interleave both options into single history; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Reread auth.ts and dependent boundaries with summary of unchanged areas; kèm kiểm thử lại điều kiện và ghi evidence.
-
-**Đáp án: D**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Đây chính là bẫy "Read all 60 modules again automatically" được nêu ở cơ chế Targeted re-analysis. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Resume unchanged work**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Fork divergent investigation**, không giải quyết được yêu cầu cốt lõi "Recheck changed artifacts, not unrelated codebase" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Recheck changed artifacts, not unrelated codebase. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-
-**Exam heuristic:** Nếu đề xuất hiện "Only auth.ts changed among 60 modules", ưu tiên phân biệt `Targeted re-analysis` với các lựa chọn mô tả chuyện khác.
-
-### Q09. Trong thử nghiệm đối chứng với tình huống **Developer returns tomorrow with no repository changes**, tiêu chí pass phù hợp là gì?
-
-- **A.** Continue named session via --resume; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Restart and lose valid context; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Interleave both options into single history; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Blindly resume with old source excerpts; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-
-**Đáp án: A**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Đúng.** Resume retains prior tool results and analysis when still valid. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Restart and lose valid context" được nêu ở cơ chế Resume unchanged work. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Fork divergent investigation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Stale context remediation**, không giải quyết được yêu cầu cốt lõi "Resume retains prior tool results and analysis when still valid" và thiếu điều kiện kiểm chứng.
-
-**Exam heuristic:** Nếu đề xuất hiện "Developer returns tomorrow with no repository changes", ưu tiên phân biệt `Resume unchanged work` với các lựa chọn mô tả chuyện khác.
-
-### Q10. Để giảm lỗi tái diễn với **Need compare caching versus query optimization**, biện pháp nào phù hợp với cơ chế đã học?
-
-- **A.** Read all 60 modules again automatically; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Create independent forks; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Interleave both options into single history; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Blindly resume with old source excerpts; áp dụng trực tiếp dù cơ chế sự cố khác.
-
-**Đáp án: B**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc **Targeted re-analysis**, không giải quyết được yêu cầu cốt lõi "Fork from shared baseline isolates alternative hypotheses" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Fork from shared baseline isolates alternative hypotheses. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Interleave both options into single history" được nêu ở cơ chế Fork divergent investigation. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Stale context remediation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-
-**Exam heuristic:** Nếu đề xuất hiện "Need compare caching versus query optimization", ưu tiên phân biệt `Fork divergent investigation` với các lựa chọn mô tả chuyện khác.
-
-## 6. Lab / Bài thực hành tự kiểm tra
-
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "Developer returns tomorrow with no repository changes".
-
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Continue named session via --resume.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
-
-## 7. Cheat sheet / Ôn nhanh
-
-- **Resume unchanged work:** Resume retains prior tool results and analysis when still valid. ✓ Continue named session via --resume. ✗ Restart and lose valid context.
-- **Fork divergent investigation:** Fork from shared baseline isolates alternative hypotheses. ✓ Create independent forks. ✗ Interleave both options into single history.
-- **Stale context remediation:** Changed code makes old tool results unreliable. ✓ Fresh session + curated summary + targeted reread of changed files. ✗ Blindly resume with old source excerpts.
-- **Targeted re-analysis:** Recheck changed artifacts, not unrelated codebase. ✓ Reread auth.ts and dependent boundaries with summary of unchanged areas. ✗ Read all 60 modules again automatically.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/1-agentic-architecture/1-7-session-state-resumption
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Thay đổi chữ ký có thể làm hỏng mọi nơi gọi hàm dù file đó không đổi. A quá hẹp. B không liên quan. D bỏ sót tác động lan truyền.

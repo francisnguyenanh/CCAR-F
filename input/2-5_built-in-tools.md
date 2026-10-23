@@ -1,326 +1,237 @@
 # 2.5 — Built-in Tools
 
-> Domain 2: Tool Design & MCP Integration · Tỷ trọng toàn domain: 18%
-> Source lesson: https://claudecertificationguide.com/learn/2-tool-design-mcp/2-5-built-in-tools
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+Claude Code (và Agent SDK) có sẵn bộ tool tích hợp để làm việc với codebase: **Read, Write, Edit, Grep, Glob, Bash**... Hiểu **tool nào dùng cho việc nào** và **cách khám phá codebase tiết kiệm context** là kỹ năng thực dụng được hỏi nhiều ở đề thi.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Built-in Tools**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Quy tắc nhớ nhanh: **Grep tìm trong nội dung, Glob tìm theo tên file; Edit sửa đoạn có neo duy nhất; khám phá từng bước (tìm trước, đọc có chọn lọc); và lần theo cả re-export/wrapper khi truy vết hàm.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Grep so với Glob
 
-### 2.1. Grep versus Glob
+### Trọng tâm
 
-**Principle (EN):** Grep searches contents, Glob matches file paths.
+**Grep** tìm theo **nội dung** file (regex). **Glob** khớp theo **đường dẫn/tên file** (pattern). Chọn nhầm tool là lỗi phổ biến.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **grep searches contents, Glob matches file paths**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** Find callers of deprecated function and files named *.test.ts.
+| Tool | Tìm theo | Ví dụ |
+|---|---|---|
+| Grep | Nội dung bên trong file | Tìm mọi nơi gọi `legacyCharge(` |
+| Glob | Tên/đường dẫn file | Liệt kê `**/*.test.ts` |
 
-**Recommended implementation:** Use Grep for caller references, Glob for test filename patterns.
+Tình huống: "Tìm tất cả nơi gọi hàm đã deprecated `legacyCharge` và liệt kê các file test `*.test.ts`". Đây là **hai** việc khác nhau:
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Use Glob to search function bodies.
+- Tìm nơi gọi hàm cần xem **thân file** → Grep (`legacyCharge\(`), có thể giới hạn theo loại file hoặc thư mục.
+- Liệt kê file test theo tên → Glob (`**/*.test.ts`), không cần đọc nội dung.
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Find callers of deprecated function and files named *.test.ts".
-- Decision: áp dụng nguyên tắc **Grep versus Glob** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Use Grep for caller references, Glob for test filename patterns" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Dùng Glob để tìm nội dung hàm sẽ không bao giờ ra, vì Glob chỉ nhìn tên file. Ngược lại dùng Grep để liệt kê file theo tên là vòng vo, tốn kém.
 
-### 2.2. Precise Edit
+Mẹo thực hành với Grep: có các chế độ đầu ra như chỉ liệt kê tên file khớp, hiển thị dòng khớp kèm số dòng, hoặc đếm số lần khớp. Bắt đầu với chế độ gọn (chỉ tên file) để xem phạm vi trước khi lấy nhiều nội dung, giúp bảo vệ context. Tên tham số chính xác có thể khác theo phiên bản; hãy dựa vào mô tả tool trong môi trường của bạn.
 
-**Principle (EN):** Edit modifies unique anchored spans; widen anchor on ambiguity.
+### Keyword
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **edit modifies unique anchored spans; widen anchor on ambiguity**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+- `Grep` — tool tìm kiếm theo nội dung file bằng regex
+- `Glob` — tool khớp tên/đường dẫn file bằng pattern
+- `regex` — biểu thức chính quy
+- `glob pattern` — mẫu đường dẫn như `**/*.ts`
+- `output mode` — chế độ đầu ra của Grep (tên file, dòng khớp, số lượng)
+- `content search` — tìm kiếm theo nội dung
 
-**Case study / Tình huống:** Edit reports old_string appears twice.
+### Bẫy đề thi
 
-**Recommended implementation:** Add unique surrounding lines or deliberate replace_all.
+- ✗ Dùng Glob để tìm các lời gọi một hàm ⇒ ✓ Dùng Grep để tìm trong nội dung
+- ✗ Dùng Grep để liệt kê file theo tên ⇒ ✓ Dùng Glob cho pattern tên file
+- ✗ Dùng Bash `grep`/`find` thay cho tool chuyên dụng khi đã có sẵn ⇒ ✓ Ưu tiên Grep/Glob tích hợp (kết quả có cấu trúc, tích hợp phân quyền)
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Rewrite complete file immediately.
+### Câu hỏi
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Edit reports old_string appears twice".
-- Decision: áp dụng nguyên tắc **Precise Edit** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Add unique surrounding lines or deliberate replace_all" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+#### Q1. Bạn cần tìm mọi nơi gọi hàm `legacyCharge` trong repo. Tool nào phù hợp?
+- A. Glob với pattern `**/legacyCharge*`
+- B. Grep với pattern `legacyCharge\(`
+- C. Read toàn bộ thư mục
+- D. Write một file ghi chú
 
-### 2.3. Incremental discovery
+**Đáp án:** B
 
-**Principle (EN):** Search first and read justified files to protect context.
+**Giải thích:** Lời gọi nằm trong nội dung file, nên cần Grep. A chỉ khớp tên file. C tốn context. D không tìm kiếm gì.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **search first and read justified files to protect context**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+#### Q2. Để lấy danh sách các file test theo quy ước tên `*.test.ts` trong toàn dự án, cách tốt nhất?
+- A. Grep chuỗi `.test.ts` trong nội dung
+- B. Read từng file trong repo
+- C. Glob với pattern `**/*.test.ts`
+- D. Bash `cat` mọi file rồi lọc
 
-**Case study / Tình huống:** Repository has 200 files but bug only in checkout path.
+**Đáp án:** C
 
-**Recommended implementation:** Grep entry point, read relevant imports, expand iteratively.
+**Giải thích:** Đây là khớp theo tên đường dẫn, đúng sở trường của Glob. A tìm nhầm chỗ. B, D tốn kém không cần.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Read all 200 files before searching.
+## K2. Edit chính xác: neo duy nhất
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Repository has 200 files but bug only in checkout path".
-- Decision: áp dụng nguyên tắc **Incremental discovery** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Grep entry point, read relevant imports, expand iteratively" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+### Trọng tâm
 
-### 2.4. Indirect function usage
+**Edit** thay một đoạn văn bản **xuất hiện duy nhất** trong file. Nếu báo trùng, hãy **mở rộng đoạn neo** bằng các dòng xung quanh, hoặc dùng `replace_all` khi thực sự muốn đổi mọi chỗ.
 
-**Principle (EN):** Re-exports and wrapper modules require multi-hop tracing.
+### Giải thích
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **re-exports and wrapper modules require multi-hop tracing**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+Edit hoạt động bằng cách tìm `old_string` và thay bằng `new_string`. Để an toàn, `old_string` phải **khớp đúng và duy nhất**; nếu xuất hiện hai lần, Edit từ chối vì không biết bạn muốn sửa chỗ nào. Cách xử lý:
 
-**Case study / Tình huống:** Renamed helper is exported through index.ts.
+1. **Thêm ngữ cảnh** (vài dòng trước/sau) vào `old_string` cho đến khi duy nhất.
+2. Nếu muốn **đổi tên một biến ở mọi nơi trong file**, dùng `replace_all` có chủ ý.
+3. Chỉ khi thay đổi lớn, khó neo, mới cân nhắc viết lại cả file (Write).
 
-**Recommended implementation:** Trace original plus re-export aliases and consumers.
+Vì sao không "viết lại cả file ngay"? Write ghi đè toàn bộ: dễ **mất nội dung** khác trong file nếu model tái tạo không chính xác, diff khó review, tốn token cho file lớn. Edit nhỏ, có kiểm chứng, diff gọn.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Single grep of original symbol suffices.
+Lưu ý quy trình: cần đọc file (Read) trước khi Edit/Write, để chắc nội dung hiện tại và định dạng (thụt lề, khoảng trắng) khớp với `old_string`. Lỗi hay gặp khác là sai khoảng trắng/tab khiến `old_string` không khớp ("không tìm thấy").
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Renamed helper is exported through index.ts".
-- Decision: áp dụng nguyên tắc **Indirect function usage** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Trace original plus re-export aliases and consumers" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+### Keyword
 
-## 3. Ví dụ thiết kế / Worked engineering example
+- `Edit` — tool thay thế đoạn văn bản chính xác trong file
+- `old_string` / `new_string` — đoạn cũ cần tìm và đoạn mới thay vào
+- `unique anchor` — đoạn neo xuất hiện duy nhất trong file
+- `replace_all` — tùy chọn thay mọi chỗ khớp
+- `Write` — tool ghi (ghi đè) cả file
+- `Read` — tool đọc nội dung file
 
-**Problem:** Find callers of deprecated function and files named *.test.ts.
+### Bẫy đề thi
 
-**Bad design:** Use Glob to search function bodies.
+- ✗ Edit báo `old_string` xuất hiện hai lần thì viết lại cả file ⇒ ✓ Thêm dòng ngữ cảnh để neo duy nhất, hoặc dùng `replace_all` có chủ ý
+- ✗ Dùng `replace_all` khi chỉ muốn sửa một chỗ ⇒ ✓ `replace_all` chỉ khi thực sự muốn đổi mọi nơi
+- ✗ Edit khi chưa đọc file ⇒ ✓ Read trước để biết nội dung và định dạng
 
-**Better design:** Use Grep for caller references, Glob for test filename patterns.
+### Câu hỏi
 
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
+#### Q1. Edit báo lỗi vì `return total;` xuất hiện ở hai hàm khác nhau, bạn chỉ muốn sửa ở hàm `calcTax`. Cách xử lý đúng?
+- A. Viết lại toàn bộ file bằng Write
+- B. Dùng `replace_all` để chắc chắn
+- C. Chạy lại đúng lệnh Edit đó nhiều lần
+- D. Mở rộng `old_string` bằng các dòng quanh `return total;` trong `calcTax` để duy nhất
 
-### Walkthrough: decision trace / Luồng xử lý
+**Đáp án:** D
 
-```text
-INPUT  : Find callers of deprecated function and files named *.test.ts.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Use Grep for caller references, Glob for test filename patterns.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
+**Giải thích:** Neo duy nhất cho phép sửa chính xác. A nhiều rủi ro. B sẽ đổi cả hàm kia. C lặp lại cùng lỗi.
+
+#### Q2. Bạn muốn đổi tên biến `tmpVal` thành `discountRate` ở mọi chỗ trong một file. Cách hợp lý nhất?
+- A. Edit với `replace_all` bật
+- B. Edit từng chỗ với neo duy nhất cho mỗi lần, dù có đến 15 chỗ
+- C. Glob để đổi tên
+- D. Grep để thay thế
+
+**Đáp án:** A
+
+**Giải thích:** `replace_all` sinh ra cho việc đổi mọi lần xuất hiện. B làm được nhưng thừa. C và D không sửa nội dung.
+
+## K3. Khám phá tăng dần (incremental discovery)
+
+### Trọng tâm
+
+Với codebase lớn, **tìm trước, đọc có chọn lọc, mở rộng dần**. Đừng đọc toàn bộ file trước khi biết chỗ cần xem, vì context sẽ bị lấp đầy.
+
+### Giải thích
+
+Context window có hạn, và mọi thứ bạn đọc đều chiếm chỗ cũng như làm loãng sự chú ý. Giả sử repo có 200 file, nhưng lỗi nằm ở luồng thanh toán (checkout). Chiến lược tốt:
+
+1. **Grep** điểm vào: tên route, hàm `checkout`, thông báo lỗi trong log.
+2. **Read** file khớp (có thể đọc theo đoạn dòng nếu file dài).
+3. Từ imports của file đó, **đọc tiếp** các module liên quan, chỉ khi cần.
+4. Lặp lại, mở rộng theo bằng chứng.
+
+Chiến lược tồi: đọc cả 200 file "cho chắc". Hậu quả: tràn/loãng context, chậm, chi phí cao, và lại càng dễ bỏ sót chi tiết quan trọng ("lost in the middle"). Có thể cần thêm **subagent** để khám phá lượng lớn rồi tóm tắt lại cho agent chính (xem Domain 5).
+
+Nguyên tắc bao trùm: **mỗi lần đọc phải có lý do dựa trên kết quả tìm kiếm hoặc dấu vết trước đó**.
+
+### Keyword
+
+- `incremental discovery` — khám phá từng bước, mở rộng theo bằng chứng
+- `entry point` — điểm vào của luồng cần tìm hiểu (route, hàm chính)
+- `context budget` — ngân sách context có hạn
+- `targeted read` — đọc có chọn lọc, đúng chỗ cần
+- `imports tracing` — lần theo import để tìm module liên quan
+- `context dilution` — context bị loãng do nhồi quá nhiều thông tin
+
+### Bẫy đề thi
+
+- ✗ Đọc hết 200 file trước rồi mới tìm ⇒ ✓ Grep điểm vào, đọc file liên quan, mở rộng dần
+- ✗ Chỉ Grep mà không đọc file khi cần hiểu ngữ cảnh ⇒ ✓ Kết hợp: tìm để khoanh vùng, đọc để hiểu
+- ✗ Đọc file nhưng không có lý do liên quan đến vấn đề ⇒ ✓ Mỗi lần đọc phải xuất phát từ bằng chứng
+
+### Câu hỏi
+
+#### Q1. Repo có 200 file, lỗi chỉ xuất hiện ở bước thanh toán. Chiến lược khám phá tốt nhất?
+- A. Đọc toàn bộ 200 file để nắm tổng thể
+- B. Grep điểm vào của checkout, đọc file khớp, rồi đọc các module được import khi cần
+- C. Đoán file rồi sửa luôn
+- D. Hỏi người dùng liệt kê từng file
+
+**Đáp án:** B
+
+**Giải thích:** Khoanh vùng bằng tìm kiếm rồi đọc có chọn lọc bảo vệ context. A tốn và gây loãng. C thiếu bằng chứng. D đẩy việc sang người dùng.
+
+#### Q2. Vì sao đọc toàn bộ codebase ngay từ đầu là rủi ro?
+- A. Tool Read bị cấm đọc nhiều file
+- B. Làm đầy và loãng context, tăng chi phí và nguy cơ bỏ sót chi tiết quan trọng
+- C. Sẽ tự động ghi đè các file
+- D. Model sẽ từ chối làm việc
+
+**Đáp án:** B
+
+**Giải thích:** Vấn đề là ngân sách và chất lượng chú ý của context. A, C, D không phải cơ chế thật.
+
+## K4. Dùng hàm gián tiếp: re-export, wrapper và truy vết nhiều bước
+
+### Trọng tâm
+
+Một grep tên hàm gốc **không đủ** khi hàm được **re-export, đổi tên (alias) hoặc bọc (wrapper)**. Cần truy vết nhiều bước: định nghĩa gốc, các lớp export lại, rồi nơi tiêu thụ.
+
+### Giải thích
+
+Ví dụ trong TypeScript: hàm `calcTax` đã được đổi tên nội bộ thành `computeTax`, nhưng `index.ts` vẫn có:
+
+```ts
+export { computeTax as calcTax } from "./tax/compute";
 ```
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+Nếu bạn chỉ Grep `computeTax`, bạn thấy file định nghĩa và `index.ts`, nhưng **bỏ sót** mọi nơi import `calcTax` từ package. Nếu chỉ Grep `calcTax`, bạn bỏ sót nơi dùng trực tiếp `computeTax`. Phải làm nhiều bước:
 
-## 4. Exam traps / Bẫy dễ nhầm
+1. Grep **định nghĩa gốc** (`computeTax`).
+2. Tìm các nơi **export lại hoặc alias** (`export ... as`, `export * from`, file barrel như `index.ts`).
+3. Grep **mọi tên mà hàm có thể được gọi** (bí danh, wrapper) để ra danh sách consumer đầy đủ.
+4. Kiểm tra các cách gọi động (chuỗi tên, reflection) mà tìm kiếm văn bản có thể bỏ sót.
 
-1. **Bẫy Grep versus Glob:** "Use Glob to search function bodies" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở grep versus glob, rồi chọn "Use Grep for caller references, Glob for test filename patterns".
+Hệ quả thực tế: khi refactor hoặc xóa hàm deprecated, bỏ sót consumer gián tiếp sẽ gây lỗi runtime/build. Đề thi hay hỏi "bước nào để chắc chắn đã tìm hết nơi dùng", đáp án là truy vết cả tên gốc lẫn alias qua file re-export, chứ không phải một lần grep.
 
-2. **Bẫy Precise Edit:** "Rewrite complete file immediately" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở precise edit, rồi chọn "Add unique surrounding lines or deliberate replace_all".
+### Keyword
 
-3. **Bẫy Incremental discovery:** "Read all 200 files before searching" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở incremental discovery, rồi chọn "Grep entry point, read relevant imports, expand iteratively".
+- `re-export` — export lại một symbol từ module khác
+- `alias` — tên thay thế (ví dụ `export { a as b }`)
+- `barrel file` — file như `index.ts` gom export của nhiều module
+- `wrapper` — hàm/module bọc quanh hàm gốc
+- `multi-hop tracing` — truy vết qua nhiều lớp gián tiếp
+- `consumer` — nơi sử dụng một hàm/module
 
-4. **Bẫy Indirect function usage:** "Single grep of original symbol suffices" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở indirect function usage, rồi chọn "Trace original plus re-export aliases and consumers".
+### Bẫy đề thi
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+- ✗ Một lần grep tên gốc là đủ để tìm mọi nơi dùng ⇒ ✓ Truy vết thêm alias và re-export (barrel file), rồi consumer
+- ✗ Chỉ grep tên mới sau khi đổi tên ⇒ ✓ Grep cả tên cũ lẫn tên mới và các export trung gian
+- ✗ Cho rằng tìm kiếm văn bản bắt được mọi lời gọi động ⇒ ✓ Lưu ý cách gọi động có thể bỏ sót
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+### Câu hỏi
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **Find callers of deprecated function and files named *.test.ts**. Phương án nào phù hợp nhất?
+#### Q1. Hàm `computeTax` được export lại qua `index.ts` dưới tên `calcTax`. Bạn cần liệt kê mọi nơi dùng trước khi xóa. Cách làm đúng?
+- A. Chỉ Grep `computeTax`
+- B. Chỉ Glob các file tên `*tax*`
+- C. Xóa rồi xem build báo lỗi chỗ nào
+- D. Grep định nghĩa gốc, tìm re-export/alias trong `index.ts`, rồi Grep mọi tên đang được dùng để lấy đủ consumer
 
-- **A.** Use Glob to search function bodies; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Rewrite complete file immediately; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Read all 200 files before searching; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Use Grep for caller references, Glob for test filename patterns; kèm kiểm thử lại điều kiện và ghi evidence.
+**Đáp án:** D
 
-**Đáp án: D**
+**Giải thích:** Phải bao phủ cả tên gốc lẫn alias. A bỏ sót consumer của `calcTax`. B tìm theo tên file chứ không theo lời gọi. C chấp nhận lỗi runtime/build không cần thiết.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+#### Q2. Sau refactor, grep `calcTax` không còn kết quả nhưng ứng dụng vẫn lỗi khi chạy. Nguyên nhân khả dĩ?
+- A. Glob không cập nhật chỉ mục
+- B. Edit đã làm hỏng file ngẫu nhiên
+- C. Còn nơi gọi bằng tên mới `computeTax` hoặc qua wrapper/gọi động mà tìm kiếm tên cũ không thấy
+- D. Grep không hỗ trợ TypeScript
 
-- **A:** **Sai.** Đây chính là bẫy "Use Glob to search function bodies" được nêu ở cơ chế Grep versus Glob. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Precise Edit**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Incremental discovery**, không giải quyết được yêu cầu cốt lõi "Grep searches contents, Glob matches file paths" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Grep searches contents, Glob matches file paths. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+**Đáp án:** C
 
-**Exam heuristic:** Nếu đề xuất hiện "Find callers of deprecated function and files named *.test.ts", ưu tiên phân biệt `Grep versus Glob` với các lựa chọn mô tả chuyện khác.
-
-### Q02. Một kỹ sư đề xuất **Rewrite complete file immediately** cho tình huống: Edit reports old_string appears twice. Cần phản biện thế nào?
-
-- **A.** Add unique surrounding lines or deliberate replace_all; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Rewrite complete file immediately; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Read all 200 files before searching; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Single grep of original symbol suffices; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-
-**Đáp án: A**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Đúng.** Edit modifies unique anchored spans; widen anchor on ambiguity. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Rewrite complete file immediately" được nêu ở cơ chế Precise Edit. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Incremental discovery**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Indirect function usage**, không giải quyết được yêu cầu cốt lõi "Edit modifies unique anchored spans; widen anchor on ambiguity" và thiếu điều kiện kiểm chứng.
-
-**Exam heuristic:** Nếu đề xuất hiện "Edit reports old_string appears twice", ưu tiên phân biệt `Precise Edit` với các lựa chọn mô tả chuyện khác.
-
-### Q03. Nếu sự cố **Repository has 200 files but bug only in checkout path** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
-
-- **A.** Use Glob to search function bodies; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Grep entry point, read relevant imports, expand iteratively; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Read all 200 files before searching; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Single grep of original symbol suffices; áp dụng trực tiếp dù cơ chế sự cố khác.
-
-**Đáp án: B**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc **Grep versus Glob**, không giải quyết được yêu cầu cốt lõi "Search first and read justified files to protect context" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Search first and read justified files to protect context. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Read all 200 files before searching" được nêu ở cơ chế Incremental discovery. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Indirect function usage**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-
-**Exam heuristic:** Nếu đề xuất hiện "Repository has 200 files but bug only in checkout path", ưu tiên phân biệt `Incremental discovery` với các lựa chọn mô tả chuyện khác.
-
-### Q04. Để viết acceptance criteria cho tình huống **Renamed helper is exported through index.ts**, lựa chọn nào thể hiện ranh giới đúng?
-
-- **A.** Use Glob to search function bodies; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Rewrite complete file immediately; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Trace original plus re-export aliases and consumers; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Single grep of original symbol suffices; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-
-**Đáp án: C**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc cơ chế **Grep versus Glob**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Precise Edit**, không giải quyết được yêu cầu cốt lõi "Re-exports and wrapper modules require multi-hop tracing" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Re-exports and wrapper modules require multi-hop tracing. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Single grep of original symbol suffices" được nêu ở cơ chế Indirect function usage. Không đảm bảo xử lý được case và dễ che mất failure mode.
-
-**Exam heuristic:** Nếu đề xuất hiện "Renamed helper is exported through index.ts", ưu tiên phân biệt `Indirect function usage` với các lựa chọn mô tả chuyện khác.
-
-### Q05. Nhóm đang sửa lỗi bằng cách **Use Glob to search function bodies**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
-
-- **A.** Use Glob to search function bodies; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Rewrite complete file immediately; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Read all 200 files before searching; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Use Grep for caller references, Glob for test filename patterns; kèm kiểm thử lại điều kiện và ghi evidence.
-
-**Đáp án: D**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Đây chính là bẫy "Use Glob to search function bodies" được nêu ở cơ chế Grep versus Glob. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Precise Edit**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Incremental discovery**, không giải quyết được yêu cầu cốt lõi "Grep searches contents, Glob matches file paths" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Grep searches contents, Glob matches file paths. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-
-**Exam heuristic:** Nếu đề xuất hiện "Find callers of deprecated function and files named *.test.ts", ưu tiên phân biệt `Grep versus Glob` với các lựa chọn mô tả chuyện khác.
-
-### Q06. Sau khi audit phát hiện **Edit reports old_string appears twice**, điều gì là cải tiến có thể kiểm chứng?
-
-- **A.** Add unique surrounding lines or deliberate replace_all; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Rewrite complete file immediately; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Read all 200 files before searching; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Single grep of original symbol suffices; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-
-**Đáp án: A**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Đúng.** Edit modifies unique anchored spans; widen anchor on ambiguity. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Rewrite complete file immediately" được nêu ở cơ chế Precise Edit. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Incremental discovery**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Indirect function usage**, không giải quyết được yêu cầu cốt lõi "Edit modifies unique anchored spans; widen anchor on ambiguity" và thiếu điều kiện kiểm chứng.
-
-**Exam heuristic:** Nếu đề xuất hiện "Edit reports old_string appears twice", ưu tiên phân biệt `Precise Edit` với các lựa chọn mô tả chuyện khác.
-
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Repository has 200 files but bug only in checkout path**, nên chọn gì?
-
-- **A.** Use Glob to search function bodies; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Grep entry point, read relevant imports, expand iteratively; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Read all 200 files before searching; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Single grep of original symbol suffices; áp dụng trực tiếp dù cơ chế sự cố khác.
-
-**Đáp án: B**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc **Grep versus Glob**, không giải quyết được yêu cầu cốt lõi "Search first and read justified files to protect context" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Search first and read justified files to protect context. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Read all 200 files before searching" được nêu ở cơ chế Incremental discovery. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Indirect function usage**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-
-**Exam heuristic:** Nếu đề xuất hiện "Repository has 200 files but bug only in checkout path", ưu tiên phân biệt `Incremental discovery` với các lựa chọn mô tả chuyện khác.
-
-### Q08. Một reviewer nêu giải pháp **Single grep of original symbol suffices**. Đánh giá chính xác nhất là gì?
-
-- **A.** Use Glob to search function bodies; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Rewrite complete file immediately; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Trace original plus re-export aliases and consumers; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Single grep of original symbol suffices; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-
-**Đáp án: C**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc cơ chế **Grep versus Glob**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Precise Edit**, không giải quyết được yêu cầu cốt lõi "Re-exports and wrapper modules require multi-hop tracing" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Re-exports and wrapper modules require multi-hop tracing. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Single grep of original symbol suffices" được nêu ở cơ chế Indirect function usage. Không đảm bảo xử lý được case và dễ che mất failure mode.
-
-**Exam heuristic:** Nếu đề xuất hiện "Renamed helper is exported through index.ts", ưu tiên phân biệt `Indirect function usage` với các lựa chọn mô tả chuyện khác.
-
-### Q09. Trong thử nghiệm đối chứng với tình huống **Find callers of deprecated function and files named *.test.ts**, tiêu chí pass phù hợp là gì?
-
-- **A.** Use Glob to search function bodies; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Rewrite complete file immediately; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Read all 200 files before searching; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Use Grep for caller references, Glob for test filename patterns; kèm kiểm thử lại điều kiện và ghi evidence.
-
-**Đáp án: D**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Đây chính là bẫy "Use Glob to search function bodies" được nêu ở cơ chế Grep versus Glob. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Precise Edit**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Incremental discovery**, không giải quyết được yêu cầu cốt lõi "Grep searches contents, Glob matches file paths" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Grep searches contents, Glob matches file paths. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-
-**Exam heuristic:** Nếu đề xuất hiện "Find callers of deprecated function and files named *.test.ts", ưu tiên phân biệt `Grep versus Glob` với các lựa chọn mô tả chuyện khác.
-
-### Q10. Để giảm lỗi tái diễn với **Edit reports old_string appears twice**, biện pháp nào phù hợp với cơ chế đã học?
-
-- **A.** Add unique surrounding lines or deliberate replace_all; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Rewrite complete file immediately; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Read all 200 files before searching; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Single grep of original symbol suffices; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-
-**Đáp án: A**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Đúng.** Edit modifies unique anchored spans; widen anchor on ambiguity. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Rewrite complete file immediately" được nêu ở cơ chế Precise Edit. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Incremental discovery**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Indirect function usage**, không giải quyết được yêu cầu cốt lõi "Edit modifies unique anchored spans; widen anchor on ambiguity" và thiếu điều kiện kiểm chứng.
-
-**Exam heuristic:** Nếu đề xuất hiện "Edit reports old_string appears twice", ưu tiên phân biệt `Precise Edit` với các lựa chọn mô tả chuyện khác.
-
-## 6. Lab / Bài thực hành tự kiểm tra
-
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "Find callers of deprecated function and files named *.test.ts".
-
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Use Grep for caller references, Glob for test filename patterns.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
-
-## 7. Cheat sheet / Ôn nhanh
-
-- **Grep versus Glob:** Grep searches contents, Glob matches file paths. ✓ Use Grep for caller references, Glob for test filename patterns. ✗ Use Glob to search function bodies.
-- **Precise Edit:** Edit modifies unique anchored spans; widen anchor on ambiguity. ✓ Add unique surrounding lines or deliberate replace_all. ✗ Rewrite complete file immediately.
-- **Incremental discovery:** Search first and read justified files to protect context. ✓ Grep entry point, read relevant imports, expand iteratively. ✗ Read all 200 files before searching.
-- **Indirect function usage:** Re-exports and wrapper modules require multi-hop tracing. ✓ Trace original plus re-export aliases and consumers. ✗ Single grep of original symbol suffices.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/2-tool-design-mcp/2-5-built-in-tools
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Tên thay đổi hoặc gọi gián tiếp làm tìm kiếm theo một tên bỏ sót. A không có cơ chế chỉ mục như vậy. B vô căn cứ. D sai vì Grep tìm văn bản ở mọi ngôn ngữ.

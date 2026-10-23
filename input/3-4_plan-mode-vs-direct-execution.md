@@ -1,326 +1,240 @@
 # 3.4 — Plan Mode vs Direct Execution
 
-> Domain 3: Claude Code Configuration & Workflows · Tỷ trọng toàn domain: 20%
-> Source lesson: https://claudecertificationguide.com/learn/3-claude-code-config/3-4-plan-mode-execution
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+Claude Code có hai cách tiếp cận một tác vụ: **Plan mode** (chế độ lập kế hoạch, chỉ đọc: khám phá codebase, so sánh phương án, đưa ra kế hoạch để bạn duyệt rồi mới sửa) và **direct execution** (làm thẳng: sửa, chạy test, xong). Không có cách nào "luôn tốt hơn"; vấn đề là chọn đúng theo **độ mơ hồ và phạm vi** của tác vụ.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Plan Mode vs Direct Execution**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Đề thi cho một tình huống rồi hỏi nên bắt đầu thế nào. Quy tắc nhớ nhanh: **thay đổi lớn, nhiều file, nhiều thiết kế khả thi → Plan mode trước; sửa nhỏ, rõ vị trí, rõ cách → làm trực tiếp rồi test; migration lớn → plan rồi thoát plan mode để thực thi từng đợt; khám phá dài dòng → giao cho Explore subagent để giữ context chính sạch.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Khi nào dùng Plan mode: mơ hồ và phạm vi rộng
 
-### 2.1. Plan for ambiguity and breadth
+### Trọng tâm
 
-**Principle (EN):** Architecture, multiple viable designs or extensive files warrant planning.
+Dùng Plan mode khi tác vụ **mơ hồ**, ảnh hưởng **nhiều file/module**, hoặc có **nhiều hướng thiết kế**. Cần khám phá và quyết định trước khi viết, vì sửa sai hướng rất tốn kém.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **architecture, multiple viable designs or extensive files warrant planning**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** Refactor services spanning 40 modules.
+**Plan mode** là chế độ chỉ đọc: Claude có thể đọc file, tìm kiếm, phân tích phụ thuộc, nhưng **không sửa file hay chạy lệnh có tác dụng phụ**. Kết thúc, Claude trình bày một kế hoạch để bạn duyệt. Chuyển chế độ bằng phím tắt (Shift+Tab xoay vòng giữa các chế độ quyền) hoặc khởi động với `--permission-mode plan`.
 
-**Recommended implementation:** Explore dependencies, compare options and plan before write.
+Tín hiệu nên dùng:
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Begin editing random files immediately.
+- **Phạm vi lớn**: ví dụ refactor tầng dịch vụ trải ra 40 module.
+- **Nhiều phương án hợp lý** với đánh đổi khác nhau (đổi sang event-driven hay giữ REST? thêm cache ở tầng nào?).
+- **Chưa biết rõ codebase**: phải hiểu cấu trúc, điểm gọi, ràng buộc trước.
+- **Rủi ro cao hoặc khó đảo ngược**: thay đổi schema, đổi API công khai.
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Refactor services spanning 40 modules".
-- Decision: áp dụng nguyên tắc **Plan for ambiguity and breadth** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Explore dependencies, compare options and plan before write" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Vì sao có lợi: (1) lỗi hướng đi được bắt ở bước rẻ nhất, trước khi 30 file bị sửa; (2) con người xem lại kế hoạch trước khi hành động (human-in-the-loop); (3) thao tác chỉ đọc nên an toàn để khám phá. Ngược lại, nếu lao vào sửa file ngay, Claude dễ chọn giải pháp cục bộ rồi phát hiện đụng chạm ở file khác giữa chừng, phải sửa lại nhiều lần.
 
-### 2.2. Execute for well-defined changes
+Một kế hoạch tốt nêu: các file/module bị ảnh hưởng, thứ tự thay đổi, rủi ro, cách kiểm chứng (test nào chạy), và các câu hỏi còn mở cho bạn quyết định.
 
-**Principle (EN):** One known fix in known location can be done directly.
+### Keyword
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **one known fix in known location can be done directly**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+- `Plan mode` — chế độ chỉ đọc để khám phá và lập kế hoạch trước khi sửa
+- `permission mode` — chế độ quyền của Claude Code (bình thường, plan, tự chấp nhận sửa...)
+- `ambiguity` — độ mơ hồ của yêu cầu hoặc thiết kế
+- `blast radius` — phạm vi ảnh hưởng của một thay đổi
+- `human-in-the-loop` — con người duyệt trước khi thực hiện
+- `design trade-offs` — các đánh đổi giữa những phương án thiết kế
 
-**Case study / Tình huống:** Null guard required in known function.
+### Bẫy đề thi
 
-**Recommended implementation:** Apply precise change and test.
+- ✗ Bắt đầu sửa file ngay với refactor lớn nhiều phương án ⇒ ✓ Vào Plan mode, khám phá và chọn phương án trước
+- ✗ Nghĩ Plan mode vẫn có thể ghi file nhưng "cẩn thận hơn" ⇒ ✓ Plan mode chỉ đọc; chưa sửa gì cho đến khi bạn duyệt kế hoạch
+- ✗ Dùng plan cho mọi thay đổi, kể cả sửa một dòng ⇒ ✓ Chỉ dùng khi mơ hồ, rộng hoặc rủi ro (xem K2)
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Create lengthy architecture study.
+### Câu hỏi
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Null guard required in known function".
-- Decision: áp dụng nguyên tắc **Execute for well-defined changes** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Apply precise change and test" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+#### Q1. Bạn cần tách monolith thành các service, ảnh hưởng 40 module, có ít nhất ba hướng thiết kế khác nhau và chưa rõ phụ thuộc giữa các module. Cách bắt đầu nào hợp lý nhất?
+- A. Bắt đầu sửa module đầu tiên, các module còn lại tính sau
+- B. Vào Plan mode, khám phá phụ thuộc, so sánh phương án và duyệt kế hoạch trước khi sửa
+- C. Yêu cầu Claude viết toàn bộ code mới trong một lượt
+- D. Chạy `claude -p` trong CI để tự làm mà không xem xét
 
-### 2.3. Plan then execute
+**Đáp án:** B
 
-**Principle (EN):** Use read-only planning then controlled implementation.
+**Giải thích:** Phạm vi rộng, nhiều phương án, phụ thuộc chưa biết là ba tín hiệu cho Plan mode. A dễ chọn sai hướng rồi sửa lại hàng loạt. C bỏ qua bước khám phá và tăng rủi ro. D không phải cách để quyết định thiết kế quan trọng.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **use read-only planning then controlled implementation**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+#### Q2. Điều nào mô tả đúng Plan mode?
+- A. Claude ghi file ngay nhưng đánh dấu là bản nháp
+- B. Claude chạy mọi lệnh shell có tác dụng phụ để thử nghiệm
+- C. Claude bỏ qua codebase và chỉ dựa vào mô tả của bạn
+- D. Claude chỉ đọc và phân tích, rồi đưa kế hoạch để người dùng duyệt trước khi chỉnh sửa
 
-**Case study / Tình huống:** Library migration requires strategy then many file edits.
+**Đáp án:** D
 
-**Recommended implementation:** Plan pattern then execute reviewed steps.
+**Giải thích:** Plan mode là chế độ chỉ đọc kèm đề xuất kế hoạch để duyệt. A và B mô tả hành vi có tác dụng phụ, trái với bản chất của plan. C sai vì khám phá codebase là phần cốt lõi của lập kế hoạch.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Stay in plan mode forever.
+## K2. Khi nào làm trực tiếp (direct execution)
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Library migration requires strategy then many file edits".
-- Decision: áp dụng nguyên tắc **Plan then execute** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Plan pattern then execute reviewed steps" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+### Trọng tâm
 
-### 2.4. Explore subagent isolation
+Thay đổi **nhỏ, rõ ràng, biết vị trí, biết cách sửa** thì làm trực tiếp và chạy test. Lập kế hoạch dài cho việc này là tốn thời gian, không thêm giá trị.
 
-**Principle (EN):** Delegate verbose discovery and return summary.
+### Giải thích
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **delegate verbose discovery and return summary**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+Plan mode có chi phí: thêm một vòng tương tác, thêm token và thời gian chờ. Chi phí đó chỉ đáng khi nó giảm rủi ro hoặc làm rõ lựa chọn. Với tác vụ như "hàm `getUser` crash khi `user` là `null`, thêm null guard ở `src/users/get.ts`", không còn gì để khám phá hay chọn: vị trí rõ, cách sửa rõ, kiểm chứng đơn giản (chạy test liên quan).
 
-**Case study / Tình huống:** Investigating unknown dependency tree would pollute primary context.
+Quy trình hợp lý cho direct execution:
 
-**Recommended implementation:** Use Explore subagent for search and concise handoff.
+1. Mô tả chính xác thay đổi và vị trí.
+2. Claude sửa.
+3. Chạy test/lint để xác nhận không hồi quy.
+4. Xem diff trước khi commit.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Paste all thousands of found lines into main context.
+Dấu hiệu nên làm trực tiếp: có thể mô tả kết quả trong một câu; chạm vào ít file (thường một); đã biết điểm sửa; có test hoặc cách kiểm chứng nhanh; dễ hoàn tác (git revert).
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Investigating unknown dependency tree would pollute primary context".
-- Decision: áp dụng nguyên tắc **Explore subagent isolation** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Use Explore subagent for search and concise handoff" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Ranh giới không phải cứng nhắc: nếu giữa chừng phát hiện việc "nhỏ" thực ra đụng nhiều nơi (ví dụ hàm được dùng ở 30 chỗ với giả định khác nhau), hãy dừng và chuyển sang Plan mode. Ngược lại, nếu đã có kế hoạch được duyệt, từng bước trong kế hoạch lại là direct execution. Nguyên tắc: **độ phức tạp của quy trình tỷ lệ với độ phức tạp và rủi ro của tác vụ**.
 
-## 3. Ví dụ thiết kế / Worked engineering example
+### Keyword
 
-**Problem:** Refactor services spanning 40 modules.
+- `direct execution` — làm thẳng, không qua bước lập kế hoạch riêng
+- `well-scoped change` — thay đổi rõ phạm vi
+- `null guard` — kiểm tra null để tránh lỗi tham chiếu
+- `regression test` — test xác nhận hành vi cũ không bị hỏng
+- `over-planning` — lập kế hoạch quá mức cần thiết, gây lãng phí
+- `reversibility` — khả năng hoàn tác thay đổi dễ dàng
 
-**Bad design:** Begin editing random files immediately.
+### Bẫy đề thi
 
-**Better design:** Explore dependencies, compare options and plan before write.
+- ✗ Yêu cầu nghiên cứu kiến trúc dài cho một lỗi null ở hàm đã biết ⇒ ✓ Sửa trực tiếp, thêm/chạy test
+- ✗ Bỏ qua bước chạy test sau khi sửa trực tiếp ⇒ ✓ Direct execution vẫn cần xác minh bằng test
+- ✗ Cố chấp làm trực tiếp khi thấy tác vụ lan ra nhiều module ⇒ ✓ Dừng lại, chuyển Plan mode khi phạm vi lớn hơn dự kiến
 
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
+### Câu hỏi
 
-### Walkthrough: decision trace / Luồng xử lý
+#### Q1. Stack trace cho thấy `formatPrice()` trong `src/utils/price.ts` ném lỗi khi `amount` là `undefined`. Bạn muốn thêm kiểm tra và một unit test. Cách làm hiệu quả nhất?
+- A. Mở Plan mode, yêu cầu báo cáo kiến trúc toàn dự án trước khi sửa
+- B. Chuyển sang Plan mode và so sánh ba kiến trúc xử lý lỗi
+- C. Yêu cầu Claude sửa trực tiếp hàm đó, thêm test và chạy test
+- D. Viết lại toàn bộ module `utils`
 
-```text
-INPUT  : Refactor services spanning 40 modules.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Explore dependencies, compare options and plan before write.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
-```
+**Đáp án:** C
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+**Giải thích:** Lỗi có vị trí và cách sửa rõ ràng, đúng loại việc làm trực tiếp rồi kiểm chứng bằng test. A và B là over-planning không thêm giá trị. D mở rộng phạm vi không cần thiết và tăng rủi ro.
 
-## 4. Exam traps / Bẫy dễ nhầm
+#### Q2. Đang sửa trực tiếp một lỗi "nhỏ", Claude phát hiện hàm đó được gọi ở 30 nơi với các giả định khác nhau về giá trị trả về. Hành động hợp lý?
+- A. Tiếp tục sửa và hy vọng không hỏng gì
+- B. Dừng lại, chuyển sang Plan mode để phân tích tác động và lập kế hoạch thay đổi
+- C. Xoá hàm đó để các lời gọi tự báo lỗi
+- D. Bỏ qua phát hiện này và commit
 
-1. **Bẫy Plan for ambiguity and breadth:** "Begin editing random files immediately" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở plan for ambiguity and breadth, rồi chọn "Explore dependencies, compare options and plan before write".
+**Đáp án:** B
 
-2. **Bẫy Execute for well-defined changes:** "Create lengthy architecture study" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở execute for well-defined changes, rồi chọn "Apply precise change and test".
+**Giải thích:** Phạm vi hoá ra rộng và rủi ro cao hơn dự kiến, là tín hiệu để lập kế hoạch. A và D bỏ qua rủi ro hồi quy. C gây phá vỡ diện rộng.
 
-3. **Bẫy Plan then execute:** "Stay in plan mode forever" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở plan then execute, rồi chọn "Plan pattern then execute reviewed steps".
+## K3. Kết hợp: plan rồi thực thi theo đợt
 
-4. **Bẫy Explore subagent isolation:** "Paste all thousands of found lines into main context" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở explore subagent isolation, rồi chọn "Use Explore subagent for search and concise handoff".
+### Trọng tâm
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+Với thay đổi lớn: **plan trước (chỉ đọc), duyệt, rồi thoát Plan mode để thực thi có kiểm soát** theo từng bước/đợt, kiểm tra sau mỗi đợt. Không "ở mãi" trong Plan mode.
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+### Giải thích
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **Refactor services spanning 40 modules**. Phương án nào phù hợp nhất?
+Plan mode và direct execution không đối lập mà là hai pha của cùng một quy trình lớn. Ví dụ migration thư viện (đổi HTTP client ở 120 file):
 
-- **A.** Create lengthy architecture study; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Stay in plan mode forever; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Explore dependencies, compare options and plan before write; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Begin editing random files immediately; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+1. **Pha 1, Plan**: khám phá cách thư viện cũ đang được dùng, nhóm các mẫu sử dụng, đề xuất chiến lược (tạo adapter, đổi dần theo module, giữ test xanh ở mọi bước), liệt kê rủi ro.
+2. **Duyệt**: con người xem kế hoạch, chỉnh sửa, đồng ý.
+3. **Pha 2, Execute**: thoát Plan mode, làm từng đợt (ví dụ module `auth` trước), chạy test sau mỗi đợt, commit nhỏ, rồi sang đợt kế.
 
-**Đáp án: C**
+Lợi ích: kế hoạch cho chiến lược chung; thực thi theo đợt cho vòng phản hồi nhanh và giảm rủi ro. Nếu sai ở đợt 2, bạn revert một commit nhỏ chứ không phải cả migration.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Sai lầm phổ biến là nghĩ rằng Plan mode là đích đến: kế hoạch không thay đổi code. Giá trị chỉ xuất hiện khi chuyển sang thực thi. Sai lầm ngược lại là nhảy sang thực thi cả khối lớn trong một lượt, mất khả năng kiểm soát và khó review.
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Execute for well-defined changes**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Plan then execute**, không giải quyết được yêu cầu cốt lõi "Architecture, multiple viable designs or extensive files warrant planning" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Architecture, multiple viable designs or extensive files warrant planning. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Begin editing random files immediately" được nêu ở cơ chế Plan for ambiguity and breadth. Không đảm bảo xử lý được case và dễ che mất failure mode.
+Có thể lưu kế hoạch ra file (ví dụ `PLAN.md`) hoặc dùng danh sách việc để theo dõi tiến độ, đặc biệt khi công việc kéo qua nhiều phiên.
 
-**Exam heuristic:** Nếu đề xuất hiện "Refactor services spanning 40 modules", ưu tiên phân biệt `Plan for ambiguity and breadth` với các lựa chọn mô tả chuyện khác.
+### Keyword
 
-### Q02. Một kỹ sư đề xuất **Create lengthy architecture study** cho tình huống: Null guard required in known function. Cần phản biện thế nào?
+- `plan then execute` — mẫu hai pha: lập kế hoạch rồi thực thi
+- `phased rollout` — triển khai theo đợt nhỏ, kiểm chứng từng đợt
+- `exit plan mode` — thoát Plan mode sau khi kế hoạch được duyệt để bắt đầu sửa
+- `incremental commits` — commit nhỏ sau mỗi đợt, dễ revert
+- `migration strategy` — chiến lược chuyển đổi thư viện/hệ thống
+- `checkpoint` — điểm kiểm tra sau mỗi bước để xác nhận trước khi đi tiếp
 
-- **A.** Create lengthy architecture study; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Stay in plan mode forever; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Paste all thousands of found lines into main context; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Apply precise change and test; kèm kiểm thử lại điều kiện và ghi evidence.
+### Bẫy đề thi
 
-**Đáp án: D**
+- ✗ Ở mãi trong Plan mode và mong code tự thay đổi ⇒ ✓ Duyệt kế hoạch rồi thoát Plan mode để thực thi
+- ✗ Thực thi cả migration lớn trong một lượt duy nhất ⇒ ✓ Chia đợt, test và commit sau mỗi đợt
+- ✗ Bỏ qua bước duyệt kế hoạch vì "model chắc làm đúng" ⇒ ✓ Con người duyệt chiến lược trước khi thực thi diện rộng
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Câu hỏi
 
-- **A:** **Sai.** Đây chính là bẫy "Create lengthy architecture study" được nêu ở cơ chế Execute for well-defined changes. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Plan then execute**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Explore subagent isolation**, không giải quyết được yêu cầu cốt lõi "One known fix in known location can be done directly" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** One known fix in known location can be done directly. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+#### Q1. Team cần chuyển 120 file từ thư viện HTTP cũ sang thư viện mới, vừa phải giữ CI xanh vừa phải dễ revert. Quy trình nào phù hợp nhất?
+- A. Plan mode để lập chiến lược và duyệt, sau đó thoát Plan mode và thực thi từng module, test và commit sau mỗi đợt
+- B. Thực thi toàn bộ 120 file trong một lượt rồi chạy test một lần
+- C. Chỉ lập kế hoạch và không bao giờ thực thi vì kế hoạch đã là kết quả
+- D. Để Claude tự chọn thư viện mới mà không cần duyệt
 
-**Exam heuristic:** Nếu đề xuất hiện "Null guard required in known function", ưu tiên phân biệt `Execute for well-defined changes` với các lựa chọn mô tả chuyện khác.
+**Đáp án:** A
 
-### Q03. Nếu sự cố **Library migration requires strategy then many file edits** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+**Giải thích:** Migration lớn cần chiến lược (plan) và thực thi có kiểm soát theo đợt. B làm khó phát hiện và revert lỗi. C bỏ quên việc thực sự thay đổi code. D bỏ bước duyệt cho quyết định ảnh hưởng lớn.
 
-- **A.** Plan pattern then execute reviewed steps; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Stay in plan mode forever; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Paste all thousands of found lines into main context; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Begin editing random files immediately; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+#### Q2. Sau khi Claude trình bày kế hoạch ở Plan mode và bạn đồng ý, bước tiếp theo hợp lý nhất là gì?
+- A. Giữ nguyên Plan mode và yêu cầu Claude sửa file
+- B. Thoát Plan mode và thực thi kế hoạch theo từng bước kèm kiểm tra
+- C. Xoá kế hoạch và bắt đầu lại ở chế độ thường
+- D. Chuyển kế hoạch sang CLAUDE.md rồi xoá
 
-**Đáp án: A**
+**Đáp án:** B
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Giải thích:** Plan mode chỉ đọc nên cần thoát ra mới sửa được; thực thi nên theo từng bước có kiểm chứng. A mâu thuẫn với tính chỉ đọc. C bỏ phí kế hoạch đã duyệt. D lạm dụng CLAUDE.md, vốn dành cho hướng dẫn bền vững.
 
-- **A:** **Đúng.** Use read-only planning then controlled implementation. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Stay in plan mode forever" được nêu ở cơ chế Plan then execute. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Explore subagent isolation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Plan for ambiguity and breadth**, không giải quyết được yêu cầu cốt lõi "Use read-only planning then controlled implementation" và thiếu điều kiện kiểm chứng.
+## K4. Explore subagent: cô lập khám phá dài dòng
 
-**Exam heuristic:** Nếu đề xuất hiện "Library migration requires strategy then many file edits", ưu tiên phân biệt `Plan then execute` với các lựa chọn mô tả chuyện khác.
+### Trọng tâm
 
-### Q04. Để viết acceptance criteria cho tình huống **Investigating unknown dependency tree would pollute primary context**, lựa chọn nào thể hiện ranh giới đúng?
+Khi cần khám phá nhiều (tìm cây phụ thuộc, đọc hàng chục file), giao cho **Explore subagent**: nó đọc trong ngữ cảnh riêng và chỉ trả **bản tóm tắt**, giữ context chính gọn.
 
-- **A.** Create lengthy architecture study; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Use Explore subagent for search and concise handoff; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Paste all thousands of found lines into main context; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Begin editing random files immediately; áp dụng trực tiếp dù cơ chế sự cố khác.
+### Giải thích
 
-**Đáp án: B**
+Khám phá codebase lạ sinh ra rất nhiều output trung gian: kết quả grep, nội dung file, cây thư mục. Nếu tất cả nằm trong cuộc trò chuyện chính, context phình ra, các chỉ dẫn và quyết định quan trọng bị đẩy xa, và chất lượng giảm dần (context degradation, bài 5.4).
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Subagent** là một instance Claude chạy trong **context window riêng**. Claude Code có sẵn subagent **Explore** chuyên khám phá codebase ở chế độ chỉ đọc (được tối ưu cho tìm kiếm nhanh). Luồng làm việc:
 
-- **A:** **Sai.** Phương án thuộc **Execute for well-defined changes**, không giải quyết được yêu cầu cốt lõi "Delegate verbose discovery and return summary" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Delegate verbose discovery and return summary. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Paste all thousands of found lines into main context" được nêu ở cơ chế Explore subagent isolation. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Plan for ambiguity and breadth**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+1. Luồng chính ra lệnh: "Tìm mọi nơi dùng `LegacyAuth` và cho biết module nào phụ thuộc."
+2. Explore chạy hàng chục lần grep/đọc file trong ngữ cảnh riêng.
+3. Chỉ trả về: "12 nơi dùng, thuộc 4 module (auth, billing, admin, reports); các điểm vào quan trọng là..."
+4. Luồng chính dùng bản tóm tắt này để lập kế hoạch.
 
-**Exam heuristic:** Nếu đề xuất hiện "Investigating unknown dependency tree would pollute primary context", ưu tiên phân biệt `Explore subagent isolation` với các lựa chọn mô tả chuyện khác.
+Điểm cần nhớ:
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Begin editing random files immediately**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+- Subagent **không thấy** lịch sử luồng chính, nên cần mô tả nhiệm vụ đầy đủ và nêu rõ muốn nhận lại gì (bài 1.3).
+- Giá trị nằm ở **cô lập context**, không phải phép màu về độ chính xác; tóm tắt cần chứa đường dẫn/bằng chứng để luồng chính kiểm chứng khi cần.
+- Kết hợp tự nhiên với Plan mode: Explore thu thập dữ kiện, luồng chính lập kế hoạch.
 
-- **A.** Create lengthy architecture study; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Stay in plan mode forever; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Explore dependencies, compare options and plan before write; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Begin editing random files immediately; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+### Keyword
 
-**Đáp án: C**
+- `Explore subagent` — subagent chỉ đọc chuyên khám phá codebase, trả về tóm tắt
+- `subagent` — instance Claude chạy trong context riêng để làm một việc cụ thể
+- `context isolation` — tách context để output trung gian không làm bẩn luồng chính
+- `summary handoff` — bàn giao kết quả cô đọng cho luồng chính
+- `dependency discovery` — tìm hiểu cây phụ thuộc giữa các thành phần
+- `evidence in summary` — tóm tắt kèm đường dẫn file để kiểm chứng
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Bẫy đề thi
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Execute for well-defined changes**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Plan then execute**, không giải quyết được yêu cầu cốt lõi "Architecture, multiple viable designs or extensive files warrant planning" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Architecture, multiple viable designs or extensive files warrant planning. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Begin editing random files immediately" được nêu ở cơ chế Plan for ambiguity and breadth. Không đảm bảo xử lý được case và dễ che mất failure mode.
+- ✗ Dán hàng nghìn dòng kết quả tìm kiếm vào luồng chính ⇒ ✓ Dùng Explore subagent và nhận lại tóm tắt
+- ✗ Nghĩ subagent tự biết toàn bộ cuộc trò chuyện trước đó ⇒ ✓ Phải truyền đủ ngữ cảnh trong yêu cầu giao việc
+- ✗ Dùng subagent cho việc nhỏ chỉ cần đọc một file ⇒ ✓ Dùng khi khám phá đủ lớn để cô lập có lợi
 
-**Exam heuristic:** Nếu đề xuất hiện "Refactor services spanning 40 modules", ưu tiên phân biệt `Plan for ambiguity and breadth` với các lựa chọn mô tả chuyện khác.
+### Câu hỏi
 
-### Q06. Sau khi audit phát hiện **Null guard required in known function**, điều gì là cải tiến có thể kiểm chứng?
+#### Q1. Bạn cần hiểu cây phụ thuộc của một monorepo 3.000 file trước khi refactor. Bạn lo ngại kết quả tìm kiếm sẽ làm đầy context chính. Phương án tốt nhất?
+- A. Chạy grep trực tiếp trong luồng chính rồi đọc từng kết quả
+- B. Dán toàn bộ cây thư mục vào CLAUDE.md
+- C. Giảm `max_tokens` để output ngắn hơn
+- D. Giao cho Explore subagent khám phá và chỉ trả về bản tóm tắt phụ thuộc
 
-- **A.** Create lengthy architecture study; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Stay in plan mode forever; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Paste all thousands of found lines into main context; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Apply precise change and test; kèm kiểm thử lại điều kiện và ghi evidence.
+**Đáp án:** D
 
-**Đáp án: D**
+**Giải thích:** Subagent khám phá trong context riêng, trả về kết luận cô đọng nên luồng chính sạch. A làm context phình. B nhồi dữ liệu tạm thời vào file bền vững và vẫn tốn context. C không giảm lượng khám phá cần thiết.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+#### Q2. Một kỹ sư giao cho Explore subagent câu "xem các chỗ đó có sao không" sau một cuộc trò chuyện dài, và kết quả trả về lạc đề. Nguyên nhân hợp lý nhất?
+- A. Subagent không thấy lịch sử luồng chính nên yêu cầu thiếu ngữ cảnh ("các chỗ đó" là gì?)
+- B. Subagent bị khoá không được đọc file
+- C. Explore chỉ hoạt động khi Plan mode đang tắt
+- D. Tóm tắt luôn lạc đề do cơ chế của subagent
 
-- **A:** **Sai.** Đây chính là bẫy "Create lengthy architecture study" được nêu ở cơ chế Execute for well-defined changes. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Plan then execute**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Explore subagent isolation**, không giải quyết được yêu cầu cốt lõi "One known fix in known location can be done directly" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** One known fix in known location can be done directly. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+**Đáp án:** A
 
-**Exam heuristic:** Nếu đề xuất hiện "Null guard required in known function", ưu tiên phân biệt `Execute for well-defined changes` với các lựa chọn mô tả chuyện khác.
-
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Library migration requires strategy then many file edits**, nên chọn gì?
-
-- **A.** Plan pattern then execute reviewed steps; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Stay in plan mode forever; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Paste all thousands of found lines into main context; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Begin editing random files immediately; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-
-**Đáp án: A**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Đúng.** Use read-only planning then controlled implementation. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Stay in plan mode forever" được nêu ở cơ chế Plan then execute. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Explore subagent isolation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Plan for ambiguity and breadth**, không giải quyết được yêu cầu cốt lõi "Use read-only planning then controlled implementation" và thiếu điều kiện kiểm chứng.
-
-**Exam heuristic:** Nếu đề xuất hiện "Library migration requires strategy then many file edits", ưu tiên phân biệt `Plan then execute` với các lựa chọn mô tả chuyện khác.
-
-### Q08. Một reviewer nêu giải pháp **Paste all thousands of found lines into main context**. Đánh giá chính xác nhất là gì?
-
-- **A.** Create lengthy architecture study; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Use Explore subagent for search and concise handoff; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Paste all thousands of found lines into main context; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Begin editing random files immediately; áp dụng trực tiếp dù cơ chế sự cố khác.
-
-**Đáp án: B**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc **Execute for well-defined changes**, không giải quyết được yêu cầu cốt lõi "Delegate verbose discovery and return summary" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Delegate verbose discovery and return summary. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Paste all thousands of found lines into main context" được nêu ở cơ chế Explore subagent isolation. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Plan for ambiguity and breadth**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-
-**Exam heuristic:** Nếu đề xuất hiện "Investigating unknown dependency tree would pollute primary context", ưu tiên phân biệt `Explore subagent isolation` với các lựa chọn mô tả chuyện khác.
-
-### Q09. Trong thử nghiệm đối chứng với tình huống **Refactor services spanning 40 modules**, tiêu chí pass phù hợp là gì?
-
-- **A.** Create lengthy architecture study; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Stay in plan mode forever; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Explore dependencies, compare options and plan before write; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Begin editing random files immediately; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-
-**Đáp án: C**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc cơ chế **Execute for well-defined changes**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Plan then execute**, không giải quyết được yêu cầu cốt lõi "Architecture, multiple viable designs or extensive files warrant planning" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Architecture, multiple viable designs or extensive files warrant planning. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Begin editing random files immediately" được nêu ở cơ chế Plan for ambiguity and breadth. Không đảm bảo xử lý được case và dễ che mất failure mode.
-
-**Exam heuristic:** Nếu đề xuất hiện "Refactor services spanning 40 modules", ưu tiên phân biệt `Plan for ambiguity and breadth` với các lựa chọn mô tả chuyện khác.
-
-### Q10. Để giảm lỗi tái diễn với **Null guard required in known function**, biện pháp nào phù hợp với cơ chế đã học?
-
-- **A.** Create lengthy architecture study; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Stay in plan mode forever; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Paste all thousands of found lines into main context; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Apply precise change and test; kèm kiểm thử lại điều kiện và ghi evidence.
-
-**Đáp án: D**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Đây chính là bẫy "Create lengthy architecture study" được nêu ở cơ chế Execute for well-defined changes. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Plan then execute**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Explore subagent isolation**, không giải quyết được yêu cầu cốt lõi "One known fix in known location can be done directly" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** One known fix in known location can be done directly. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-
-**Exam heuristic:** Nếu đề xuất hiện "Null guard required in known function", ưu tiên phân biệt `Execute for well-defined changes` với các lựa chọn mô tả chuyện khác.
-
-## 6. Lab / Bài thực hành tự kiểm tra
-
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "Refactor services spanning 40 modules".
-
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Explore dependencies, compare options and plan before write.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
-
-## 7. Cheat sheet / Ôn nhanh
-
-- **Plan for ambiguity and breadth:** Architecture, multiple viable designs or extensive files warrant planning. ✓ Explore dependencies, compare options and plan before write. ✗ Begin editing random files immediately.
-- **Execute for well-defined changes:** One known fix in known location can be done directly. ✓ Apply precise change and test. ✗ Create lengthy architecture study.
-- **Plan then execute:** Use read-only planning then controlled implementation. ✓ Plan pattern then execute reviewed steps. ✗ Stay in plan mode forever.
-- **Explore subagent isolation:** Delegate verbose discovery and return summary. ✓ Use Explore subagent for search and concise handoff. ✗ Paste all thousands of found lines into main context.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/3-claude-code-config/3-4-plan-mode-execution
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Subagent chạy ở context riêng, nên chỉ biết những gì nằm trong yêu cầu giao việc; cần nêu rõ đối tượng, mục tiêu và định dạng kết quả. B sai vì Explore vốn được thiết kế để đọc. C không có cơ sở. D khái quát hoá sai từ một lỗi do brief thiếu.

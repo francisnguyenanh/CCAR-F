@@ -1,326 +1,254 @@
 # 2.4 — MCP Server Integration
 
-> Domain 2: Tool Design & MCP Integration · Tỷ trọng toàn domain: 18%
-> Source lesson: https://claudecertificationguide.com/learn/2-tool-design-mcp/2-4-mcp-server-integration
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+**Model Context Protocol (MCP)** là giao thức chuẩn để Claude kết nối với hệ thống bên ngoài (Jira, GitHub, database...). Một MCP server có thể cung cấp **tools** (hành động), **resources** (dữ liệu đọc được) và **prompts**. Trong Claude Code, bạn cấu hình server qua file, và **chọn đúng phạm vi (scope) cấu hình** quyết định ai dùng được server đó.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **MCP Server Integration**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Đề thi xoay quanh bốn quyết định: đặt cấu hình ở đâu (team hay cá nhân), xử lý bí mật thế nào, khi nào dùng resource thay vì tool, và dùng server có sẵn hay tự xây. Quy tắc nhớ nhanh: **chia sẻ qua `.mcp.json` trong repo, bí mật qua biến môi trường, dữ liệu ngữ cảnh qua resource, và ưu tiên đồ có sẵn đã được bảo trì.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Phạm vi cấu hình MCP: team so với cá nhân
 
-### 2.1. Shared configuration scope
+### Trọng tâm
 
-**Principle (EN):** Repository .mcp.json is team-wide, ~/.claude.json personal.
+`.mcp.json` ở gốc repo là cấu hình **dùng chung cho cả team** (đưa vào version control). Cấu hình **cá nhân** nằm ở `~/.claude.json`.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **repository .mcp.json is team-wide, ~/.claude.json personal**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** All teammates need same Jira MCP server.
+Claude Code cho phép khai báo MCP server ở nhiều phạm vi:
 
-**Recommended implementation:** Commit .mcp.json with environment placeholders.
+| Phạm vi | Nơi lưu | Ai dùng |
+|---|---|---|
+| Project | `.mcp.json` ở gốc repo (commit được) | Cả team, ai clone repo đều có |
+| User / cá nhân | `~/.claude.json` | Chỉ một người, mọi project của người đó |
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Store team setup only in one developer home dir.
+Tình huống điển hình: cả team cần cùng một server Jira. Cách đúng là khai báo trong `.mcp.json` rồi commit; thành viên mới clone repo là có ngay cấu hình, không phải làm theo hướng dẫn thủ công. Nếu chỉ cấu hình trong thư mục home của một lập trình viên, những người khác không có server đó và dẫn đến "máy tôi chạy được, máy bạn thì không".
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "All teammates need same Jira MCP server".
-- Decision: áp dụng nguyên tắc **Shared configuration scope** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Commit .mcp.json with environment placeholders" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Ngược lại, server thử nghiệm cá nhân hoặc server cần thông tin riêng không nên đẩy vào repo; để ở phạm vi user.
 
-### 2.2. Secrets via environment variables
+Khi Claude Code khởi động, nó kết nối tới các server đã cấu hình và **tool của chúng xuất hiện cùng với tool built-in**, nên tên và mô tả tool MCP cũng cần chất lượng tốt như K1 của bài 2.1. Server cho team mới cấu hình trong project thường cần người dùng **phê duyệt** trước lần dùng đầu (cơ chế an toàn), điều bạn nên biết khi hướng dẫn team.
 
-**Principle (EN):** Reference ${TOKEN} rather than commit raw credentials.
+### Keyword
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **reference ${TOKEN} rather than commit raw credentials**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+- `MCP (Model Context Protocol)` — giao thức chuẩn kết nối model với công cụ/dữ liệu bên ngoài
+- `.mcp.json` — file cấu hình MCP cấp project, commit vào repo
+- `~/.claude.json` — cấu hình cá nhân của người dùng
+- `project scope` — phạm vi project, chia sẻ cho cả team
+- `user scope` — phạm vi người dùng, riêng một người
+- `MCP server` — tiến trình/dịch vụ cung cấp tool, resource, prompt qua MCP
 
-**Case study / Tình huống:** Team shares server settings but each member uses own token.
+### Bẫy đề thi
 
-**Recommended implementation:** Use env interpolation and secrets manager.
+- ✗ Cấu hình server chung của team chỉ trong thư mục home của một người ⇒ ✓ Đặt trong `.mcp.json` ở repo và commit
+- ✗ Đưa server thử nghiệm cá nhân vào `.mcp.json` cho cả team ⇒ ✓ Để ở cấu hình cá nhân
+- ✗ Gửi hướng dẫn cài tay qua chat cho từng thành viên ⇒ ✓ Version-control cấu hình để mọi người đồng bộ
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Commit token literal into repository.
+### Câu hỏi
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Team shares server settings but each member uses own token".
-- Decision: áp dụng nguyên tắc **Secrets via environment variables** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Use env interpolation and secrets manager" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+#### Q1. Cả team 12 người cần dùng chung server MCP Jira với cùng cấu hình. Cách quản lý tốt nhất?
+- A. Mỗi người tự thêm vào `~/.claude.json` theo hướng dẫn trên wiki
+- B. Khai báo trong `.mcp.json` ở gốc repo và commit
+- C. Chỉ cấu hình trên máy trưởng nhóm
+- D. Dán cấu hình vào CLAUDE.md để model tự kết nối
 
-### 2.3. MCP resources versus tools
+**Đáp án:** B
 
-**Principle (EN):** Resources expose readable context; tools invoke capabilities.
+**Giải thích:** `.mcp.json` ở repo là phạm vi project, ai clone cũng nhận cấu hình. A dễ lệch và tốn công. C không chia sẻ. D sai cơ chế: CLAUDE.md là hướng dẫn cho model, không phải nơi cấu hình kết nối server.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **resources expose readable context; tools invoke capabilities**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+#### Q2. Một lập trình viên muốn thử một server MCP thử nghiệm chỉ cho riêng mình, không ảnh hưởng đồng đội. Nơi cấu hình phù hợp?
+- A. `.mcp.json` trong repo
+- B. Cấu hình cá nhân `~/.claude.json`
+- C. Nhánh `main` của repo
+- D. Biến trong pipeline CI
 
-**Case study / Tình huống:** Agent must know database schema before building query.
+**Đáp án:** B
 
-**Recommended implementation:** Expose schema resource to reduce discovery calls.
+**Giải thích:** Phạm vi user chỉ ảnh hưởng một người. A, C đưa vào repo nên ảnh hưởng cả team. D không liên quan môi trường làm việc cục bộ.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Force endless list_tables tool calls.
+## K2. Bí mật qua biến môi trường
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Agent must know database schema before building query".
-- Decision: áp dụng nguyên tắc **MCP resources versus tools** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Expose schema resource to reduce discovery calls" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+### Trọng tâm
 
-### 2.4. Community versus custom server
+Không commit token/credential vào `.mcp.json`. Dùng **tham chiếu biến môi trường** dạng `${TOKEN}`; mỗi người cung cấp giá trị của mình.
 
-**Principle (EN):** Evaluate maintained standard integration before writing custom.
+### Giải thích
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **evaluate maintained standard integration before writing custom**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+`.mcp.json` được commit nên **mọi người có quyền đọc repo đều đọc được nó**, cả lịch sử git. Nếu bạn viết token thật vào đó:
 
-**Case study / Tình huống:** Standard Jira lookup requirement appears.
+- Lộ bí mật cho cả team và bất kỳ ai truy cập repo.
+- Token dùng chung làm mất khả năng truy vết (không biết ai thực hiện hành động).
+- Khi xoay (rotate) token phải sửa repo và đẩy lại; lịch sử git vẫn giữ giá trị cũ.
 
-**Recommended implementation:** Evaluate existing connector/security/maintenance first.
+Cách đúng: trong file chỉ ghi **placeholder** và để biến môi trường cung cấp giá trị, ví dụ:
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Build custom MCP from zero automatically.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Standard Jira lookup requirement appears".
-- Decision: áp dụng nguyên tắc **Community versus custom server** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Evaluate existing connector/security/maintenance first" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-## 3. Ví dụ thiết kế / Worked engineering example
-
-**Problem:** All teammates need same Jira MCP server.
-
-**Bad design:** Store team setup only in one developer home dir.
-
-**Better design:** Commit .mcp.json with environment placeholders.
-
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
-
-### Walkthrough: decision trace / Luồng xử lý
-
-```text
-INPUT  : All teammates need same Jira MCP server.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Commit .mcp.json with environment placeholders.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
+```json
+{
+  "mcpServers": {
+    "jira": {
+      "command": "npx",
+      "args": ["-y", "some-jira-mcp-server"],
+      "env": { "JIRA_TOKEN": "${JIRA_TOKEN}" }
+    }
+  }
+}
 ```
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+Mỗi thành viên đặt `JIRA_TOKEN` trong môi trường của mình (shell profile, secrets manager, biến CI). Nhờ đó cấu hình dùng chung nhưng **thông tin xác thực riêng từng người**, đúng yêu cầu "cùng server, mỗi người token riêng".
 
-## 4. Exam traps / Bẫy dễ nhầm
+Lưu ý: `${VAR}` chỉ là cách chèn giá trị khi chạy. Đừng thay bằng việc bỏ token vào file rồi thêm vào `.gitignore` cho cả file cấu hình chung, vì như vậy mất luôn việc chia sẻ cấu hình. Tên ví dụ trong code ở trên là minh họa.
 
-1. **Bẫy Shared configuration scope:** "Store team setup only in one developer home dir" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở shared configuration scope, rồi chọn "Commit .mcp.json with environment placeholders".
+### Keyword
 
-2. **Bẫy Secrets via environment variables:** "Commit token literal into repository" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở secrets via environment variables, rồi chọn "Use env interpolation and secrets manager".
+- `environment variable` — biến môi trường, cách đưa giá trị bí mật vào lúc chạy
+- `${VAR}` — cú pháp tham chiếu biến môi trường trong cấu hình
+- `secrets manager` — kho quản lý bí mật tập trung
+- `credential leakage` — rò rỉ thông tin xác thực
+- `token rotation` — thay token định kỳ hoặc khi lộ
+- `per-user credentials` — thông tin xác thực riêng cho từng người
 
-3. **Bẫy MCP resources versus tools:** "Force endless list_tables tool calls" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở mcp resources versus tools, rồi chọn "Expose schema resource to reduce discovery calls".
+### Bẫy đề thi
 
-4. **Bẫy Community versus custom server:** "Build custom MCP from zero automatically" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở community versus custom server, rồi chọn "Evaluate existing connector/security/maintenance first".
+- ✗ Commit token thật vào `.mcp.json` cho tiện ⇒ ✓ Dùng `${TOKEN}` và đặt giá trị ở môi trường mỗi người
+- ✗ Dùng một token dùng chung cho cả team ⇒ ✓ Mỗi người một token để truy vết và thu hồi riêng
+- ✗ Tin rằng repo private thì commit secret an toàn ⇒ ✓ Secret không nên nằm trong source dù repo private
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+### Câu hỏi
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+#### Q1. Team chia sẻ cấu hình server MCP nhưng mỗi thành viên dùng API token cá nhân. Thiết kế đúng?
+- A. Ghi token của từng người vào `.mcp.json` theo khối riêng
+- B. Dùng chung một token rồi ghi thẳng vào file
+- C. Dùng `${TOKEN}` trong `.mcp.json` và mỗi người đặt biến môi trường của mình
+- D. Gửi token trong CLAUDE.md để model dùng
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **All teammates need same Jira MCP server**. Phương án nào phù hợp nhất?
+**Đáp án:** C
 
-- **A.** Store team setup only in one developer home dir; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Commit token literal into repository; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Force endless list_tables tool calls; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Commit .mcp.json with environment placeholders; kèm kiểm thử lại điều kiện và ghi evidence.
+**Giải thích:** Cấu hình chung chứa placeholder còn giá trị nằm ở môi trường cá nhân. A, B lộ bí mật trong repo. D đưa bí mật vào ngữ cảnh model và repo.
 
-**Đáp án: D**
+#### Q2. Lý do chính nên tránh commit token trực tiếp vào `.mcp.json`?
+- A. File sẽ chạy chậm hơn
+- B. Server MCP không đọc được token ở dạng văn bản
+- C. JSON không cho phép chuỗi dài
+- D. Bí mật sẽ lộ cho mọi người đọc repo và tồn tại trong lịch sử git
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** D
 
-- **A:** **Sai.** Đây chính là bẫy "Store team setup only in one developer home dir" được nêu ở cơ chế Shared configuration scope. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Secrets via environment variables**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **MCP resources versus tools**, không giải quyết được yêu cầu cốt lõi "Repository .mcp.json is team-wide, ~/.claude.json personal" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Repository .mcp.json is team-wide, ~/.claude.json personal. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+**Giải thích:** Vấn đề là bảo mật và vòng đời bí mật. A, B, C là lý do kỹ thuật không đúng.
 
-**Exam heuristic:** Nếu đề xuất hiện "All teammates need same Jira MCP server", ưu tiên phân biệt `Shared configuration scope` với các lựa chọn mô tả chuyện khác.
+## K3. Resource so với Tool
 
-### Q02. Một kỹ sư đề xuất **Commit token literal into repository** cho tình huống: Team shares server settings but each member uses own token. Cần phản biện thế nào?
+### Trọng tâm
 
-- **A.** Use env interpolation and secrets manager; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Commit token literal into repository; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Force endless list_tables tool calls; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Build custom MCP from zero automatically; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+**Resource** cung cấp dữ liệu/ngữ cảnh để **đọc** (ví dụ database schema, tài liệu); **tool** thực thi hành động hoặc truy vấn có tham số. Dùng resource để giảm các lời gọi khám phá lặp lại.
 
-**Đáp án: A**
+### Giải thích
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+MCP phân biệt:
 
-- **A:** **Đúng.** Reference ${TOKEN} rather than commit raw credentials. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Commit token literal into repository" được nêu ở cơ chế Secrets via environment variables. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **MCP resources versus tools**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Community versus custom server**, không giải quyết được yêu cầu cốt lõi "Reference ${TOKEN} rather than commit raw credentials" và thiếu điều kiện kiểm chứng.
+- **Tools**: hàm model chủ động gọi, có thể có tác dụng phụ (tạo issue, chạy query). Do model quyết định gọi.
+- **Resources**: nội dung dữ liệu được server phơi bày và đánh địa chỉ bằng URI (ví dụ schema DB, danh mục tài liệu, nội dung issue), thường **do ứng dụng/người dùng chọn đưa vào ngữ cảnh**; giúp model biết "có gì" ở đó.
 
-**Exam heuristic:** Nếu đề xuất hiện "Team shares server settings but each member uses own token", ưu tiên phân biệt `Secrets via environment variables` với các lựa chọn mô tả chuyện khác.
+Tình huống: agent phải biết schema bảng trước khi viết SQL. Nếu chỉ có tool `list_tables` và `describe_table`, mỗi nhiệm vụ agent phải gọi hàng chục lần để khám phá, tốn lượt, token và dễ sai sót. Nếu server phơi bày **schema như một resource**, agent có **catalog nội dung** ngay từ đầu, giảm các lời gọi khám phá và viết truy vấn đúng hơn.
 
-### Q03. Nếu sự cố **Agent must know database schema before building query** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+Tiêu chí chọn:
 
-- **A.** Store team setup only in one developer home dir; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Expose schema resource to reduce discovery calls; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Force endless list_tables tool calls; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Build custom MCP from zero automatically; áp dụng trực tiếp dù cơ chế sự cố khác.
+| Nhu cầu | Chọn |
+|---|---|
+| Biết cấu trúc/tài liệu để làm việc (đọc, ổn định) | Resource |
+| Thực hiện thao tác, có tham số, có thể ghi | Tool |
+| Truy vấn động theo điều kiện | Tool |
 
-**Đáp án: B**
+Hai thứ bổ trợ nhau: resource cho ngữ cảnh nền, tool cho hành động. Đừng ép mọi thứ thành tool chỉ vì tool quen thuộc hơn.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Keyword
 
-- **A:** **Sai.** Phương án thuộc **Shared configuration scope**, không giải quyết được yêu cầu cốt lõi "Resources expose readable context; tools invoke capabilities" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Resources expose readable context; tools invoke capabilities. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Force endless list_tables tool calls" được nêu ở cơ chế MCP resources versus tools. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Community versus custom server**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+- `MCP resource` — dữ liệu đọc được do server phơi bày, định danh bằng URI
+- `MCP tool` — hàm model có thể gọi để thực hiện hành động
+- `content catalog` — danh mục nội dung giúp model biết có gì sẵn
+- `discovery calls` — các lời gọi chỉ để khám phá cấu trúc/dữ liệu
+- `URI` — địa chỉ định danh tài nguyên
+- `side effect` — tác dụng phụ làm thay đổi hệ thống ngoài
 
-**Exam heuristic:** Nếu đề xuất hiện "Agent must know database schema before building query", ưu tiên phân biệt `MCP resources versus tools` với các lựa chọn mô tả chuyện khác.
+### Bẫy đề thi
 
-### Q04. Để viết acceptance criteria cho tình huống **Standard Jira lookup requirement appears**, lựa chọn nào thể hiện ranh giới đúng?
+- ✗ Bắt agent gọi `list_tables` hàng chục lần để biết schema ⇒ ✓ Phơi bày schema như resource để có catalog sẵn
+- ✗ Biến mọi hành động ghi thành resource ⇒ ✓ Hành động có tác dụng phụ thuộc về tool
+- ✗ Nghĩ resource và tool là một ⇒ ✓ Resource cung cấp ngữ cảnh đọc; tool thực hiện hành động
 
-- **A.** Store team setup only in one developer home dir; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Commit token literal into repository; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Evaluate existing connector/security/maintenance first; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Build custom MCP from zero automatically; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+### Câu hỏi
 
-**Đáp án: C**
+#### Q1. Agent viết SQL phải gọi `list_tables` và `describe_table` nhiều lần mỗi nhiệm vụ để hiểu schema, gây chậm và tốn token. Cải tiến phù hợp nhất?
+- A. Tăng số vòng lặp tối đa
+- B. Thêm nhiều tool khám phá hơn
+- C. Phơi bày schema database thành MCP resource để agent có sẵn ngữ cảnh
+- D. Viết schema vào mỗi câu hỏi của người dùng
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** C
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Shared configuration scope**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Secrets via environment variables**, không giải quyết được yêu cầu cốt lõi "Evaluate maintained standard integration before writing custom" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Evaluate maintained standard integration before writing custom. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Build custom MCP from zero automatically" được nêu ở cơ chế Community versus custom server. Không đảm bảo xử lý được case và dễ che mất failure mode.
+**Giải thích:** Resource cung cấp catalog dữ liệu giảm khám phá lặp. A và B làm nặng thêm. D thủ công và dễ lệch.
 
-**Exam heuristic:** Nếu đề xuất hiện "Standard Jira lookup requirement appears", ưu tiên phân biệt `Community versus custom server` với các lựa chọn mô tả chuyện khác.
+#### Q2. Thao tác nào nên được triển khai như tool thay vì resource?
+- A. Tạo issue Jira mới với tiêu đề và mô tả
+- B. Danh mục tài liệu API chỉ đọc
+- C. Schema của database
+- D. Nội dung README của dự án
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Store team setup only in one developer home dir**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+**Đáp án:** A
 
-- **A.** Store team setup only in one developer home dir; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Commit token literal into repository; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Force endless list_tables tool calls; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Commit .mcp.json with environment placeholders; kèm kiểm thử lại điều kiện và ghi evidence.
+**Giải thích:** Tạo issue là hành động có tác dụng phụ và tham số, đặc trưng của tool. B, C, D là dữ liệu đọc ổn định, hợp với resource.
 
-**Đáp án: D**
+## K4. Server có sẵn so với server tự xây
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Trọng tâm
 
-- **A:** **Sai.** Đây chính là bẫy "Store team setup only in one developer home dir" được nêu ở cơ chế Shared configuration scope. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Secrets via environment variables**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **MCP resources versus tools**, không giải quyết được yêu cầu cốt lõi "Repository .mcp.json is team-wide, ~/.claude.json personal" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Repository .mcp.json is team-wide, ~/.claude.json personal. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+Với nhu cầu **chuẩn** (Jira, GitHub, Slack...), hãy **đánh giá server có sẵn** về bảo mật, bảo trì, chức năng trước; chỉ tự xây khi có nhu cầu đặc thù chưa ai đáp ứng.
 
-**Exam heuristic:** Nếu đề xuất hiện "All teammates need same Jira MCP server", ưu tiên phân biệt `Shared configuration scope` với các lựa chọn mô tả chuyện khác.
+### Giải thích
 
-### Q06. Sau khi audit phát hiện **Team shares server settings but each member uses own token**, điều gì là cải tiến có thể kiểm chứng?
+Tự xây MCP server từ đầu nghe hấp dẫn nhưng tốn chi phí lâu dài: viết, kiểm thử, xử lý xác thực, theo dõi thay đổi API của hệ thống bên kia, vá lỗi bảo mật. Với tích hợp chuẩn, thường đã có connector chính thức hoặc cộng đồng được bảo trì.
 
-- **A.** Use env interpolation and secrets manager; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Commit token literal into repository; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Force endless list_tables tool calls; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Build custom MCP from zero automatically; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+Khi đánh giá server có sẵn, kiểm tra:
 
-**Đáp án: A**
+- **Chức năng**: có đủ thao tác bạn cần không (tìm issue, comment, đổi trạng thái)?
+- **Bảo mật**: cách xử lý xác thực, phạm vi quyền (scope) token, mã nguồn có thể rà soát, nguồn gốc đáng tin.
+- **Bảo trì**: cập nhật gần đây, số người dùng, cách xử lý issue.
+- **Phù hợp vận hành**: giấy phép, cách chạy, yêu cầu mạng.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Chỉ **tự xây (custom)** khi: hệ thống nội bộ không có connector; cần logic nghiệp vụ đặc thù (ví dụ gộp nhiều API nội bộ thành vài tool chất lượng cao); hoặc server có sẵn không đáp ứng yêu cầu bảo mật. Ngay cả khi tự xây, nên dùng SDK MCP chính thức thay vì tự cài giao thức, và nhớ áp dụng chất lượng description (bài 2.1) cùng lỗi có cấu trúc (bài 2.2).
 
-- **A:** **Đúng.** Reference ${TOKEN} rather than commit raw credentials. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Commit token literal into repository" được nêu ở cơ chế Secrets via environment variables. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **MCP resources versus tools**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Community versus custom server**, không giải quyết được yêu cầu cốt lõi "Reference ${TOKEN} rather than commit raw credentials" và thiếu điều kiện kiểm chứng.
+Lưu ý: "có sẵn" không có nghĩa "tin tưởng mù quáng": server bên thứ ba chạy với quyền của bạn, nên cần rà soát và cấp quyền tối thiểu.
 
-**Exam heuristic:** Nếu đề xuất hiện "Team shares server settings but each member uses own token", ưu tiên phân biệt `Secrets via environment variables` với các lựa chọn mô tả chuyện khác.
+### Keyword
 
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Agent must know database schema before building query**, nên chọn gì?
+- `community server` — server MCP do cộng đồng/nhà cung cấp duy trì
+- `custom MCP server` — server tự xây cho nhu cầu riêng
+- `build vs buy` — cân nhắc tự xây hay dùng có sẵn
+- `maintenance burden` — gánh nặng bảo trì lâu dài
+- `token scope` — phạm vi quyền của token cấp cho server
+- `MCP SDK` — bộ thư viện chính thức để xây MCP server
 
-- **A.** Store team setup only in one developer home dir; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Expose schema resource to reduce discovery calls; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Force endless list_tables tool calls; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Build custom MCP from zero automatically; áp dụng trực tiếp dù cơ chế sự cố khác.
+### Bẫy đề thi
 
-**Đáp án: B**
+- ✗ Có nhu cầu Jira chuẩn là tự xây MCP server ngay ⇒ ✓ Đánh giá connector có sẵn về bảo mật và bảo trì trước
+- ✗ Dùng server bên thứ ba mà không kiểm tra, vì "có sẵn" ⇒ ✓ Rà soát nguồn gốc, quyền, bảo trì
+- ✗ Khi tự xây thì tự cài giao thức MCP thủ công ⇒ ✓ Dùng SDK chính thức
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Câu hỏi
 
-- **A:** **Sai.** Phương án thuộc **Shared configuration scope**, không giải quyết được yêu cầu cốt lõi "Resources expose readable context; tools invoke capabilities" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Resources expose readable context; tools invoke capabilities. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Force endless list_tables tool calls" được nêu ở cơ chế MCP resources versus tools. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Community versus custom server**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+#### Q1. Team cần tra cứu và cập nhật issue Jira từ Claude. Đã có vài MCP server Jira được bảo trì. Bước đầu hợp lý?
+- A. Tự viết MCP server từ đầu cho chắc
+- B. Đánh giá các server có sẵn về chức năng, bảo mật, bảo trì; chỉ tự xây nếu không đáp ứng
+- C. Dùng ngay server đầu tiên tìm được với token quyền admin
+- D. Bỏ MCP, dán nội dung issue vào prompt bằng tay
 
-**Exam heuristic:** Nếu đề xuất hiện "Agent must know database schema before building query", ưu tiên phân biệt `MCP resources versus tools` với các lựa chọn mô tả chuyện khác.
+**Đáp án:** B
 
-### Q08. Một reviewer nêu giải pháp **Build custom MCP from zero automatically**. Đánh giá chính xác nhất là gì?
+**Giải thích:** Với nhu cầu chuẩn, đánh giá có sẵn tiết kiệm chi phí dài hạn. A tốn công không cần thiết. C bỏ qua bảo mật và quyền tối thiểu. D mất tính tự động.
 
-- **A.** Store team setup only in one developer home dir; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Commit token literal into repository; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Evaluate existing connector/security/maintenance first; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Build custom MCP from zero automatically; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+#### Q2. Trường hợp nào thuyết phục nhất để tự xây MCP server?
+- A. Kết nối GitHub với tính năng mà mọi server có sẵn đều hỗ trợ
+- B. Tích hợp hệ thống nội bộ riêng chưa có connector, cần gộp nhiều API thành vài tool chất lượng
+- C. Chỉ vì muốn thử công nghệ mới
+- D. Vì không muốn đọc tài liệu của server có sẵn
 
-**Đáp án: C**
+**Đáp án:** B
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc cơ chế **Shared configuration scope**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Secrets via environment variables**, không giải quyết được yêu cầu cốt lõi "Evaluate maintained standard integration before writing custom" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Evaluate maintained standard integration before writing custom. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Build custom MCP from zero automatically" được nêu ở cơ chế Community versus custom server. Không đảm bảo xử lý được case và dễ che mất failure mode.
-
-**Exam heuristic:** Nếu đề xuất hiện "Standard Jira lookup requirement appears", ưu tiên phân biệt `Community versus custom server` với các lựa chọn mô tả chuyện khác.
-
-### Q09. Trong thử nghiệm đối chứng với tình huống **All teammates need same Jira MCP server**, tiêu chí pass phù hợp là gì?
-
-- **A.** Store team setup only in one developer home dir; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Commit token literal into repository; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Force endless list_tables tool calls; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Commit .mcp.json with environment placeholders; kèm kiểm thử lại điều kiện và ghi evidence.
-
-**Đáp án: D**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Đây chính là bẫy "Store team setup only in one developer home dir" được nêu ở cơ chế Shared configuration scope. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Secrets via environment variables**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **MCP resources versus tools**, không giải quyết được yêu cầu cốt lõi "Repository .mcp.json is team-wide, ~/.claude.json personal" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Repository .mcp.json is team-wide, ~/.claude.json personal. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-
-**Exam heuristic:** Nếu đề xuất hiện "All teammates need same Jira MCP server", ưu tiên phân biệt `Shared configuration scope` với các lựa chọn mô tả chuyện khác.
-
-### Q10. Để giảm lỗi tái diễn với **Team shares server settings but each member uses own token**, biện pháp nào phù hợp với cơ chế đã học?
-
-- **A.** Use env interpolation and secrets manager; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Commit token literal into repository; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Force endless list_tables tool calls; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Build custom MCP from zero automatically; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-
-**Đáp án: A**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Đúng.** Reference ${TOKEN} rather than commit raw credentials. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Commit token literal into repository" được nêu ở cơ chế Secrets via environment variables. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **MCP resources versus tools**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Community versus custom server**, không giải quyết được yêu cầu cốt lõi "Reference ${TOKEN} rather than commit raw credentials" và thiếu điều kiện kiểm chứng.
-
-**Exam heuristic:** Nếu đề xuất hiện "Team shares server settings but each member uses own token", ưu tiên phân biệt `Secrets via environment variables` với các lựa chọn mô tả chuyện khác.
-
-## 6. Lab / Bài thực hành tự kiểm tra
-
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "All teammates need same Jira MCP server".
-
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Commit .mcp.json with environment placeholders.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
-
-## 7. Cheat sheet / Ôn nhanh
-
-- **Shared configuration scope:** Repository .mcp.json is team-wide, ~/.claude.json personal. ✓ Commit .mcp.json with environment placeholders. ✗ Store team setup only in one developer home dir.
-- **Secrets via environment variables:** Reference ${TOKEN} rather than commit raw credentials. ✓ Use env interpolation and secrets manager. ✗ Commit token literal into repository.
-- **MCP resources versus tools:** Resources expose readable context; tools invoke capabilities. ✓ Expose schema resource to reduce discovery calls. ✗ Force endless list_tables tool calls.
-- **Community versus custom server:** Evaluate maintained standard integration before writing custom. ✓ Evaluate existing connector/security/maintenance first. ✗ Build custom MCP from zero automatically.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/2-tool-design-mcp/2-4-mcp-server-integration
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Hệ thống nội bộ và logic đặc thù là lý do chính đáng. A đã có giải pháp. C, D không phải căn cứ kiến trúc.

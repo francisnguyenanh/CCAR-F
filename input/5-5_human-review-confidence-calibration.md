@@ -1,326 +1,236 @@
 # 5.5 — Human Review & Confidence Calibration
 
-> Domain 5: Context Management & Reliability · Tỷ trọng toàn domain: 15%
-> Source lesson: https://claudecertificationguide.com/learn/5-context-management/5-5-human-review-calibration
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+Khi Claude trích xuất dữ liệu hàng loạt (hóa đơn, hợp đồng, biểu mẫu), không thể để mọi kết quả đi thẳng vào hệ thống mà cũng không thể cho người duyệt từng mục. Bài toán là **thiết kế quy trình duyệt của con người** dựa trên số liệu đáng tin: duyệt cái gì, bao nhiêu, theo thứ tự nào, và khi nào được phép tự động hóa.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Human Review & Confidence Calibration**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Đề thi nhắm vào bốn sai lầm: tin vào **độ chính xác tổng hợp** che khuất nhóm yếu, chỉ duyệt các mục model báo **độ tự tin thấp**, coi điểm tự tin là **xác suất đúng thật**, và duyệt đều theo thứ tự đến trước. Quy tắc nhớ nhanh: **đo theo từng phân đoạn, lấy mẫu phân tầng cả mục tự tin cao, hiệu chuẩn bằng nhãn thật, xếp ưu tiên theo rủi ro.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Đánh giá theo phân đoạn, không chỉ độ chính xác tổng
 
-### 2.1. Segment-level evaluation
+### Trọng tâm
 
-**Principle (EN):** Aggregate accuracy hides poor handwritten or international extraction.
+Độ chính xác tổng (ví dụ 97%) có thể che giấu một **phân đoạn kém** (tài liệu viết tay, ngôn ngữ khác). Phải đo **theo loại tài liệu và theo trường**.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **aggregate accuracy hides poor handwritten or international extraction**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** Overall accuracy 97% but scanned documents fail often.
+Giả sử 95% khối lượng là hóa đơn đánh máy rõ nét (độ chính xác 99%) và 5% là hóa đơn quét/viết tay (độ chính xác 60%). Độ chính xác tổng khoảng 97%, trông rất tốt, nhưng nhóm viết tay sai gần nửa số lần. Nếu quyết định tự động hóa dựa trên con số tổng, sẽ có lỗi hệ thống tập trung ở đúng nhóm đó, thường là nhóm có hậu quả lớn hoặc khách hàng quan trọng.
 
-**Recommended implementation:** Measure per document type and field.
+Cách đánh giá đúng:
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Auto-approve based on global accuracy alone.
+- Chia theo **document type**, **ngôn ngữ**, **nguồn/định dạng**, **chất lượng quét**.
+- Đo theo **từng trường** (field-level): tổng tiền, ngày, mã số có thể có độ chính xác khác nhau, trường rủi ro cao cần chuẩn cao hơn.
+- Đặt **ngưỡng cho từng phân đoạn**: cho phép tự động hóa với phân đoạn đạt chuẩn, giữ duyệt người với phân đoạn chưa đạt.
+- Theo dõi theo thời gian: một phân đoạn có thể xấu đi khi xuất hiện mẫu mới.
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Overall accuracy 97% but scanned documents fail often".
-- Decision: áp dụng nguyên tắc **Segment-level evaluation** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Measure per document type and field" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Nguyên lý thống kê: số trung bình có thể che giấu phương sai giữa các nhóm con (giống nghịch lý Simpson). Quyết định tự động hóa phải dựa trên **hiệu năng của phân đoạn có rủi ro nhất**, không phải trung bình.
 
-### 2.2. Stratified audit of high confidence
+### Keyword
 
-**Principle (EN):** Review sample from every stratum including automated high-confidence output.
+- `aggregate accuracy` — độ chính xác tổng hợp trên toàn bộ dữ liệu
+- `segment-level evaluation` — đánh giá theo từng phân đoạn
+- `field-level accuracy` — độ chính xác theo từng trường dữ liệu
+- `document type` — loại tài liệu (đánh máy, viết tay, quét...)
+- `automation threshold` — ngưỡng cho phép tự động hóa
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **review sample from every stratum including automated high-confidence output**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Bẫy đề thi
 
-**Case study / Tình huống:** New invoice layout causes confidently wrong totals.
+- ✗ Độ chính xác tổng 97% nghĩa là tự động duyệt tất cả ⇒ ✓ Kiểm tra từng phân đoạn và trường trước khi tự động hóa
+- ✗ Dùng một ngưỡng chung cho mọi loại tài liệu ⇒ ✓ Ngưỡng theo phân đoạn và mức rủi ro
+- ✗ Chỉ đo độ chính xác ở mức toàn bộ tài liệu ⇒ ✓ Đo theo trường quan trọng (tổng tiền, ngày, mã)
 
-**Recommended implementation:** Stratified random human checks across confidence bands.
+### Câu hỏi
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Review only items the model says low confidence.
+#### Q1. Hệ thống trích xuất hóa đơn đạt 97% tổng thể, ban quản lý muốn bỏ duyệt thủ công. Dữ liệu cho thấy 5% hóa đơn viết tay có độ chính xác thấp. Quyết định hợp lý?
+- A. Bỏ duyệt vì 97% đã cao
+- B. Chỉ bỏ duyệt cho phân đoạn đạt chuẩn, giữ duyệt người cho hóa đơn viết tay
+- C. Duyệt đều 100% mọi hóa đơn mãi mãi
+- D. Chờ đến khi độ chính xác tổng đạt 100%
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "New invoice layout causes confidently wrong totals".
-- Decision: áp dụng nguyên tắc **Stratified audit of high confidence** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Stratified random human checks across confidence bands" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+**Đáp án:** B
 
-### 2.3. Calibration with ground truth
+**Giải thích:** Quyết định tự động hóa theo phân đoạn: nhóm tốt được tự động, nhóm yếu giữ người. A bỏ qua nhóm yếu. C lãng phí nguồn lực. D không thực tế.
 
-**Principle (EN):** Raw model score not empirical correctness probability.
+#### Q2. Vì sao cần đo độ chính xác theo từng trường chứ không chỉ theo từng tài liệu?
+- A. Vì trường nào cũng có cùng mức độ chính xác
+- B. Vì tài liệu không thể chia thành trường
+- C. Để giảm chi phí gọi API
+- D. Vì một số trường (tổng tiền, mã số) có thể kém hơn và mức rủi ro cao hơn các trường khác
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **raw model score not empirical correctness probability**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+**Đáp án:** D
 
-**Case study / Tình huống:** Model says 0.95 but amounts correct 0.82 on labels.
+**Giải thích:** Chất lượng và hậu quả sai khác nhau theo trường, nên cần tiêu chuẩn riêng. A, B sai về sự thật. C không phải mục đích.
 
-**Recommended implementation:** Calibrate thresholds on labeled held-out records.
+## K2. Lấy mẫu phân tầng, kể cả mục tự tin cao
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Treat numeric 0.95 as 95% correctness automatically.
+### Trọng tâm
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Model says 0.95 but amounts correct 0.82 on labels".
-- Decision: áp dụng nguyên tắc **Calibration with ground truth** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Calibrate thresholds on labeled held-out records" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Phải **lấy mẫu ngẫu nhiên có phân tầng** để người duyệt kiểm tra mọi nhóm, **gồm cả kết quả model tự tin cao**; không chỉ duyệt mục "tự tin thấp".
 
-### 2.4. Reviewer queue prioritization
+### Giải thích
 
-**Principle (EN):** Allocate reviewers by uncertainty and risk, not simple FIFO.
+Nếu chỉ duyệt các mục model báo tự tin thấp, bạn không bao giờ phát hiện được trường hợp **sai mà vẫn tự tin** (confidently wrong): ví dụ bố cục hóa đơn mới khiến model đọc nhầm cột tổng tiền nhưng vẫn tự tin 0,97. Lỗi này lọt hoàn toàn vào hệ thống và không có tín hiệu cảnh báo.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **allocate reviewers by uncertainty and risk, not simple FIFO**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+**Stratified sampling** nghĩa là chia dữ liệu thành các tầng (strata) theo phân đoạn và dải tự tin (cao, vừa, thấp), rồi lấy mẫu ngẫu nhiên trong từng tầng:
 
-**Case study / Tình huống:** Limited reviewers face ambiguous high-impact fields.
+| Tầng | Mục đích lấy mẫu |
+|---|---|
+| Tự tin thấp | Bắt lỗi dự đoán được, huấn luyện lại quy tắc |
+| Tự tin cao | Phát hiện lỗi tự tin sai, bố cục mới, drift |
+| Phân đoạn mới/hiếm | Phát hiện sớm nhóm hoạt động kém |
 
-**Recommended implementation:** Prioritize uncertain, contradictory, weak segment outputs.
+Kết quả mẫu cho ra **ước lượng tỷ lệ lỗi theo từng tầng**, cơ sở để điều chỉnh ngưỡng tự động hóa. Việc lấy mẫu phải là **ngẫu nhiên** trong tầng (không chọn tay), để ước lượng không bị lệch.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Review every item uniformly.
+Lưu ý liên quan: lấy mẫu liên tục (không chỉ lúc triển khai) giúp phát hiện **model/data drift** khi định dạng đầu vào đổi.
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Limited reviewers face ambiguous high-impact fields".
-- Decision: áp dụng nguyên tắc **Reviewer queue prioritization** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Prioritize uncertain, contradictory, weak segment outputs" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+### Keyword
 
-## 3. Ví dụ thiết kế / Worked engineering example
+- `stratified sampling` — lấy mẫu phân tầng theo nhóm
+- `confidently wrong` — sai nhưng vẫn báo tự tin cao
+- `drift` — phân phối dữ liệu thay đổi theo thời gian làm giảm chất lượng
+- `random audit` — kiểm tra ngẫu nhiên để ước lượng không thiên lệch
+- `confidence band` — dải điểm tự tin (cao, vừa, thấp)
 
-**Problem:** Overall accuracy 97% but scanned documents fail often.
+### Bẫy đề thi
 
-**Bad design:** Auto-approve based on global accuracy alone.
+- ✗ Chỉ duyệt các mục model báo tự tin thấp ⇒ ✓ Lấy mẫu ngẫu nhiên từ mọi tầng, kể cả tự tin cao
+- ✗ Chọn tay các mẫu "trông đáng ngờ" để kiểm ⇒ ✓ Lấy mẫu ngẫu nhiên trong từng tầng để ước lượng không lệch
+- ✗ Kiểm tra một lần lúc triển khai là đủ ⇒ ✓ Lấy mẫu liên tục để phát hiện drift
 
-**Better design:** Measure per document type and field.
+### Câu hỏi
 
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
+#### Q1. Nhà cung cấp đổi bố cục hóa đơn; model vẫn báo tự tin cao nhưng đọc sai tổng tiền. Quy trình chỉ duyệt mục tự tin thấp không phát hiện được. Cải tiến đúng?
+- A. Hạ ngưỡng tự tin xuống còn 0,5 để duyệt ít hơn
+- B. Thêm lời nhắc "hãy cẩn thận hơn" vào prompt trích xuất
+- C. Bỏ duyệt hoàn toàn vì model đã tự tin
+- D. Thêm lấy mẫu ngẫu nhiên phân tầng trên cả kết quả tự tin cao, theo từng loại bố cục
 
-### Walkthrough: decision trace / Luồng xử lý
+**Đáp án:** D
 
-```text
-INPUT  : Overall accuracy 97% but scanned documents fail often.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Measure per document type and field.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
-```
+**Giải thích:** Chỉ lấy mẫu ở tầng tự tin cao mới bắt được lỗi tự tin sai và bố cục mới. A làm tình trạng tệ hơn. B không tạo tín hiệu phát hiện lỗi. C loại bỏ lưới an toàn.
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+#### Q2. Điểm khác biệt chính giữa lấy mẫu ngẫu nhiên phân tầng và chọn tay các mẫu đáng ngờ là gì?
+- A. Chọn tay luôn nhanh hơn và chính xác hơn
+- B. Lấy mẫu ngẫu nhiên trong từng tầng cho ước lượng tỷ lệ lỗi không thiên lệch của tầng đó
+- C. Hai cách như nhau về mặt thống kê
+- D. Lấy mẫu ngẫu nhiên chỉ dùng cho dữ liệu nhỏ
 
-## 4. Exam traps / Bẫy dễ nhầm
+**Đáp án:** B
 
-1. **Bẫy Segment-level evaluation:** "Auto-approve based on global accuracy alone" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở segment-level evaluation, rồi chọn "Measure per document type and field".
+**Giải thích:** Tính ngẫu nhiên đảm bảo mẫu đại diện cho tầng. Chọn tay (A, C) gây thiên lệch. D sai: phương pháp áp dụng cho mọi quy mô.
 
-2. **Bẫy Stratified audit of high confidence:** "Review only items the model says low confidence" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở stratified audit of high confidence, rồi chọn "Stratified random human checks across confidence bands".
+## K3. Hiệu chuẩn độ tự tin bằng dữ liệu có nhãn
 
-3. **Bẫy Calibration with ground truth:** "Treat numeric 0.95 as 95% correctness automatically" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở calibration with ground truth, rồi chọn "Calibrate thresholds on labeled held-out records".
+### Trọng tâm
 
-4. **Bẫy Reviewer queue prioritization:** "Review every item uniformly" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở reviewer queue prioritization, rồi chọn "Prioritize uncertain, contradictory, weak segment outputs".
+Điểm tự tin do model đưa ra **không phải xác suất đúng thực tế**. Phải **hiệu chuẩn (calibrate)** ngưỡng bằng tập dữ liệu có nhãn (ground truth) giữ riêng.
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+### Giải thích
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+Model nói "0,95" không có nghĩa là 95% trường hợp như vậy là đúng. Khi so với nhãn thật, có thể chỉ 82% đúng (**overconfident**), hoặc ngược lại. Mức độ khớp giữa điểm tự tin và tỷ lệ đúng thực tế gọi là **calibration**.
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **Overall accuracy 97% but scanned documents fail often**. Phương án nào phù hợp nhất?
+Cách hiệu chuẩn:
 
-- **A.** Measure per document type and field; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Auto-approve based on global accuracy alone; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Review only items the model says low confidence; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Treat numeric 0.95 as 95% correctness automatically; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+1. Chuẩn bị tập **held-out có nhãn** đại diện cho dữ liệu thực (gồm cả các phân đoạn khó, K1).
+2. Chạy model, thu điểm tự tin cho từng trường.
+3. Chia theo dải điểm và tính **tỷ lệ đúng thực** của từng dải (có thể vẽ reliability diagram).
+4. Chọn **ngưỡng tự động duyệt** sao cho đạt tỷ lệ lỗi chấp nhận được **theo dữ liệu thực nghiệm**, ví dụ "dải ≥ 0,97 mới đạt 99% đúng".
+5. Kiểm tra lại định kỳ vì model và dữ liệu đổi.
 
-**Đáp án: A**
+Cần dùng dữ liệu **held-out** (không dùng để chỉnh prompt) để tránh ước lượng quá lạc quan. Với trường hợp điểm tự tin do chính LLM tự nêu bằng văn bản, độ lệch thường lớn; nên kết hợp tín hiệu khác (kiểm tra ràng buộc, đồng thuận nhiều lần chạy, kiểm tra chéo trường) khi đánh giá.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Tóm lại: ngưỡng là **tham số rút ra từ đo đạc**, không phải con số chọn theo cảm giác.
 
-- **A:** **Đúng.** Aggregate accuracy hides poor handwritten or international extraction. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Auto-approve based on global accuracy alone" được nêu ở cơ chế Segment-level evaluation. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Stratified audit of high confidence**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Calibration with ground truth**, không giải quyết được yêu cầu cốt lõi "Aggregate accuracy hides poor handwritten or international extraction" và thiếu điều kiện kiểm chứng.
+### Keyword
 
-**Exam heuristic:** Nếu đề xuất hiện "Overall accuracy 97% but scanned documents fail often", ưu tiên phân biệt `Segment-level evaluation` với các lựa chọn mô tả chuyện khác.
+- `calibration` — hiệu chuẩn: điểm tự tin khớp tỷ lệ đúng thực tế
+- `ground truth` — nhãn đúng do con người xác nhận
+- `held-out set` — tập dữ liệu giữ riêng để đánh giá không thiên lệch
+- `overconfidence` — tự tin quá mức so với độ chính xác thực
+- `reliability diagram` — biểu đồ so sánh độ tự tin với tỷ lệ đúng thực
 
-### Q02. Một kỹ sư đề xuất **Review only items the model says low confidence** cho tình huống: New invoice layout causes confidently wrong totals. Cần phản biện thế nào?
+### Bẫy đề thi
 
-- **A.** Review every item uniformly; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Stratified random human checks across confidence bands; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Review only items the model says low confidence; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Treat numeric 0.95 as 95% correctness automatically; áp dụng trực tiếp dù cơ chế sự cố khác.
+- ✗ Coi điểm 0,95 là 95% khả năng đúng ⇒ ✓ Đo tỷ lệ đúng thực tế trên dữ liệu có nhãn rồi mới đặt ngưỡng
+- ✗ Chọn ngưỡng theo cảm giác (0,9 trông ổn) ⇒ ✓ Chọn ngưỡng từ đo đạc trên tập held-out
+- ✗ Hiệu chuẩn một lần rồi dùng mãi ⇒ ✓ Kiểm tra lại định kỳ vì dữ liệu và model thay đổi
 
-**Đáp án: B**
+### Câu hỏi
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+#### Q1. Model báo tự tin 0,95 cho các trường số tiền, nhưng đối chiếu nhãn thật chỉ 82% đúng. Hành động đúng?
+- A. Giữ ngưỡng vì 0,95 đã cao
+- B. Hiệu chuẩn lại: đo tỷ lệ đúng theo dải điểm trên tập có nhãn và đặt ngưỡng dựa trên đó
+- C. Nhân điểm tự tin với 0,82 cho mọi trường hợp
+- D. Hỏi lại model xem nó có chắc không
 
-- **A:** **Sai.** Phương án thuộc **Reviewer queue prioritization**, không giải quyết được yêu cầu cốt lõi "Review sample from every stratum including automated high-confidence output" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Review sample from every stratum including automated high-confidence output. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Review only items the model says low confidence" được nêu ở cơ chế Stratified audit of high confidence. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Calibration with ground truth**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+**Đáp án:** B
 
-**Exam heuristic:** Nếu đề xuất hiện "New invoice layout causes confidently wrong totals", ưu tiên phân biệt `Stratified audit of high confidence` với các lựa chọn mô tả chuyện khác.
+**Giải thích:** Hiệu chuẩn dựa trên ground truth cho ngưỡng có ý nghĩa thực nghiệm. A bỏ qua độ lệch. C là sửa tùy tiện một hệ số. D vẫn dựa vào tự đánh giá không đáng tin.
 
-### Q03. Nếu sự cố **Model says 0.95 but amounts correct 0.82 on labels** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+#### Q2. Vì sao cần tập held-out khi hiệu chuẩn ngưỡng?
+- A. Để model học thuộc nhãn
+- B. Vì tập này luôn nhỏ nên chạy nhanh
+- C. Để tránh ước lượng lạc quan do đã dùng cùng dữ liệu chỉnh prompt
+- D. Vì ngưỡng không cần dữ liệu
 
-- **A.** Review every item uniformly; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Auto-approve based on global accuracy alone; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Calibrate thresholds on labeled held-out records; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Treat numeric 0.95 as 95% correctness automatically; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+**Đáp án:** C
 
-**Đáp án: C**
+**Giải thích:** Dữ liệu đã dùng để tinh chỉnh sẽ cho kết quả đẹp hơn thực tế. A sai mục đích. B không phải lý do. D mâu thuẫn với nguyên tắc hiệu chuẩn.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+## K4. Xếp hàng duyệt theo bất định và rủi ro
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Reviewer queue prioritization**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Segment-level evaluation**, không giải quyết được yêu cầu cốt lõi "Raw model score not empirical correctness probability" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Raw model score not empirical correctness probability. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Treat numeric 0.95 as 95% correctness automatically" được nêu ở cơ chế Calibration with ground truth. Không đảm bảo xử lý được case và dễ che mất failure mode.
+### Trọng tâm
 
-**Exam heuristic:** Nếu đề xuất hiện "Model says 0.95 but amounts correct 0.82 on labels", ưu tiên phân biệt `Calibration with ground truth` với các lựa chọn mô tả chuyện khác.
+Nguồn lực duyệt có hạn: **ưu tiên** mục bất định, mâu thuẫn, thuộc phân đoạn yếu hoặc có tác động lớn, thay vì duyệt FIFO hoặc đồng đều.
 
-### Q04. Để viết acceptance criteria cho tình huống **Limited reviewers face ambiguous high-impact fields**, lựa chọn nào thể hiện ranh giới đúng?
+### Giải thích
 
-- **A.** Review every item uniformly; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Auto-approve based on global accuracy alone; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Review only items the model says low confidence; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Prioritize uncertain, contradictory, weak segment outputs; kèm kiểm thử lại điều kiện và ghi evidence.
+Số người duyệt hữu hạn, nên thứ tự duyệt quyết định giá trị nhận được. Duyệt theo thứ tự đến trước (FIFO) hay duyệt đều mọi mục coi trọng mục rủi ro thấp ngang mục rủi ro cao.
 
-**Đáp án: D**
+Điểm ưu tiên có thể kết hợp các yếu tố:
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- **Bất định**: điểm tự tin thấp (đã hiệu chuẩn, K3), hai lần chạy cho kết quả khác nhau.
+- **Mâu thuẫn**: trường vi phạm ràng buộc (tổng chi tiết không khớp tổng cộng, ngày trong tương lai).
+- **Phân đoạn yếu**: loại tài liệu có tỷ lệ lỗi cao (K1).
+- **Tác động**: giá trị tiền lớn, trường nhạy cảm, khách quan trọng.
+- **Mới/lạ**: bố cục chưa gặp.
 
-- **A:** **Sai.** Đây chính là bẫy "Review every item uniformly" được nêu ở cơ chế Reviewer queue prioritization. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Segment-level evaluation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Stratified audit of high confidence**, không giải quyết được yêu cầu cốt lõi "Allocate reviewers by uncertainty and risk, not simple FIFO" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Allocate reviewers by uncertainty and risk, not simple FIFO. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+Triển khai đơn giản: tính điểm rủi ro cho từng mục, sắp xếp hàng đợi giảm dần, phân bổ người duyệt từ đầu hàng. Vẫn giữ một phần **lấy mẫu ngẫu nhiên** (K2) để không chỉ nhìn vào thứ model đã nghi ngờ.
 
-**Exam heuristic:** Nếu đề xuất hiện "Limited reviewers face ambiguous high-impact fields", ưu tiên phân biệt `Reviewer queue prioritization` với các lựa chọn mô tả chuyện khác.
+Phản hồi từ người duyệt (sửa gì, vì sao) nên quay lại làm **dữ liệu có nhãn mới** để cải tiến hiệu chuẩn và prompt, tạo vòng lặp cải thiện liên tục.
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Auto-approve based on global accuracy alone**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+### Keyword
 
-- **A.** Measure per document type and field; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Auto-approve based on global accuracy alone; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Review only items the model says low confidence; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Treat numeric 0.95 as 95% correctness automatically; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+- `review queue` — hàng đợi các mục chờ người duyệt
+- `risk-based prioritization` — ưu tiên theo mức rủi ro
+- `FIFO` — vào trước ra trước, không xét độ ưu tiên
+- `constraint violation` — vi phạm ràng buộc dữ liệu (tổng không khớp...)
+- `feedback loop` — phản hồi của người duyệt quay lại cải tiến hệ thống
 
-**Đáp án: A**
+### Bẫy đề thi
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- ✗ Duyệt tuần tự theo thứ tự đến ⇒ ✓ Ưu tiên theo bất định, mâu thuẫn và tác động
+- ✗ Chỉ ưu tiên theo điểm tự tin, bỏ qua giá trị tiền ⇒ ✓ Kết hợp nhiều yếu tố rủi ro
+- ✗ Bỏ lấy mẫu ngẫu nhiên khi đã có hàng đợi ưu tiên ⇒ ✓ Vẫn giữ mẫu ngẫu nhiên để bắt lỗi tự tin sai
 
-- **A:** **Đúng.** Aggregate accuracy hides poor handwritten or international extraction. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Auto-approve based on global accuracy alone" được nêu ở cơ chế Segment-level evaluation. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Stratified audit of high confidence**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Calibration with ground truth**, không giải quyết được yêu cầu cốt lõi "Aggregate accuracy hides poor handwritten or international extraction" và thiếu điều kiện kiểm chứng.
+### Câu hỏi
 
-**Exam heuristic:** Nếu đề xuất hiện "Overall accuracy 97% but scanned documents fail often", ưu tiên phân biệt `Segment-level evaluation` với các lựa chọn mô tả chuyện khác.
+#### Q1. Chỉ có 3 người duyệt cho hàng nghìn hóa đơn mỗi ngày. Cách phân bổ hiệu quả nhất?
+- A. Duyệt theo thứ tự nhận được
+- B. Chia đều số hóa đơn, duyệt ngẫu nhiên hoàn toàn
+- C. Ưu tiên mục bất định, vi phạm ràng buộc, phân đoạn yếu và giá trị lớn, kèm một phần mẫu ngẫu nhiên
+- D. Chỉ duyệt hóa đơn giá trị thấp để làm nhanh
 
-### Q06. Sau khi audit phát hiện **New invoice layout causes confidently wrong totals**, điều gì là cải tiến có thể kiểm chứng?
+**Đáp án:** C
 
-- **A.** Review every item uniformly; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Stratified random human checks across confidence bands; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Review only items the model says low confidence; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Treat numeric 0.95 as 95% correctness automatically; áp dụng trực tiếp dù cơ chế sự cố khác.
+**Giải thích:** Tập trung nguồn lực vào rủi ro cao nhất, giữ mẫu ngẫu nhiên để phát hiện lỗi ẩn. A và B không tính rủi ro. D ngược logic.
 
-**Đáp án: B**
+#### Q2. Một hóa đơn có tổng chi tiết không khớp tổng cộng nhưng điểm tự tin 0,96. Nên xử lý thế nào trong hàng đợi?
+- A. Tự động duyệt vì điểm tự tin cao
+- B. Đẩy lên đầu hàng đợi duyệt vì vi phạm ràng buộc
+- C. Xóa hóa đơn khỏi hệ thống
+- D. Chờ đến cuối ngày mới xem
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** B
 
-- **A:** **Sai.** Phương án thuộc **Reviewer queue prioritization**, không giải quyết được yêu cầu cốt lõi "Review sample from every stratum including automated high-confidence output" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Review sample from every stratum including automated high-confidence output. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Review only items the model says low confidence" được nêu ở cơ chế Stratified audit of high confidence. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Calibration with ground truth**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-
-**Exam heuristic:** Nếu đề xuất hiện "New invoice layout causes confidently wrong totals", ưu tiên phân biệt `Stratified audit of high confidence` với các lựa chọn mô tả chuyện khác.
-
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Model says 0.95 but amounts correct 0.82 on labels**, nên chọn gì?
-
-- **A.** Review every item uniformly; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Auto-approve based on global accuracy alone; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Calibrate thresholds on labeled held-out records; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Treat numeric 0.95 as 95% correctness automatically; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-
-**Đáp án: C**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc cơ chế **Reviewer queue prioritization**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Segment-level evaluation**, không giải quyết được yêu cầu cốt lõi "Raw model score not empirical correctness probability" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Raw model score not empirical correctness probability. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Treat numeric 0.95 as 95% correctness automatically" được nêu ở cơ chế Calibration with ground truth. Không đảm bảo xử lý được case và dễ che mất failure mode.
-
-**Exam heuristic:** Nếu đề xuất hiện "Model says 0.95 but amounts correct 0.82 on labels", ưu tiên phân biệt `Calibration with ground truth` với các lựa chọn mô tả chuyện khác.
-
-### Q08. Một reviewer nêu giải pháp **Review every item uniformly**. Đánh giá chính xác nhất là gì?
-
-- **A.** Review every item uniformly; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Auto-approve based on global accuracy alone; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Review only items the model says low confidence; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Prioritize uncertain, contradictory, weak segment outputs; kèm kiểm thử lại điều kiện và ghi evidence.
-
-**Đáp án: D**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Đây chính là bẫy "Review every item uniformly" được nêu ở cơ chế Reviewer queue prioritization. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Segment-level evaluation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Stratified audit of high confidence**, không giải quyết được yêu cầu cốt lõi "Allocate reviewers by uncertainty and risk, not simple FIFO" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Allocate reviewers by uncertainty and risk, not simple FIFO. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-
-**Exam heuristic:** Nếu đề xuất hiện "Limited reviewers face ambiguous high-impact fields", ưu tiên phân biệt `Reviewer queue prioritization` với các lựa chọn mô tả chuyện khác.
-
-### Q09. Trong thử nghiệm đối chứng với tình huống **Overall accuracy 97% but scanned documents fail often**, tiêu chí pass phù hợp là gì?
-
-- **A.** Measure per document type and field; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Auto-approve based on global accuracy alone; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Review only items the model says low confidence; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Treat numeric 0.95 as 95% correctness automatically; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-
-**Đáp án: A**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Đúng.** Aggregate accuracy hides poor handwritten or international extraction. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Auto-approve based on global accuracy alone" được nêu ở cơ chế Segment-level evaluation. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Stratified audit of high confidence**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Calibration with ground truth**, không giải quyết được yêu cầu cốt lõi "Aggregate accuracy hides poor handwritten or international extraction" và thiếu điều kiện kiểm chứng.
-
-**Exam heuristic:** Nếu đề xuất hiện "Overall accuracy 97% but scanned documents fail often", ưu tiên phân biệt `Segment-level evaluation` với các lựa chọn mô tả chuyện khác.
-
-### Q10. Để giảm lỗi tái diễn với **New invoice layout causes confidently wrong totals**, biện pháp nào phù hợp với cơ chế đã học?
-
-- **A.** Review every item uniformly; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Stratified random human checks across confidence bands; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Review only items the model says low confidence; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Treat numeric 0.95 as 95% correctness automatically; áp dụng trực tiếp dù cơ chế sự cố khác.
-
-**Đáp án: B**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc **Reviewer queue prioritization**, không giải quyết được yêu cầu cốt lõi "Review sample from every stratum including automated high-confidence output" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Review sample from every stratum including automated high-confidence output. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Review only items the model says low confidence" được nêu ở cơ chế Stratified audit of high confidence. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Calibration with ground truth**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-
-**Exam heuristic:** Nếu đề xuất hiện "New invoice layout causes confidently wrong totals", ưu tiên phân biệt `Stratified audit of high confidence` với các lựa chọn mô tả chuyện khác.
-
-## 6. Lab / Bài thực hành tự kiểm tra
-
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "Overall accuracy 97% but scanned documents fail often".
-
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Measure per document type and field.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
-
-## 7. Cheat sheet / Ôn nhanh
-
-- **Segment-level evaluation:** Aggregate accuracy hides poor handwritten or international extraction. ✓ Measure per document type and field. ✗ Auto-approve based on global accuracy alone.
-- **Stratified audit of high confidence:** Review sample from every stratum including automated high-confidence output. ✓ Stratified random human checks across confidence bands. ✗ Review only items the model says low confidence.
-- **Calibration with ground truth:** Raw model score not empirical correctness probability. ✓ Calibrate thresholds on labeled held-out records. ✗ Treat numeric 0.95 as 95% correctness automatically.
-- **Reviewer queue prioritization:** Allocate reviewers by uncertainty and risk, not simple FIFO. ✓ Prioritize uncertain, contradictory, weak segment outputs. ✗ Review every item uniformly.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/5-context-management/5-5-human-review-calibration
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Mâu thuẫn dữ liệu là tín hiệu lỗi khách quan, mạnh hơn điểm tự tin chưa chắc đã chuẩn. A phớt lờ mâu thuẫn. C mất dữ liệu. D bỏ lỡ mục rủi ro cao.

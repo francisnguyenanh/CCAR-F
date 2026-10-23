@@ -1,326 +1,246 @@
 # 2.2 — Structured Error Responses
 
-> Domain 2: Tool Design & MCP Integration · Tỷ trọng toàn domain: 18%
-> Source lesson: https://claudecertificationguide.com/learn/2-tool-design-mcp/2-2-structured-error-responses
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+Tool nào rồi cũng có lúc lỗi. Câu hỏi là **model có biết lỗi gì và nên làm gì tiếp theo không**. Nếu tool chỉ trả "Operation failed" (hoặc tệ hơn, trả danh sách rỗng như thể thành công), model sẽ đoán mò: thử lại vô tận, bịa kết quả, hoặc kết luận sai với người dùng.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Structured Error Responses**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Bài này dạy cách phân loại lỗi (transient, validation, business, permission), cách báo lỗi bằng `is_error` kèm metadata có cấu trúc, và cách phân biệt **thành công nhưng rỗng** với **truy cập thất bại**. Quy tắc nhớ nhanh: **mỗi loại lỗi có một hành động xử lý khác nhau, và lỗi phải nói rõ nó thuộc loại nào.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Lỗi tạm thời (transient) và lỗi do input (validation)
 
-### 2.1. Transient versus validation
+### Trọng tâm
 
-**Principle (EN):** Temporary service fault retries unchanged later; validation needs corrected input.
+Lỗi **transient** (timeout, dịch vụ quá tải) có thể thử lại **y nguyên** sau một lúc. Lỗi **validation** (input sai định dạng) thử lại y nguyên sẽ **luôn thất bại**; phải sửa input trước.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **temporary service fault retries unchanged later; validation needs corrected input**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** Order API times out versus order id lacks # prefix.
+Hai loại lỗi này nhìn bề ngoài đều là "request thất bại", nhưng cách xử lý đối nghịch nhau:
 
-**Recommended implementation:** Retry backoff for timeout; correct ID then retry for validation.
+| Loại | Ví dụ | Nên làm | Retry y nguyên? |
+|---|---|---|---|
+| Transient | Order API timeout, 503, rate limit | Retry với **backoff** (chờ tăng dần), giới hạn số lần | Có |
+| Validation | Mã đơn thiếu tiền tố `#`, ngày sai định dạng | Sửa input theo thông báo lỗi rồi gọi lại | Không |
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Blindly repeat same malformed ID.
+Với lỗi transient, lý do thử lại hợp lý là nguyên nhân nằm ở **hệ thống**, không phải ở request; vài giây sau có thể ổn. Cần **exponential backoff** và **giới hạn số lần** để không làm sập thêm dịch vụ đang quá tải.
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Order API times out versus order id lacks # prefix".
-- Decision: áp dụng nguyên tắc **Transient versus validation** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Retry backoff for timeout; correct ID then retry for validation" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Với lỗi validation, nguyên nhân nằm ở **dữ liệu bạn gửi**. Nếu tool trả thông điệp rõ như "order_id phải bắt đầu bằng `#`, ví dụ `#4412`", model có thể tự sửa và gọi lại thành công ngay lượt kế tiếp. Nếu lặp lại cùng ID sai, vòng lặp sẽ đốt token mà không bao giờ thành công.
 
-### 2.2. Business versus permission
+Vì vậy tool nên trả thông tin **đủ để model phân loại**: lỗi thuộc nhóm nào, có nên retry không, và nếu là validation thì sai ở trường nào. Đây là nền tảng cho K3.
 
-**Principle (EN):** Policy denial or unauthorized identity requires alternative/escalation.
+### Keyword
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **policy denial or unauthorized identity requires alternative/escalation**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+- `transient error` — lỗi tạm thời, có thể tự hết (timeout, 503)
+- `validation error` — lỗi do dữ liệu đầu vào sai định dạng/giá trị
+- `exponential backoff` — chờ lâu dần giữa các lần thử lại
+- `retryable` — có thể thử lại mà không đổi gì
+- `idempotent retry` — thử lại an toàn vì không gây tác dụng phụ lặp
+- `corrective retry` — sửa input rồi mới thử lại
 
-**Case study / Tình huống:** Refund exceeds threshold or role lacks finance access.
+### Bẫy đề thi
 
-**Recommended implementation:** Escalate policy case or obtain authorized principal.
+- ✗ Gặp lỗi nào cũng retry y nguyên ⇒ ✓ Chỉ retry y nguyên với lỗi transient; validation phải sửa input
+- ✗ Retry không giới hạn, không backoff ⇒ ✓ Backoff và giới hạn số lần
+- ✗ Coi lỗi định dạng ID là lỗi hệ thống ⇒ ✓ Đó là lỗi input; đọc thông báo và sửa
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Retry the exact same request indefinitely.
+### Câu hỏi
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Refund exceeds threshold or role lacks finance access".
-- Decision: áp dụng nguyên tắc **Business versus permission** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Escalate policy case or obtain authorized principal" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+#### Q1. Tool `get_order` trả lỗi "order_id must start with #" khi model truyền `4412`. Hành vi đúng của agent?
+- A. Retry y nguyên 3 lần với backoff
+- B. Báo cho khách rằng hệ thống đang gặp sự cố
+- C. Sửa thành `#4412` theo thông báo lỗi rồi gọi lại
+- D. Chuyển ngay cho nhân viên hỗ trợ
 
-### 2.3. isError and structured metadata
+**Đáp án:** C
 
-**Principle (EN):** Expose error type, retryability and actionable explanation in tool result.
+**Giải thích:** Đây là lỗi validation có hướng dẫn sửa rõ ràng; sửa input rồi gọi lại là cách nhanh nhất. A sẽ thất bại lặp lại. B sai vì không phải lỗi hệ thống. D leo thang không cần thiết.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **expose error type, retryability and actionable explanation in tool result**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+#### Q2. API đơn hàng trả timeout lúc cao điểm, truy vấn của model hoàn toàn hợp lệ. Xử lý phù hợp nhất?
+- A. Retry với backoff và giới hạn số lần; nếu vẫn lỗi thì báo rõ
+- B. Đổi mã đơn thành định dạng khác rồi gọi lại
+- C. Trả danh sách rỗng cho model để tiếp tục
+- D. Retry liên tục không chờ cho đến khi thành công
 
-**Case study / Tình huống:** Model treats Database unavailable as normal empty records.
+**Đáp án:** A
 
-**Recommended implementation:** Set isError true and actionable category.
+**Giải thích:** Timeout là transient; backoff giảm áp lực và có giới hạn để không treo. B vô nghĩa vì input đúng. C che giấu lỗi. D có thể làm sập dịch vụ thêm.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Return generic Operation failed as success.
+## K2. Lỗi nghiệp vụ (business) và lỗi quyền (permission)
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Model treats Database unavailable as normal empty records".
-- Decision: áp dụng nguyên tắc **isError and structured metadata** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Set isError true and actionable category" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+### Trọng tâm
 
-### 2.4. Successful empty versus failed access
+Lỗi **business** (vi phạm chính sách) và **permission** (không có quyền) **không tự hết bằng retry**. Cần phương án thay thế, **leo thang (escalate)** hoặc dùng danh tính có quyền.
 
-**Principle (EN):** Zero matches after executed query differs from failed query.
+### Giải thích
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **zero matches after executed query differs from failed query**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+Hai loại này khác transient vì **kết quả sẽ giống hệt** dù thử bao nhiêu lần:
 
-**Case study / Tình huống:** Customer lookup returns [] but DB was reachable.
+- **Business error**: yêu cầu hợp lệ về kỹ thuật nhưng **vi phạm quy tắc nghiệp vụ**. Ví dụ hoàn tiền 5.000 USD trong khi hạn mức tự động là 500 USD; đơn đã quá hạn đổi trả. Hướng xử lý: giải thích cho khách, đề xuất phương án nằm trong chính sách (hoàn một phần, voucher), hoặc **chuyển người có thẩm quyền**.
+- **Permission error**: danh tính hiện tại không có quyền (ví dụ vai trò support không được xem dữ liệu tài chính). Hướng xử lý: không cố "lách"; yêu cầu **principal được cấp quyền** hoặc leo thang.
 
-**Recommended implementation:** Mark success with resultCount=0 and no retry.
+Thông điệp lỗi nên cho model biết đây là loại **không retry được** và gợi ý bước tiếp theo (ví dụ `"escalate_to": "finance_approver"`). Nhờ đó model không lặp lại request, không tìm cách vòng qua rào chắn (như đổi sang tool khác để làm điều bị cấm) và có thể phản hồi trung thực với người dùng.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Treat empty list as timeout.
+Điểm kiến trúc: **chính sách phải được cưỡng chế ở phía tool/backend**, không chỉ dặn trong prompt. Tool từ chối có cấu trúc là "lan can" xác định, trong khi prompt chỉ là lời nhắc xác suất.
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Customer lookup returns [] but DB was reachable".
-- Decision: áp dụng nguyên tắc **Successful empty versus failed access** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Mark success with resultCount=0 and no retry" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+### Keyword
 
-## 3. Ví dụ thiết kế / Worked engineering example
+- `business rule error` — lỗi vi phạm quy tắc nghiệp vụ/chính sách
+- `permission error` — lỗi không đủ quyền truy cập
+- `escalation` — chuyển cho người/hệ thống có thẩm quyền xử lý
+- `authorized principal` — danh tính (người/service) được cấp quyền thực hiện
+- `non-retryable` — không nên thử lại vì kết quả không đổi
+- `policy threshold` — ngưỡng chính sách (ví dụ hạn mức hoàn tiền tự động)
 
-**Problem:** Order API times out versus order id lacks # prefix.
+### Bẫy đề thi
 
-**Bad design:** Blindly repeat same malformed ID.
+- ✗ Retry y hệt request bị từ chối vì chính sách ⇒ ✓ Đề xuất phương án trong chính sách hoặc leo thang
+- ✗ Thử đổi tool/tham số để lách lỗi quyền ⇒ ✓ Dùng danh tính được cấp quyền hoặc escalate
+- ✗ Chỉ dặn trong prompt "không hoàn quá 500 USD" ⇒ ✓ Backend/tool cưỡng chế ngưỡng và trả lỗi có cấu trúc
 
-**Better design:** Retry backoff for timeout; correct ID then retry for validation.
+### Câu hỏi
 
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
+#### Q1. Agent gọi `issue_refund` cho 2.400 USD, tool trả lỗi "exceeds auto-approval limit (500)". Phản hồi tốt nhất?
+- A. Retry sau 30 giây vì có thể là lỗi tạm
+- B. Chia thành 5 yêu cầu hoàn tiền nhỏ để vượt ngưỡng
+- C. Báo hoàn tiền thành công để khách yên tâm
+- D. Giải thích giới hạn và chuyển yêu cầu cho người có thẩm quyền duyệt
 
-### Walkthrough: decision trace / Luồng xử lý
+**Đáp án:** D
 
-```text
-INPUT  : Order API times out versus order id lacks # prefix.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Retry backoff for timeout; correct ID then retry for validation.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
+**Giải thích:** Lỗi business không tự hết; hướng đúng là escalate theo chính sách. A vô ích. B là lách chính sách. C là thông tin sai.
+
+#### Q2. Tool tra hồ sơ lương trả lỗi permission vì agent chạy bằng vai trò support. Hành động đúng?
+- A. Thử lại với cùng vai trò nhiều lần
+- B. Dùng tool khác cũng đọc được dữ liệu đó để vòng qua
+- C. Báo không đủ quyền và yêu cầu/escalate sang danh tính có quyền phù hợp
+- D. Bỏ qua và trả lời bằng dữ liệu phỏng đoán
+
+**Đáp án:** C
+
+**Giải thích:** Lỗi quyền cần giải quyết bằng cấp quyền hợp lệ hoặc leo thang. A cho kết quả lặp lại. B vi phạm ranh giới bảo mật. D là bịa dữ liệu.
+
+## K3. `is_error` và metadata có cấu trúc
+
+### Trọng tâm
+
+Khi tool lỗi, hãy đánh dấu `is_error: true` và trả **loại lỗi, khả năng retry, mô tả hành động tiếp theo** theo cấu trúc. Đừng trả chuỗi chung chung hay trả như thể thành công.
+
+### Giải thích
+
+Trong Messages API, kết quả tool đi trong block `tool_result`. Block này có cờ `is_error` để báo lỗi (với MCP, kết quả tool cũng có cờ `isError`). Cờ này cho model biết nội dung là **thông báo lỗi**, không phải dữ liệu bình thường.
+
+Hai sai lầm phổ biến:
+
+1. **Nuốt lỗi và trả chuỗi vô nghĩa** như `"Operation failed"` hoặc trả `[]` khi DB không truy cập được. Model sẽ coi đó là "không có bản ghi" và kết luận sai ("khách chưa từng mua hàng").
+2. **Trả lỗi nhưng không phân loại**, khiến model không biết nên retry, sửa input hay escalate.
+
+Một lỗi có cấu trúc tốt, ví dụ:
+
+```json
+{
+  "is_error": true,
+  "content": {
+    "category": "transient",
+    "retryable": true,
+    "message": "Orders DB timed out after 5s",
+    "suggested_action": "retry_with_backoff"
+  }
+}
 ```
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+Các trường hữu ích: `category` (transient/validation/business/permission), `retryable`, thông điệp dễ hiểu, hành động gợi ý, và (nếu an toàn) chi tiết sai ở trường nào. Đừng lộ thông tin nhạy cảm như stack trace hay chuỗi kết nối.
 
-## 4. Exam traps / Bẫy dễ nhầm
+Lưu ý: khi lỗi vẫn phải gửi `tool_result` tương ứng với `tool_use_id`, nếu bỏ qua, vòng lặp agent sẽ hỏng (xem bài 1.1).
 
-1. **Bẫy Transient versus validation:** "Blindly repeat same malformed ID" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở transient versus validation, rồi chọn "Retry backoff for timeout; correct ID then retry for validation".
+### Keyword
 
-2. **Bẫy Business versus permission:** "Retry the exact same request indefinitely" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở business versus permission, rồi chọn "Escalate policy case or obtain authorized principal".
+- `is_error` — cờ trong `tool_result` báo kết quả là lỗi
+- `isError` — cờ tương ứng trong kết quả tool của MCP
+- `error category` — phân loại lỗi (transient, validation, business, permission)
+- `retryable flag` — trường báo lỗi có nên retry không
+- `actionable message` — thông điệp nêu rõ bước tiếp theo
+- `structured error` — lỗi trả dưới dạng cấu trúc, máy đọc được
 
-3. **Bẫy isError and structured metadata:** "Return generic Operation failed as success" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở iserror and structured metadata, rồi chọn "Set isError true and actionable category".
+### Bẫy đề thi
 
-4. **Bẫy Successful empty versus failed access:** "Treat empty list as timeout" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở successful empty versus failed access, rồi chọn "Mark success with resultCount=0 and no retry".
+- ✗ Trả "Operation failed" chung chung ⇒ ✓ Trả `is_error` cùng category, retryable và hành động gợi ý
+- ✗ Trả danh sách rỗng khi DB không truy cập được ⇒ ✓ Báo lỗi truy cập, không giả làm kết quả rỗng
+- ✗ Lộ stack trace đầy đủ cho model/người dùng ⇒ ✓ Thông điệp hữu ích nhưng không lộ chi tiết nhạy cảm
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+### Câu hỏi
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+#### Q1. Khi database không khả dụng, tool trả `{"records": []}` với trạng thái thành công. Agent báo cho khách "bạn chưa có đơn nào". Cách sửa tốt nhất?
+- A. Dặn model trong prompt rằng danh sách rỗng đôi khi là lỗi
+- B. Tool trả `is_error: true` với category và retryable rõ ràng khi truy cập DB thất bại
+- C. Bắt model gọi lại tool 3 lần mỗi lần tra cứu
+- D. Thêm bước kiểm tra độ dài văn bản trả lời
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **Order API times out versus order id lacks # prefix**. Phương án nào phù hợp nhất?
+**Đáp án:** B
 
-- **A.** Blindly repeat same malformed ID; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Retry the exact same request indefinitely; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Return generic Operation failed as success; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Retry backoff for timeout; correct ID then retry for validation; kèm kiểm thử lại điều kiện và ghi evidence.
+**Giải thích:** Lỗi truy cập phải được biểu diễn là lỗi có cấu trúc để model không nhầm với dữ liệu rỗng. A dựa vào suy đoán. C tốn tài nguyên và không phân biệt được. D không liên quan.
 
-**Đáp án: D**
+#### Q2. Trường nào cung cấp giá trị lớn nhất để model quyết định retry hay không trong kết quả lỗi?
+- A. Chuỗi stack trace đầy đủ
+- B. Thời gian hệ thống của server
+- C. Tên máy chủ nội bộ
+- D. Trường `category` kèm cờ `retryable` và `suggested_action`
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** D
 
-- **A:** **Sai.** Đây chính là bẫy "Blindly repeat same malformed ID" được nêu ở cơ chế Transient versus validation. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Business versus permission**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **isError and structured metadata**, không giải quyết được yêu cầu cốt lõi "Temporary service fault retries unchanged later; validation needs corrected input" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Temporary service fault retries unchanged later; validation needs corrected input. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+**Giải thích:** Model cần phân loại và hành động tiếp theo. A, B, C không giúp quyết định retry và còn có thể lộ thông tin nội bộ.
 
-**Exam heuristic:** Nếu đề xuất hiện "Order API times out versus order id lacks # prefix", ưu tiên phân biệt `Transient versus validation` với các lựa chọn mô tả chuyện khác.
+## K4. Rỗng thành công khác với truy cập thất bại
 
-### Q02. Một kỹ sư đề xuất **Retry the exact same request indefinitely** cho tình huống: Refund exceeds threshold or role lacks finance access. Cần phản biện thế nào?
+### Trọng tâm
 
-- **A.** Escalate policy case or obtain authorized principal; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Retry the exact same request indefinitely; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Return generic Operation failed as success; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Treat empty list as timeout; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+Truy vấn chạy xong nhưng **0 kết quả** là **thành công** (không retry). Truy vấn **không thực thi được** là **lỗi**. Hai tình huống phải được phân biệt rõ trong response.
 
-**Đáp án: A**
+### Giải thích
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Xét tool `find_customer(email)`:
 
-- **A:** **Đúng.** Policy denial or unauthorized identity requires alternative/escalation. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Retry the exact same request indefinitely" được nêu ở cơ chế Business versus permission. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **isError and structured metadata**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Successful empty versus failed access**, không giải quyết được yêu cầu cốt lõi "Policy denial or unauthorized identity requires alternative/escalation" và thiếu điều kiện kiểm chứng.
+- Trường hợp A: DB truy cập bình thường, không có khách nào khớp email → đây là **câu trả lời hợp lệ**: "không tồn tại". Trả `is_error: false` cùng `result_count: 0` (hoặc mảng rỗng có ngữ nghĩa rõ ràng). Model nên báo "không tìm thấy" hoặc xin thông tin khác (kiểm tra chính tả email, thử số điện thoại), **không retry** vì kết quả sẽ y hệt.
+- Trường hợp B: DB timeout → **không có câu trả lời**. Phải trả lỗi (`is_error: true`, transient). Model có thể retry hoặc báo hệ thống tạm thời gián đoạn.
 
-**Exam heuristic:** Nếu đề xuất hiện "Refund exceeds threshold or role lacks finance access", ưu tiên phân biệt `Business versus permission` với các lựa chọn mô tả chuyện khác.
+Nếu gộp chung hai trường hợp:
 
-### Q03. Nếu sự cố **Model treats Database unavailable as normal empty records** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+- Coi rỗng là lỗi → agent retry vô ích, hoặc báo "hệ thống lỗi" sai sự thật.
+- Coi lỗi là rỗng → agent kết luận "không có dữ liệu" và có thể đưa ra quyết định sai (ví dụ cho khách đăng ký tài khoản trùng).
 
-- **A.** Blindly repeat same malformed ID; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Set isError true and actionable category; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Return generic Operation failed as success; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Treat empty list as timeout; áp dụng trực tiếp dù cơ chế sự cố khác.
+Thêm trường `result_count` hoặc `status` làm response tự mô tả, giảm đoán mò. Đây cũng là một dạng của nguyên tắc rộng hơn trong hệ thống agent: **không để thất bại bị che giấu thành thành công**, và **không để thành công bị coi là thất bại**.
 
-**Đáp án: B**
+### Keyword
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- `empty result` — kết quả rỗng sau khi truy vấn chạy thành công
+- `access failure` — thất bại khi truy cập (timeout, mất kết nối)
+- `result_count` — số bản ghi trả về; giúp phân biệt 0 kết quả với lỗi
+- `valid empty` — kết quả rỗng hợp lệ, không phải lỗi
+- `silent failure` — thất bại bị che giấu thành thành công
+- `false negative` — kết luận "không có" sai do lỗi bị coi là rỗng
 
-- **A:** **Sai.** Phương án thuộc **Transient versus validation**, không giải quyết được yêu cầu cốt lõi "Expose error type, retryability and actionable explanation in tool result" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Expose error type, retryability and actionable explanation in tool result. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Return generic Operation failed as success" được nêu ở cơ chế isError and structured metadata. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Successful empty versus failed access**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+### Bẫy đề thi
 
-**Exam heuristic:** Nếu đề xuất hiện "Model treats Database unavailable as normal empty records", ưu tiên phân biệt `isError and structured metadata` với các lựa chọn mô tả chuyện khác.
+- ✗ Mảng rỗng luôn là lỗi nên retry ⇒ ✓ Rỗng sau truy vấn thành công là kết quả hợp lệ, không retry
+- ✗ Timeout thì trả `[]` cho gọn ⇒ ✓ Timeout là lỗi, phải báo `is_error`
+- ✗ Dùng cùng một dạng response cho cả hai trường hợp ⇒ ✓ Phân biệt bằng `is_error` và `result_count`
 
-### Q04. Để viết acceptance criteria cho tình huống **Customer lookup returns [] but DB was reachable**, lựa chọn nào thể hiện ranh giới đúng?
+### Câu hỏi
 
-- **A.** Blindly repeat same malformed ID; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Retry the exact same request indefinitely; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Mark success with resultCount=0 and no retry; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Treat empty list as timeout; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+#### Q1. `find_customer` trả `[]` và `is_error: false`, kèm `result_count: 0`, DB hoạt động bình thường. Agent nên làm gì?
+- A. Retry với backoff vì rỗng là dấu hiệu timeout
+- B. Báo là hệ thống đang lỗi
+- C. Thông báo không tìm thấy khách khớp và đề nghị người dùng kiểm tra thông tin hoặc thử định danh khác
+- D. Tự tạo hồ sơ khách mới không hỏi
 
-**Đáp án: C**
+**Đáp án:** C
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Giải thích:** Rỗng hợp lệ là câu trả lời; retry cho kết quả giống hệt. A và B hiểu sai thành lỗi. D tự ý thay đổi dữ liệu.
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Transient versus validation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Business versus permission**, không giải quyết được yêu cầu cốt lõi "Zero matches after executed query differs from failed query" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Zero matches after executed query differs from failed query. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Treat empty list as timeout" được nêu ở cơ chế Successful empty versus failed access. Không đảm bảo xử lý được case và dễ che mất failure mode.
+#### Q2. Tool kiểm tra kho trả `[]` cả khi tìm thấy 0 mặt hàng lẫn khi kết nối kho thất bại. Hệ quả đáng lo nhất?
+- A. Model không thể phân biệt hết hàng thật với lỗi hệ thống nên có thể báo sai
+- B. Tool chạy chậm hơn
+- C. Response lớn hơn
+- D. Model không gọi tool nữa
 
-**Exam heuristic:** Nếu đề xuất hiện "Customer lookup returns [] but DB was reachable", ưu tiên phân biệt `Successful empty versus failed access` với các lựa chọn mô tả chuyện khác.
+**Đáp án:** A
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Blindly repeat same malformed ID**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
-
-- **A.** Blindly repeat same malformed ID; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Retry the exact same request indefinitely; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Return generic Operation failed as success; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Retry backoff for timeout; correct ID then retry for validation; kèm kiểm thử lại điều kiện và ghi evidence.
-
-**Đáp án: D**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Đây chính là bẫy "Blindly repeat same malformed ID" được nêu ở cơ chế Transient versus validation. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Business versus permission**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **isError and structured metadata**, không giải quyết được yêu cầu cốt lõi "Temporary service fault retries unchanged later; validation needs corrected input" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Temporary service fault retries unchanged later; validation needs corrected input. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-
-**Exam heuristic:** Nếu đề xuất hiện "Order API times out versus order id lacks # prefix", ưu tiên phân biệt `Transient versus validation` với các lựa chọn mô tả chuyện khác.
-
-### Q06. Sau khi audit phát hiện **Refund exceeds threshold or role lacks finance access**, điều gì là cải tiến có thể kiểm chứng?
-
-- **A.** Escalate policy case or obtain authorized principal; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Retry the exact same request indefinitely; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Return generic Operation failed as success; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Treat empty list as timeout; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-
-**Đáp án: A**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Đúng.** Policy denial or unauthorized identity requires alternative/escalation. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Retry the exact same request indefinitely" được nêu ở cơ chế Business versus permission. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **isError and structured metadata**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Successful empty versus failed access**, không giải quyết được yêu cầu cốt lõi "Policy denial or unauthorized identity requires alternative/escalation" và thiếu điều kiện kiểm chứng.
-
-**Exam heuristic:** Nếu đề xuất hiện "Refund exceeds threshold or role lacks finance access", ưu tiên phân biệt `Business versus permission` với các lựa chọn mô tả chuyện khác.
-
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Model treats Database unavailable as normal empty records**, nên chọn gì?
-
-- **A.** Blindly repeat same malformed ID; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Set isError true and actionable category; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Return generic Operation failed as success; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Treat empty list as timeout; áp dụng trực tiếp dù cơ chế sự cố khác.
-
-**Đáp án: B**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc **Transient versus validation**, không giải quyết được yêu cầu cốt lõi "Expose error type, retryability and actionable explanation in tool result" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Expose error type, retryability and actionable explanation in tool result. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Return generic Operation failed as success" được nêu ở cơ chế isError and structured metadata. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Successful empty versus failed access**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-
-**Exam heuristic:** Nếu đề xuất hiện "Model treats Database unavailable as normal empty records", ưu tiên phân biệt `isError and structured metadata` với các lựa chọn mô tả chuyện khác.
-
-### Q08. Một reviewer nêu giải pháp **Treat empty list as timeout**. Đánh giá chính xác nhất là gì?
-
-- **A.** Blindly repeat same malformed ID; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Retry the exact same request indefinitely; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Mark success with resultCount=0 and no retry; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Treat empty list as timeout; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-
-**Đáp án: C**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc cơ chế **Transient versus validation**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Business versus permission**, không giải quyết được yêu cầu cốt lõi "Zero matches after executed query differs from failed query" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Zero matches after executed query differs from failed query. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Treat empty list as timeout" được nêu ở cơ chế Successful empty versus failed access. Không đảm bảo xử lý được case và dễ che mất failure mode.
-
-**Exam heuristic:** Nếu đề xuất hiện "Customer lookup returns [] but DB was reachable", ưu tiên phân biệt `Successful empty versus failed access` với các lựa chọn mô tả chuyện khác.
-
-### Q09. Trong thử nghiệm đối chứng với tình huống **Order API times out versus order id lacks # prefix**, tiêu chí pass phù hợp là gì?
-
-- **A.** Blindly repeat same malformed ID; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Retry the exact same request indefinitely; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Return generic Operation failed as success; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Retry backoff for timeout; correct ID then retry for validation; kèm kiểm thử lại điều kiện và ghi evidence.
-
-**Đáp án: D**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Đây chính là bẫy "Blindly repeat same malformed ID" được nêu ở cơ chế Transient versus validation. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Business versus permission**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **isError and structured metadata**, không giải quyết được yêu cầu cốt lõi "Temporary service fault retries unchanged later; validation needs corrected input" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Temporary service fault retries unchanged later; validation needs corrected input. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-
-**Exam heuristic:** Nếu đề xuất hiện "Order API times out versus order id lacks # prefix", ưu tiên phân biệt `Transient versus validation` với các lựa chọn mô tả chuyện khác.
-
-### Q10. Để giảm lỗi tái diễn với **Refund exceeds threshold or role lacks finance access**, biện pháp nào phù hợp với cơ chế đã học?
-
-- **A.** Escalate policy case or obtain authorized principal; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Retry the exact same request indefinitely; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Return generic Operation failed as success; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Treat empty list as timeout; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-
-**Đáp án: A**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Đúng.** Policy denial or unauthorized identity requires alternative/escalation. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Retry the exact same request indefinitely" được nêu ở cơ chế Business versus permission. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **isError and structured metadata**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Successful empty versus failed access**, không giải quyết được yêu cầu cốt lõi "Policy denial or unauthorized identity requires alternative/escalation" và thiếu điều kiện kiểm chứng.
-
-**Exam heuristic:** Nếu đề xuất hiện "Refund exceeds threshold or role lacks finance access", ưu tiên phân biệt `Business versus permission` với các lựa chọn mô tả chuyện khác.
-
-## 6. Lab / Bài thực hành tự kiểm tra
-
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "Order API times out versus order id lacks # prefix".
-
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Retry backoff for timeout; correct ID then retry for validation.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
-
-## 7. Cheat sheet / Ôn nhanh
-
-- **Transient versus validation:** Temporary service fault retries unchanged later; validation needs corrected input. ✓ Retry backoff for timeout; correct ID then retry for validation. ✗ Blindly repeat same malformed ID.
-- **Business versus permission:** Policy denial or unauthorized identity requires alternative/escalation. ✓ Escalate policy case or obtain authorized principal. ✗ Retry the exact same request indefinitely.
-- **isError and structured metadata:** Expose error type, retryability and actionable explanation in tool result. ✓ Set isError true and actionable category. ✗ Return generic Operation failed as success.
-- **Successful empty versus failed access:** Zero matches after executed query differs from failed query. ✓ Mark success with resultCount=0 and no retry. ✗ Treat empty list as timeout.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/2-tool-design-mcp/2-2-structured-error-responses
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Gộp hai trường hợp gây kết luận sai (false negative hoặc retry vô ích). B, C, D không phải hệ quả chính.

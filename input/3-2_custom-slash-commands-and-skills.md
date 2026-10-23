@@ -1,326 +1,252 @@
 # 3.2 — Custom Slash Commands and Skills
 
-> Domain 3: Claude Code Configuration & Workflows · Tỷ trọng toàn domain: 20%
-> Source lesson: https://claudecertificationguide.com/learn/3-claude-code-config/3-2-slash-commands-skills
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+**Slash command** là lệnh bắt đầu bằng `/` (ví dụ `/review`, `/deploy-check`) để chạy lại một quy trình làm việc đã được đóng gói sẵn, thay vì gõ lại prompt dài mỗi lần. **Skill** là dạng đóng gói mới và đầy đủ hơn: một thư mục chứa `SKILL.md` cùng file hỗ trợ (template, script, checklist). Claude có thể tự kích hoạt skill khi mô tả khớp yêu cầu, hoặc bạn gọi trực tiếp bằng `/tên-skill`.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Custom Slash Commands and Skills**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Đề thi xoay quanh bốn câu hỏi: workflow dùng chung phải đặt ở đâu để cả team có, làm sao để workflow nhiều output không làm "ngập" cuộc trò chuyện chính, `allowed-tools` thực sự làm gì, và làm sao Claude biết khi nào nên dùng skill. Quy tắc nhớ nhanh: **workflow của team → `.claude/skills/<tên>/SKILL.md` được commit; output dài dòng → `context: fork`; `allowed-tools` chỉ là tiền phê duyệt, không phải danh sách cấm; `description` rõ ràng quyết định việc tự khớp.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Vị trí skill và command: `.claude/skills/` là chuẩn
 
-### 2.1. Skill path versus command alias
+### Trọng tâm
 
-**Principle (EN):** .claude/skills/name/SKILL.md is canonical; commands/name.md legacy alias.
+Skill nằm tại `.claude/skills/<tên>/SKILL.md` (trong repo để chia sẻ, hoặc `~/.claude/skills/` cho cá nhân). File `.claude/commands/<tên>.md` là dạng cũ, vẫn chạy được như alias của lệnh. Workflow cần chia sẻ cho team phải nằm trong repo và được commit.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **.claude/skills/name/SKILL.md is canonical; commands/name.md legacy alias**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** Team creates /review workflow with supporting files.
+Có hai nơi lưu và hai phạm vi:
 
-**Recommended implementation:** Use versioned skills folder with SKILL.md.
+| Vị trí | Phạm vi |
+|---|---|
+| `.claude/skills/<tên>/SKILL.md` (trong repo) | Cả team, qua git |
+| `~/.claude/skills/<tên>/SKILL.md` | Chỉ bạn, mọi dự án |
+| `.claude/commands/<tên>.md` | Dạng cũ, vẫn dùng được; một file = một lệnh |
+| `~/.claude/commands/<tên>.md` | Cá nhân, dạng cũ |
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Keep workflow only under personal ~/.claude.
+Skill hơn command ở chỗ nó là **một thư mục**: ngoài `SKILL.md` (có frontmatter và hướng dẫn) còn chứa được file đi kèm như template báo cáo, script kiểm tra, danh sách tiêu chí. Ví dụ:
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Team creates /review workflow with supporting files".
-- Decision: áp dụng nguyên tắc **Skill path versus command alias** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Use versioned skills folder with SKILL.md" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.2. Forked skill context
-
-**Principle (EN):** context: fork isolates verbose work from main context.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **context: fork isolates verbose work from main context**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Code exploration produces 50 pages of excerpts.
-
-**Recommended implementation:** Use fork context skill and return concise findings.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Dump every excerpt to main conversation.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Code exploration produces 50 pages of excerpts".
-- Decision: áp dụng nguyên tắc **Forked skill context** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Use fork context skill and return concise findings" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.3. allowed-tools nuance
-
-**Principle (EN):** Skill allowed-tools preapproves those tools, not complete denylist.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **skill allowed-tools preapproves those tools, not complete denylist**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Skill allows Read and Grep but Bash exists with normal permissions.
-
-**Recommended implementation:** Apply normal permission checks to unlisted tool.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Claim all other tools become impossible.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Skill allows Read and Grep but Bash exists with normal permissions".
-- Decision: áp dụng nguyên tắc **allowed-tools nuance** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Apply normal permission checks to unlisted tool" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.4. Scope and discovery
-
-**Principle (EN):** Project skills shared; description enables automatic matching.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **project skills shared; description enables automatic matching**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Teammates need same deploy checklist skill.
-
-**Recommended implementation:** Commit project skill with clear description.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Create private local command and expect team visibility.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Teammates need same deploy checklist skill".
-- Decision: áp dụng nguyên tắc **Scope and discovery** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Commit project skill with clear description" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-## 3. Ví dụ thiết kế / Worked engineering example
-
-**Problem:** Team creates /review workflow with supporting files.
-
-**Bad design:** Keep workflow only under personal ~/.claude.
-
-**Better design:** Use versioned skills folder with SKILL.md.
-
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
-
-### Walkthrough: decision trace / Luồng xử lý
-
-```text
-INPUT  : Team creates /review workflow with supporting files.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Use versioned skills folder with SKILL.md.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
+```
+.claude/skills/review/
+├── SKILL.md            # frontmatter + các bước review
+├── checklist.md        # tiêu chí review của team
+└── scripts/lint.sh     # script hỗ trợ
 ```
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+`SKILL.md` mở đầu bằng frontmatter YAML, tối thiểu có `name` và `description`; phần thân là hướng dẫn Claude làm theo. Có thể truyền tham số bằng `$ARGUMENTS` trong nội dung khi gọi `/review src/auth`.
 
-## 4. Exam traps / Bẫy dễ nhầm
+Vì sao vị trí quan trọng: một workflow chỉ nằm ở `~/.claude/` thì đồng đội không có nó; workflow trong repo thì ai clone cũng dùng được, được review qua PR và có version. Với tình huống "team cần lệnh `/review` có file hỗ trợ" đáp án chuẩn là skill trong `.claude/skills/` được commit. Command dạng `commands/<tên>.md` vẫn hợp lệ cho prompt một file đơn giản, nhưng đề thi coi skill là đường dẫn chính.
 
-1. **Bẫy Skill path versus command alias:** "Keep workflow only under personal ~/.claude" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở skill path versus command alias, rồi chọn "Use versioned skills folder with SKILL.md".
+### Keyword
 
-2. **Bẫy Forked skill context:** "Dump every excerpt to main conversation" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở forked skill context, rồi chọn "Use fork context skill and return concise findings".
+- `SKILL.md` — file định nghĩa skill: frontmatter cùng hướng dẫn
+- `.claude/skills/` — thư mục skill cấp project, commit để chia sẻ
+- `~/.claude/skills/` — thư mục skill cá nhân, chỉ máy bạn
+- `.claude/commands/` — nơi lưu slash command dạng cũ (một file Markdown một lệnh)
+- `$ARGUMENTS` — chỗ giữ phần tham số người dùng gõ sau tên lệnh
+- `supporting files` — file đi kèm skill (template, script, checklist)
 
-3. **Bẫy allowed-tools nuance:** "Claim all other tools become impossible" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở allowed-tools nuance, rồi chọn "Apply normal permission checks to unlisted tool".
+### Bẫy đề thi
 
-4. **Bẫy Scope and discovery:** "Create private local command and expect team visibility" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở scope and discovery, rồi chọn "Commit project skill with clear description".
+- ✗ Để workflow dùng chung chỉ trong `~/.claude/` của một người ⇒ ✓ Đặt trong `.claude/skills/<tên>/SKILL.md` của repo và commit
+- ✗ Nghĩ `commands/<tên>.md` đã bị xoá bỏ hoàn toàn ⇒ ✓ Nó vẫn hoạt động như alias dạng cũ, nhưng skill là đường dẫn chuẩn
+- ✗ Nhét template và script vào prompt của một file command ⇒ ✓ Dùng skill dạng thư mục với file hỗ trợ
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+### Câu hỏi
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+#### Q1. Team muốn chuẩn hoá lệnh `/review` kèm checklist riêng và một script lint, để mọi thành viên sau khi clone repo đều dùng được. Cách làm đúng nhất?
+- A. Tạo `~/.claude/skills/review/SKILL.md` trên máy tech lead rồi hướng dẫn mọi người xin file
+- B. Viết prompt dài vào wiki nội bộ để mọi người copy-paste
+- C. Dùng `CLAUDE.local.md` ở gốc repo để lưu lệnh
+- D. Tạo `.claude/skills/review/SKILL.md` cùng `checklist.md` và script trong thư mục đó, rồi commit
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **Team creates /review workflow with supporting files**. Phương án nào phù hợp nhất?
+**Đáp án:** D
 
-- **A.** Dump every excerpt to main conversation; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Claim all other tools become impossible; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Use versioned skills folder with SKILL.md; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Keep workflow only under personal ~/.claude; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+**Giải thích:** Skill dạng thư mục trong repo mang theo file hỗ trợ và đi theo git đến mọi người. A chỉ có tác dụng trên một máy. B thủ công, không tích hợp với `/review`. C sai mục đích: `CLAUDE.local.md` chứa hướng dẫn cá nhân, không định nghĩa slash command.
 
-**Đáp án: C**
+#### Q2. Một dev cũ đang dùng file `.claude/commands/deploy.md` và hỏi liệu có phải di chuyển ngay không. Phát biểu nào đúng?
+- A. File commands vẫn chạy như alias dạng cũ, nhưng skill (`.claude/skills/<tên>/SKILL.md`) là dạng chuẩn và hỗ trợ file đi kèm
+- B. File commands đã bị vô hiệu hoá, lệnh `/deploy` sẽ báo lỗi
+- C. Phải đổi tên thành `.claude/hooks/deploy.md` mới hoạt động
+- D. Chỉ skill cá nhân ở `~/.claude/skills/` mới được hỗ trợ
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** A
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Forked skill context**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **allowed-tools nuance**, không giải quyết được yêu cầu cốt lõi ".claude/skills/name/SKILL.md is canonical; commands/name.md legacy alias" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** .claude/skills/name/SKILL.md is canonical; commands/name.md legacy alias. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Keep workflow only under personal ~/.claude" được nêu ở cơ chế Skill path versus command alias. Không đảm bảo xử lý được case và dễ che mất failure mode.
+**Giải thích:** Command dạng cũ vẫn hoạt động, nhưng skill là dạng canonical vì có thể gom nhiều file và có `description` để tự khớp. B sai vì không bị vô hiệu hoá. C bịa một thư mục không dùng cho mục đích này. D sai vì skill cấp project cũng được hỗ trợ.
 
-**Exam heuristic:** Nếu đề xuất hiện "Team creates /review workflow with supporting files", ưu tiên phân biệt `Skill path versus command alias` với các lựa chọn mô tả chuyện khác.
+## K2. Skill chạy trong ngữ cảnh tách biệt: `context: fork`
 
-### Q02. Một kỹ sư đề xuất **Dump every excerpt to main conversation** cho tình huống: Code exploration produces 50 pages of excerpts. Cần phản biện thế nào?
+### Trọng tâm
 
-- **A.** Dump every excerpt to main conversation; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Claim all other tools become impossible; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Create private local command and expect team visibility; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Use fork context skill and return concise findings; kèm kiểm thử lại điều kiện và ghi evidence.
+Đặt `context: fork` trong frontmatter để skill chạy trong ngữ cảnh riêng; phần công việc dài dòng (đọc nhiều file, log) nằm ngoài cuộc trò chuyện chính và chỉ **bản tóm tắt** được trả về.
 
-**Đáp án: D**
+### Giải thích
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Context window là tài nguyên hữu hạn. Một skill kiểu "khảo sát toàn bộ codebase rồi liệt kê điểm cần sửa" có thể đọc hàng chục file, in ra hàng nghìn dòng. Nếu chạy ngay trong cuộc trò chuyện chính, toàn bộ đoạn trích đó nằm lại trong context: tốn token, đẩy các chỉ dẫn quan trọng ra xa và làm model dễ lẫn (context degradation, xem bài 5.4).
 
-- **A:** **Sai.** Đây chính là bẫy "Dump every excerpt to main conversation" được nêu ở cơ chế Forked skill context. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **allowed-tools nuance**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Scope and discovery**, không giải quyết được yêu cầu cốt lõi "context: fork isolates verbose work from main context" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** context: fork isolates verbose work from main context. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+Với `context: fork`, skill được chạy ở một ngữ cảnh con (giống một subagent): nó tự đọc, tự suy luận, rồi chỉ gửi về kết quả cô đọng. Cuộc trò chuyện chính chỉ thấy phần tóm tắt.
 
-**Exam heuristic:** Nếu đề xuất hiện "Code exploration produces 50 pages of excerpts", ưu tiên phân biệt `Forked skill context` với các lựa chọn mô tả chuyện khác.
+```markdown
+---
+name: audit-deps
+description: Khảo sát phụ thuộc lỗi thời và rủi ro bảo mật, trả về danh sách ngắn
+context: fork
+allowed-tools: Read, Grep, Glob
+---
+Quét toàn bộ repo, tìm dependency lỗi thời. Chỉ trả về tối đa 10 mục
+quan trọng nhất, mỗi mục một dòng kèm đường dẫn file.
+```
 
-### Q03. Nếu sự cố **Skill allows Read and Grep but Bash exists with normal permissions** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+Dùng fork khi: output trung gian lớn, công việc khảo sát/tìm kiếm, bạn chỉ cần kết luận. Không cần fork khi: skill ngắn, kết quả trung gian chính là thứ bạn muốn xem và thảo luận tiếp. Một điểm cần nhớ: vì ngữ cảnh con là tách biệt, hướng dẫn trong skill cần **tự đủ thông tin** (không dựa vào các tin nhắn trước của cuộc trò chuyện) và nên chỉ định rõ định dạng kết quả muốn nhận lại.
 
-- **A.** Apply normal permission checks to unlisted tool; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Claim all other tools become impossible; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Create private local command and expect team visibility; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Keep workflow only under personal ~/.claude; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+### Keyword
 
-**Đáp án: A**
+- `context: fork` — thiết lập frontmatter chạy skill trong ngữ cảnh tách biệt
+- `context isolation` — cô lập ngữ cảnh để output dài không làm bẩn cuộc trò chuyện chính
+- `verbose output` — output nhiều chi tiết (đoạn trích, log) tiêu tốn context
+- `summary return` — chỉ trả kết luận cô đọng về luồng chính
+- `context degradation` — chất lượng giảm khi context quá dài, nhiều nhiễu
+- `self-contained instructions` — hướng dẫn đủ thông tin để chạy độc lập
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Bẫy đề thi
 
-- **A:** **Đúng.** Skill allowed-tools preapproves those tools, not complete denylist. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Claim all other tools become impossible" được nêu ở cơ chế allowed-tools nuance. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Scope and discovery**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Skill path versus command alias**, không giải quyết được yêu cầu cốt lõi "Skill allowed-tools preapproves those tools, not complete denylist" và thiếu điều kiện kiểm chứng.
+- ✗ Chạy skill khảo sát nặng ngay trong luồng chính, để mọi đoạn trích nằm lại ⇒ ✓ Dùng `context: fork` và trả về bản tóm tắt
+- ✗ Nghĩ fork làm skill chạy nhanh hơn hoặc rẻ hơn về số lần gọi model ⇒ ✓ Lợi ích chính là bảo vệ context của luồng chính
+- ✗ Dùng fork rồi mong skill đọc được các trao đổi trước đó trong luồng chính ⇒ ✓ Ngữ cảnh con tách biệt, hướng dẫn phải tự đủ
 
-**Exam heuristic:** Nếu đề xuất hiện "Skill allows Read and Grep but Bash exists with normal permissions", ưu tiên phân biệt `allowed-tools nuance` với các lựa chọn mô tả chuyện khác.
+### Câu hỏi
 
-### Q04. Để viết acceptance criteria cho tình huống **Teammates need same deploy checklist skill**, lựa chọn nào thể hiện ranh giới đúng?
+#### Q1. Skill `/map-deps` đọc 200 file và in từng đoạn trích ra. Sau hai lần chạy, cuộc trò chuyện chính đầy rác và Claude bắt đầu quên quy ước đã nêu ở đầu phiên. Điều chỉnh phù hợp nhất?
+- A. Tăng `max_tokens` của response
+- B. Thêm `context: fork` vào frontmatter và yêu cầu skill chỉ trả về danh sách tóm tắt
+- C. Xoá `description` để skill không tự kích hoạt
+- D. Chuyển skill sang `~/.claude/skills/`
 
-- **A.** Dump every excerpt to main conversation; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Commit project skill with clear description; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Create private local command and expect team visibility; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Keep workflow only under personal ~/.claude; áp dụng trực tiếp dù cơ chế sự cố khác.
+**Đáp án:** B
 
-**Đáp án: B**
+**Giải thích:** Vấn đề là output trung gian làm đầy context chính. `context: fork` cô lập công việc và chỉ trả bản tóm tắt. A chỉ liên quan giới hạn output của một response, không giảm rác tích tụ. C đổi cách kích hoạt chứ không đổi nơi output nằm. D đổi phạm vi chia sẻ, không đổi context.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+#### Q2. Trường hợp nào sau đây KHÔNG nên dùng `context: fork`?
+- A. Skill quét log 10.000 dòng rồi chỉ báo 5 lỗi chính
+- B. Skill khảo sát kiến trúc toàn repo và trả về sơ đồ thư mục ngắn
+- C. Skill giải thích từng bước một đoạn code nhỏ để bạn hỏi tiếp ngay trong cuộc trò chuyện
+- D. Skill tìm mọi nơi dùng một API cũ trong 300 file
 
-- **A:** **Sai.** Phương án thuộc **Forked skill context**, không giải quyết được yêu cầu cốt lõi "Project skills shared; description enables automatic matching" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Project skills shared; description enables automatic matching. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Create private local command and expect team visibility" được nêu ở cơ chế Scope and discovery. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Skill path versus command alias**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+**Đáp án:** C
 
-**Exam heuristic:** Nếu đề xuất hiện "Teammates need same deploy checklist skill", ưu tiên phân biệt `Scope and discovery` với các lựa chọn mô tả chuyện khác.
+**Giải thích:** Khi chính các bước trung gian là thứ bạn cần xem và thảo luận tiếp, tách ra ngữ cảnh riêng sẽ che mất chúng. A, B, D đều có output trung gian lớn mà chỉ cần kết luận, đúng chỗ dùng fork.
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Keep workflow only under personal ~/.claude**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+## K3. `allowed-tools` là tiền phê duyệt, không phải danh sách cấm
 
-- **A.** Dump every excerpt to main conversation; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Claim all other tools become impossible; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Use versioned skills folder with SKILL.md; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Keep workflow only under personal ~/.claude; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+### Trọng tâm
 
-**Đáp án: C**
+`allowed-tools` trong skill cho phép các tool liệt kê chạy **không cần hỏi quyền** khi skill đang hoạt động. Nó **không** chặn các tool còn lại; tool không liệt kê vẫn bị kiểm tra quyền theo cấu hình thông thường. Muốn cấm hẳn phải dùng quy tắc `deny` trong permissions.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Giải thích
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Forked skill context**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **allowed-tools nuance**, không giải quyết được yêu cầu cốt lõi ".claude/skills/name/SKILL.md is canonical; commands/name.md legacy alias" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** .claude/skills/name/SKILL.md is canonical; commands/name.md legacy alias. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Keep workflow only under personal ~/.claude" được nêu ở cơ chế Skill path versus command alias. Không đảm bảo xử lý được case và dễ che mất failure mode.
+Hãy phân biệt hai khái niệm: **cấp phép trước (pre-approve)** và **cấm (deny)**.
 
-**Exam heuristic:** Nếu đề xuất hiện "Team creates /review workflow with supporting files", ưu tiên phân biệt `Skill path versus command alias` với các lựa chọn mô tả chuyện khác.
+- `allowed-tools: Read, Grep` nghĩa là khi skill chạy, `Read` và `Grep` được dùng ngay, không bật hộp thoại xin phép. Điều này tiện cho skill chỉ đọc, giúp chạy mượt trong CI hoặc khi cần ít gián đoạn.
+- Nếu `Bash` không nằm trong danh sách, Claude vẫn có thể muốn gọi `Bash`; khi đó áp dụng hệ thống quyền bình thường của dự án (hỏi người dùng, hoặc theo allow/deny đã cấu hình). `Bash` không tự "biến mất".
 
-### Q06. Sau khi audit phát hiện **Code exploration produces 50 pages of excerpts**, điều gì là cải tiến có thể kiểm chứng?
+Hệ quả thiết kế: nếu bạn coi `allowed-tools: Read, Grep` là "hàng rào" bảo đảm skill không thể sửa file, bạn đang hiểu sai; một lời gọi tool khác vẫn có thể diễn ra nếu quyền thông thường cho phép hoặc người dùng chấp thuận. Muốn bảo đảm tool bị chặn, hãy dùng `permissions.deny` trong settings (hoặc hook chặn), chúng mới là cơ chế cưỡng chế. Bảng so sánh:
 
-- **A.** Dump every excerpt to main conversation; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Claim all other tools become impossible; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Create private local command and expect team visibility; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Use fork context skill and return concise findings; kèm kiểm thử lại điều kiện và ghi evidence.
+| Mục tiêu | Cơ chế đúng |
+|---|---|
+| Cho phép tool chạy mượt trong skill | `allowed-tools` |
+| Cấm chắc chắn một tool/lệnh | `permissions.deny` hoặc hook |
+| Chỉ gợi ý hành vi | Hướng dẫn trong SKILL.md |
 
-**Đáp án: D**
+Cách nghĩ này nhất quán với nguyên lý xuyên suốt của Domain 3: văn bản/chỉ dẫn là xác suất, cấu hình quyền và hook mới là đảm bảo.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Keyword
 
-- **A:** **Sai.** Đây chính là bẫy "Dump every excerpt to main conversation" được nêu ở cơ chế Forked skill context. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **allowed-tools nuance**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Scope and discovery**, không giải quyết được yêu cầu cốt lõi "context: fork isolates verbose work from main context" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** context: fork isolates verbose work from main context. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+- `allowed-tools` — danh sách tool được tiền phê duyệt khi skill chạy
+- `pre-approve` — cho phép trước, không cần hỏi quyền từng lần
+- `permissions.deny` — quy tắc trong settings để cấm tool/lệnh chắc chắn
+- `permission checks` — hệ thống kiểm tra quyền thông thường áp cho tool chưa được phê duyệt
+- `denylist` — danh sách cấm; `allowed-tools` không phải thứ này
+- `least privilege` — chỉ cấp đúng quyền cần thiết cho skill
 
-**Exam heuristic:** Nếu đề xuất hiện "Code exploration produces 50 pages of excerpts", ưu tiên phân biệt `Forked skill context` với các lựa chọn mô tả chuyện khác.
+### Bẫy đề thi
 
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Skill allows Read and Grep but Bash exists with normal permissions**, nên chọn gì?
+- ✗ Nghĩ `allowed-tools: Read, Grep` làm mọi tool khác không thể dùng ⇒ ✓ Tool khác vẫn qua kiểm tra quyền thông thường
+- ✗ Dùng `allowed-tools` làm rào chắn an toàn cho thao tác nguy hiểm ⇒ ✓ Dùng `permissions.deny` hoặc hook để cấm chắc chắn
+- ✗ Bỏ trống `allowed-tools` rồi cho rằng skill không có tool nào ⇒ ✓ Skill vẫn dùng tool theo quyền thông thường, chỉ là phải hỏi nhiều hơn
 
-- **A.** Apply normal permission checks to unlisted tool; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Claim all other tools become impossible; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Create private local command and expect team visibility; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Keep workflow only under personal ~/.claude; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+### Câu hỏi
 
-**Đáp án: A**
+#### Q1. Skill `/inspect` khai báo `allowed-tools: Read, Grep`. Một kỹ sư kết luận "skill này không thể chạy lệnh Bash, nên an toàn để chạy tự động". Đánh giá đúng nhất?
+- A. Đúng, mọi tool không nằm trong danh sách đều bị chặn
+- B. Đúng, nhưng chỉ khi skill dùng `context: fork`
+- C. Sai; `allowed-tools` chỉ tiền phê duyệt, `Bash` vẫn đi qua kiểm tra quyền thông thường nên cần `permissions.deny` nếu muốn cấm
+- D. Sai; vì `allowed-tools` chỉ ảnh hưởng đến giao diện hiển thị
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** C
 
-- **A:** **Đúng.** Skill allowed-tools preapproves those tools, not complete denylist. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Claim all other tools become impossible" được nêu ở cơ chế allowed-tools nuance. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Scope and discovery**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Skill path versus command alias**, không giải quyết được yêu cầu cốt lõi "Skill allowed-tools preapproves those tools, not complete denylist" và thiếu điều kiện kiểm chứng.
+**Giải thích:** `allowed-tools` là danh sách cho phép trước, không phải denylist; tool khác vẫn tuân theo quyền thông thường. Muốn cấm chắc chắn cần `permissions.deny` hoặc hook. A và B khẳng định một cơ chế chặn không tồn tại. D đoán sai bản chất.
 
-**Exam heuristic:** Nếu đề xuất hiện "Skill allows Read and Grep but Bash exists with normal permissions", ưu tiên phân biệt `allowed-tools nuance` với các lựa chọn mô tả chuyện khác.
+#### Q2. Bạn muốn skill `/summarize-logs` chạy mà không bật hộp thoại xin phép cho các lần đọc file và grep. Cách phù hợp?
+- A. Thêm `allowed-tools: Read, Grep` vào frontmatter của skill
+- B. Thêm câu "đừng hỏi quyền" vào thân SKILL.md
+- C. Đặt `context: fork` vì fork bỏ qua toàn bộ kiểm tra quyền
+- D. Đổi tên skill thành `/auto`
 
-### Q08. Một reviewer nêu giải pháp **Create private local command and expect team visibility**. Đánh giá chính xác nhất là gì?
+**Đáp án:** A
 
-- **A.** Dump every excerpt to main conversation; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Commit project skill with clear description; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Create private local command and expect team visibility; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Keep workflow only under personal ~/.claude; áp dụng trực tiếp dù cơ chế sự cố khác.
+**Giải thích:** `allowed-tools` chính là cơ chế tiền phê duyệt cho tool liệt kê. B chỉ là văn bản, không thay đổi hệ thống quyền. C sai vì fork liên quan context chứ không phải quyền. D vô nghĩa vì tên skill không ảnh hưởng quyền.
 
-**Đáp án: B**
+## K4. Phạm vi và khả năng được phát hiện (`description`)
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Trọng tâm
 
-- **A:** **Sai.** Phương án thuộc **Forked skill context**, không giải quyết được yêu cầu cốt lõi "Project skills shared; description enables automatic matching" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Project skills shared; description enables automatic matching. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Create private local command and expect team visibility" được nêu ở cơ chế Scope and discovery. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Skill path versus command alias**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+Skill cấp project được chia sẻ qua repo; **`description`** trong frontmatter là thứ Claude dùng để biết khi nào nên tự áp dụng skill. Description mơ hồ thì skill khó được tự khớp; command chỉ nằm ở máy cá nhân thì đồng đội không thấy.
 
-**Exam heuristic:** Nếu đề xuất hiện "Teammates need same deploy checklist skill", ưu tiên phân biệt `Scope and discovery` với các lựa chọn mô tả chuyện khác.
+### Giải thích
 
-### Q09. Trong thử nghiệm đối chứng với tình huống **Team creates /review workflow with supporting files**, tiêu chí pass phù hợp là gì?
+Hai yếu tố quyết định việc một skill "được dùng đúng lúc": ai có nó (phạm vi) và Claude có nhận ra nó phù hợp hay không (khả năng phát hiện).
 
-- **A.** Dump every excerpt to main conversation; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Claim all other tools become impossible; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Use versioned skills folder with SKILL.md; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Keep workflow only under personal ~/.claude; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+**Phạm vi.** Muốn mọi đồng đội dùng chung checklist deploy: commit skill vào `.claude/skills/` của repo. Nếu tạo skill/command riêng ở `~/.claude/`, chỉ bạn có nó. Nên đặt tên skill đặc thù cho dự án để tránh trùng với skill cá nhân hoặc skill khác.
 
-**Đáp án: C**
+**Khả năng phát hiện.** Ở đầu phiên, Claude chỉ thấy phần metadata của các skill (chủ yếu `name` và `description`), còn nội dung đầy đủ của `SKILL.md` được nạp khi skill thực sự được dùng. Vì thế `description` giống như "tờ rơi quảng cáo": phải nói rõ **skill làm gì** và **khi nào dùng**, bằng từ ngữ người dùng hay nói.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- Kém: `description: Helper cho deploy` (mơ hồ).
+- Tốt: `description: Chạy checklist trước khi deploy lên production: kiểm tra migration, feature flag, rollback plan. Dùng khi người dùng nhắc đến deploy, release hoặc go-live.`
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Forked skill context**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **allowed-tools nuance**, không giải quyết được yêu cầu cốt lõi ".claude/skills/name/SKILL.md is canonical; commands/name.md legacy alias" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** .claude/skills/name/SKILL.md is canonical; commands/name.md legacy alias. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Keep workflow only under personal ~/.claude" được nêu ở cơ chế Skill path versus command alias. Không đảm bảo xử lý được case và dễ che mất failure mode.
+Nếu bạn không muốn Claude tự kích hoạt (ví dụ skill có tác dụng phụ như deploy thật), có thể cấu hình để skill chỉ chạy khi người dùng gõ `/tên-skill` một cách chủ động (tùy chọn kiểu `disable-model-invocation`). Với thao tác nguy hiểm, nên bắt buộc gọi thủ công kèm xác nhận thay vì để model tự quyết.
 
-**Exam heuristic:** Nếu đề xuất hiện "Team creates /review workflow with supporting files", ưu tiên phân biệt `Skill path versus command alias` với các lựa chọn mô tả chuyện khác.
+### Keyword
 
-### Q10. Để giảm lỗi tái diễn với **Code exploration produces 50 pages of excerpts**, biện pháp nào phù hợp với cơ chế đã học?
+- `description` — trường frontmatter mô tả skill làm gì và khi nào dùng, để tự khớp
+- `automatic matching` — Claude tự chọn skill dựa trên mô tả và yêu cầu hiện tại
+- `progressive loading` — chỉ metadata nạp sớm, nội dung đầy đủ nạp khi skill được dùng
+- `project skill` — skill trong repo, chia sẻ qua git
+- `manual invocation` — người dùng chủ động gõ `/tên-skill`
+- `disable-model-invocation` — tùy chọn ngăn model tự kích hoạt skill, chỉ cho gọi thủ công
 
-- **A.** Dump every excerpt to main conversation; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Claim all other tools become impossible; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Create private local command and expect team visibility; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Use fork context skill and return concise findings; kèm kiểm thử lại điều kiện và ghi evidence.
+### Bẫy đề thi
 
-**Đáp án: D**
+- ✗ Tạo command riêng ở `~/.claude/` rồi mong cả team dùng được ⇒ ✓ Commit skill vào `.claude/skills/` của project
+- ✗ Viết description chung chung như "helper" ⇒ ✓ Mô tả rõ chức năng và thời điểm dùng bằng từ khóa người dùng hay nhắc
+- ✗ Để skill có tác dụng phụ nặng (deploy thật) tự kích hoạt theo suy đoán ⇒ ✓ Giới hạn ở gọi thủ công cho thao tác nguy hiểm
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Câu hỏi
 
-- **A:** **Sai.** Đây chính là bẫy "Dump every excerpt to main conversation" được nêu ở cơ chế Forked skill context. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **allowed-tools nuance**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Scope and discovery**, không giải quyết được yêu cầu cốt lõi "context: fork isolates verbose work from main context" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** context: fork isolates verbose work from main context. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+#### Q1. Team có skill `release-checklist` trong repo, nhưng Claude hiếm khi tự dùng nó khi dev nói "tôi chuẩn bị release bản 2.3". Frontmatter hiện chỉ có `description: Helper`. Sửa gì hiệu quả nhất?
+- A. Nhồi toàn bộ checklist vào CLAUDE.md gốc
+- B. Đổi tên skill thành `helper`
+- C. Viết lại `description` nêu rõ skill làm gì (checklist trước release) và khi nào dùng (release, deploy, go-live)
+- D. Chuyển skill vào `~/.claude/skills/`
 
-**Exam heuristic:** Nếu đề xuất hiện "Code exploration produces 50 pages of excerpts", ưu tiên phân biệt `Forked skill context` với các lựa chọn mô tả chuyện khác.
+**Đáp án:** C
 
-## 6. Lab / Bài thực hành tự kiểm tra
+**Giải thích:** Claude dùng description để quyết định khớp skill; mô tả cụ thể kèm tình huống sử dụng làm tăng khả năng được chọn đúng lúc. A làm tốn context cho mọi phiên. B làm tên vô nghĩa. D thu hẹp phạm vi xuống một người, không giúp khớp.
 
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "Team creates /review workflow with supporting files".
+#### Q2. Skill `/deploy-prod` thực hiện deploy thật. Team lo ngại Claude tự gọi skill khi dev chỉ hỏi chung chung về release. Biện pháp hợp lý nhất?
+- A. Viết description thật dài để model khó nhầm
+- B. Xoá skill khỏi repo và chạy lệnh deploy bằng tay
+- C. Dùng `allowed-tools` để cấm Bash
+- D. Cấu hình skill chỉ cho gọi thủ công (không cho model tự kích hoạt) và vẫn yêu cầu xác nhận
 
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Use versioned skills folder with SKILL.md.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
+**Đáp án:** D
 
-## 7. Cheat sheet / Ôn nhanh
-
-- **Skill path versus command alias:** .claude/skills/name/SKILL.md is canonical; commands/name.md legacy alias. ✓ Use versioned skills folder with SKILL.md. ✗ Keep workflow only under personal ~/.claude.
-- **Forked skill context:** context: fork isolates verbose work from main context. ✓ Use fork context skill and return concise findings. ✗ Dump every excerpt to main conversation.
-- **allowed-tools nuance:** Skill allowed-tools preapproves those tools, not complete denylist. ✓ Apply normal permission checks to unlisted tool. ✗ Claim all other tools become impossible.
-- **Scope and discovery:** Project skills shared; description enables automatic matching. ✓ Commit project skill with clear description. ✗ Create private local command and expect team visibility.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/3-claude-code-config/3-2-slash-commands-skills
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Thao tác có tác dụng phụ nên do người chủ động kích hoạt, không để model tự suy đoán. A không đảm bảo. B bỏ mất lợi ích tự động hoá. C sai vì `allowed-tools` không phải denylist (xem K3).

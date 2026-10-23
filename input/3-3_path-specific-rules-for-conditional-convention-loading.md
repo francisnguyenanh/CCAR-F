@@ -1,326 +1,275 @@
 # 3.3 — Path-Specific Rules for Conditional Convention Loading
 
-> Domain 3: Claude Code Configuration & Workflows · Tỷ trọng toàn domain: 20%
-> Source lesson: https://claudecertificationguide.com/learn/3-claude-code-config/3-3-path-specific-rules
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+Khi dự án lớn dần, số quy ước cũng tăng: quy ước React, Terraform, SQL migration, test, controller... Nhét hết vào CLAUDE.md gốc thì mọi phiên đều phải đọc tất cả, dù hôm nay bạn chỉ sửa một component. **Path-specific rules** giải quyết việc này: mỗi quy ước là một file trong `.claude/rules/`, có frontmatter `paths` chứa glob, và chỉ được nạp khi Claude làm việc với file khớp glob.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Path-Specific Rules for Conditional Convention Loading**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Đề thi hỏi: dùng glob thế nào cho loại file rải rác nhiều thư mục, vì sao điều này tiết kiệm context, khi nào dùng rules thay vì CLAUDE.md lồng nhau, và giới hạn quan trọng nhất, **rule chỉ là hướng dẫn, không phải cơ chế cưỡng chế**. Quy tắc nhớ nhanh: **quy ước theo loại file → `.claude/rules/*.md` + `paths`; quy ước theo vị trí → CLAUDE.md thư mục; bất biến bắt buộc → hook/CI/test.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Rule với frontmatter `paths` glob
 
-### 2.1. paths glob frontmatter
+### Trọng tâm
 
-**Principle (EN):** Rules in .claude/rules/*.md activate for matching paths.
+File trong `.claude/rules/*.md` có thể khai báo `paths:` là danh sách glob; rule chỉ kích hoạt khi Claude làm việc với file khớp. Một rule cho cả nhóm file rải rác, không phải copy vào từng thư mục.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **rules in .claude/rules/*.md activate for matching paths**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** All *.test.ts across many folders need same convention.
+Cấu trúc điển hình:
 
-**Recommended implementation:** Use paths: ["**/*.test.ts"].
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Copy instructions into every folder.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "All *.test.ts across many folders need same convention".
-- Decision: áp dụng nguyên tắc **paths glob frontmatter** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Use paths: ["**/*.test.ts"]" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.2. Context budget optimization
-
-**Principle (EN):** Conditional rules avoid loading irrelevant guidelines.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **conditional rules avoid loading irrelevant guidelines**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** React edits need no Terraform standards.
-
-**Recommended implementation:** Load Terraform guidance only on matching paths.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Put all Terraform guidance in root CLAUDE.md.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "React edits need no Terraform standards".
-- Decision: áp dụng nguyên tắc **Context budget optimization** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Load Terraform guidance only on matching paths" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.3. Cross-folder file classes
-
-**Principle (EN):** Glob can match dispersed files across entire repository.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **glob can match dispersed files across entire repository**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Controller files occur under five distinct modules.
-
-**Recommended implementation:** Use **/*.controller.ts or relevant patterns.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Depend on one top-level directory CLAUDE.md.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Controller files occur under five distinct modules".
-- Decision: áp dụng nguyên tắc **Cross-folder file classes** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Use **/*.controller.ts or relevant patterns" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.4. Rule versus enforcement
-
-**Principle (EN):** Rules guide generation; invariant checks need hooks/settings/tests.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **rules guide generation; invariant checks need hooks/settings/tests**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** All SQL migrations must pass a safety check.
-
-**Recommended implementation:** Use CI/hook for mandatory policy plus rules for conventions.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Trust passive rules as guaranteed authorization gate.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "All SQL migrations must pass a safety check".
-- Decision: áp dụng nguyên tắc **Rule versus enforcement** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Use CI/hook for mandatory policy plus rules for conventions" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-## 3. Ví dụ thiết kế / Worked engineering example
-
-**Problem:** All *.test.ts across many folders need same convention.
-
-**Bad design:** Copy instructions into every folder.
-
-**Better design:** Use paths: ["**/*.test.ts"].
-
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
-
-### Walkthrough: decision trace / Luồng xử lý
-
-```text
-INPUT  : All *.test.ts across many folders need same convention.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Use paths: ["**/*.test.ts"].
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
+```
+.claude/rules/
+├── testing.md        # paths: ["**/*.test.ts"]
+├── terraform.md      # paths: ["infra/**/*.tf"]
+└── api-errors.md     # paths: ["src/api/**/*.ts"]
 ```
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+Nội dung `testing.md`:
 
-## 4. Exam traps / Bẫy dễ nhầm
+```markdown
+---
+paths:
+  - "**/*.test.ts"
+---
+- Dùng `describe`/`it`, tên test mô tả hành vi.
+- Mỗi test độc lập, không phụ thuộc thứ tự chạy.
+- Mock I/O bằng `jest.mock`, không gọi mạng thật.
+```
 
-1. **Bẫy paths glob frontmatter:** "Copy instructions into every folder" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở paths glob frontmatter, rồi chọn "Use paths: ["**/*.test.ts"]".
+Vài điểm cơ chế cần nhớ:
 
-2. **Bẫy Context budget optimization:** "Put all Terraform guidance in root CLAUDE.md" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở context budget optimization, rồi chọn "Load Terraform guidance only on matching paths".
+- **Glob** dùng cú pháp quen thuộc: `*` khớp trong một cấp thư mục, `**` khớp qua nhiều cấp, `{a,b}` cho nhiều lựa chọn (ví dụ `"**/*.{ts,tsx}"`).
+- Rule **không có** `paths` được nạp vô điều kiện như CLAUDE.md; rule **có** `paths` mới là có điều kiện.
+- Rule nằm trong repo nên được commit và chia sẻ như CLAUDE.md của project; cũng có thể có rule cấp người dùng trong thư mục home cho sở thích cá nhân.
+- Không cần sao chép nội dung vào mỗi thư mục: một glob phủ toàn bộ repo, kể cả file mới tạo sau này miễn là khớp mẫu.
 
-3. **Bẫy Cross-folder file classes:** "Depend on one top-level directory CLAUDE.md" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở cross-folder file classes, rồi chọn "Use **/*.controller.ts or relevant patterns".
+Vì sao hay hơn "nhân bản CLAUDE.md vào từng thư mục"? Các file `*.test.ts` không nằm trong một thư mục duy nhất; nhân bản sẽ lệch theo thời gian và quên thư mục mới. Glob mô tả **loại file**, đúng với bản chất của quy ước test.
 
-4. **Bẫy Rule versus enforcement:** "Trust passive rules as guaranteed authorization gate" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở rule versus enforcement, rồi chọn "Use CI/hook for mandatory policy plus rules for conventions".
+### Keyword
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+- `.claude/rules/` — thư mục chứa các rule Markdown theo chủ đề
+- `paths` — trường frontmatter liệt kê glob xác định khi nào rule có hiệu lực
+- `glob pattern` — mẫu khớp đường dẫn, ví dụ `**/*.test.ts`
+- `conditional loading` — chỉ nạp hướng dẫn khi file đang làm việc khớp điều kiện
+- `unconditional rule` — rule không có `paths`, luôn được nạp
+- `convention` — quy ước viết code của team
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+### Bẫy đề thi
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **All *.test.ts across many folders need same convention**. Phương án nào phù hợp nhất?
+- ✗ Copy cùng một hướng dẫn test vào mọi thư mục có test ⇒ ✓ Một rule với `paths: ["**/*.test.ts"]`
+- ✗ Nghĩ rule không có `paths` cũng chỉ nạp có điều kiện ⇒ ✓ Không có `paths` thì rule được nạp vô điều kiện
+- ✗ Muốn giới hạn rule cho một nhóm file nhưng quên khai báo `paths` ⇒ ✓ Phải có `paths`, nếu không rule nạp ở mọi phiên
 
-- **A.** Put all Terraform guidance in root CLAUDE.md; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Depend on one top-level directory CLAUDE.md; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Use paths: ["**/*.test.ts"]; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Copy instructions into every folder; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+### Câu hỏi
 
-**Đáp án: C**
+#### Q1. Repo có hàng trăm file `*.test.ts` nằm trong nhiều package khác nhau. Team muốn Claude luôn dùng cùng một quy ước test khi sửa các file này, nhưng không muốn tốn context khi sửa code không phải test. Cách làm nào đúng?
+- A. Viết quy ước test vào CLAUDE.md gốc cho chắc
+- B. Tạo CLAUDE.md trong từng thư mục chứa test
+- C. Tạo `.claude/rules/testing.md` với `paths: ["**/*.test.ts"]`
+- D. Tạo skill `/test-rules` và nhắc dev gõ lệnh mỗi lần
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** C
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Context budget optimization**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Cross-folder file classes**, không giải quyết được yêu cầu cốt lõi "Rules in .claude/rules/*.md activate for matching paths" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Rules in .claude/rules/*.md activate for matching paths. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Copy instructions into every folder" được nêu ở cơ chế paths glob frontmatter. Không đảm bảo xử lý được case và dễ che mất failure mode.
+**Giải thích:** Rule có `paths` glob gắn với loại file nên một file phủ mọi package và chỉ nạp khi làm việc với test. A nạp quy ước ở mọi phiên, lãng phí context. B phải nhân bản và dễ lệch. D phụ thuộc vào việc người dùng nhớ gõ lệnh.
 
-**Exam heuristic:** Nếu đề xuất hiện "All *.test.ts across many folders need same convention", ưu tiên phân biệt `paths glob frontmatter` với các lựa chọn mô tả chuyện khác.
+#### Q2. Team tạo `.claude/rules/terraform.md` chứa quy ước hạ tầng nhưng không viết frontmatter `paths`. Dev frontend phàn nàn rằng quy ước Terraform vẫn chiếm context khi sửa React. Giải thích và cách sửa đúng?
+- A. Rule không có `paths` được nạp vô điều kiện; thêm `paths: ["**/*.tf"]` (hoặc đường dẫn hạ tầng) để chỉ nạp khi cần
+- B. Rule chỉ nạp khi file có đuôi `.md` được mở; đổi tên file rule
+- C. Phải khai báo `paths` trong `settings.json` thay vì frontmatter
+- D. Đây là lỗi của model; nạp lại phiên sẽ tự hết
 
-### Q02. Một kỹ sư đề xuất **Put all Terraform guidance in root CLAUDE.md** cho tình huống: React edits need no Terraform standards. Cần phản biện thế nào?
+**Đáp án:** A
 
-- **A.** Put all Terraform guidance in root CLAUDE.md; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Depend on one top-level directory CLAUDE.md; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Trust passive rules as guaranteed authorization gate; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Load Terraform guidance only on matching paths; kèm kiểm thử lại điều kiện và ghi evidence.
+**Giải thích:** Điều kiện nạp có điều kiện chính là `paths`; thiếu nó rule hoạt động như hướng dẫn luôn nạp. B, C bịa cơ chế không tồn tại. D sai vì đây là hành vi theo thiết kế, không phải lỗi ngẫu nhiên.
 
-**Đáp án: D**
+## K2. Tối ưu ngân sách context bằng nạp có điều kiện
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Trọng tâm
 
-- **A:** **Sai.** Đây chính là bẫy "Put all Terraform guidance in root CLAUDE.md" được nêu ở cơ chế Context budget optimization. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Cross-folder file classes**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Rule versus enforcement**, không giải quyết được yêu cầu cốt lõi "Conditional rules avoid loading irrelevant guidelines" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Conditional rules avoid loading irrelevant guidelines. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+Nạp có điều kiện giúp Claude chỉ thấy quy ước liên quan tới file đang sửa. Quy ước của hạ tầng (Terraform) không nên nằm trong CLAUDE.md gốc khi bạn đang sửa React.
 
-**Exam heuristic:** Nếu đề xuất hiện "React edits need no Terraform standards", ưu tiên phân biệt `Context budget optimization` với các lựa chọn mô tả chuyện khác.
+### Giải thích
 
-### Q03. Nếu sự cố **Controller files occur under five distinct modules** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+Mỗi dòng hướng dẫn nạp vào context đều có chi phí: token, độ trễ và quan trọng hơn là **độ nhiễu**. Model có xu hướng phân tán sự chú ý khi context chứa nhiều chỉ dẫn không liên quan, và các quy tắc quan trọng dễ bị "chìm" giữa đống quy tắc khác.
 
-- **A.** Use **/*.controller.ts or relevant patterns; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Depend on one top-level directory CLAUDE.md; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Trust passive rules as guaranteed authorization gate; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Copy instructions into every folder; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+Hãy hình dung CLAUDE.md gốc 800 dòng chứa quy ước cho React, Terraform, SQL, Python data pipeline, mobile. Một dev frontend chỉ sửa một nút bấm vẫn phải nạp 100% các quy ước còn lại ở mỗi phiên. Chuyển các phần chuyên biệt thành rule có `paths`:
 
-**Đáp án: A**
+| Công việc đang làm | Nạp |
+|---|---|
+| Sửa `src/components/Button.tsx` | CLAUDE.md gốc (ngắn) + rule React |
+| Sửa `infra/main.tf` | CLAUDE.md gốc + rule Terraform |
+| Sửa `db/migrations/*.sql` | CLAUDE.md gốc + rule SQL |
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Nguyên tắc phân chia: **cái gì áp cho mọi thao tác** (lệnh build, quy ước commit, kiến trúc tổng) ở CLAUDE.md gốc; **cái gì chỉ liên quan một nhóm file** ở rule có `paths`. Bạn không cần tối ưu từng token, nhưng nên tránh để các quy ước chuyên ngành lớn nằm trong phần luôn-nạp.
 
-- **A:** **Đúng.** Glob can match dispersed files across entire repository. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Depend on one top-level directory CLAUDE.md" được nêu ở cơ chế Cross-folder file classes. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Rule versus enforcement**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **paths glob frontmatter**, không giải quyết được yêu cầu cốt lõi "Glob can match dispersed files across entire repository" và thiếu điều kiện kiểm chứng.
+Cần phân biệt với `@path` imports (bài 3.1): import giúp **tổ chức** nhưng file import vẫn nạp cùng file cha; chỉ path-specific rules mới cho **nạp có điều kiện**.
 
-**Exam heuristic:** Nếu đề xuất hiện "Controller files occur under five distinct modules", ưu tiên phân biệt `Cross-folder file classes` với các lựa chọn mô tả chuyện khác.
+### Keyword
 
-### Q04. Để viết acceptance criteria cho tình huống **All SQL migrations must pass a safety check**, lựa chọn nào thể hiện ranh giới đúng?
+- `context budget` — ngân sách context; mỗi hướng dẫn nạp đều tiêu tốn một phần
+- `instruction noise` — nhiễu do hướng dẫn không liên quan
+- `always-loaded` — phần luôn nạp mỗi phiên (CLAUDE.md gốc, rule không có `paths`)
+- `scoped rule` — rule chỉ áp cho nhóm file xác định
+- `selective loading` — nạp có chọn lọc theo công việc hiện tại
+- `domain-specific guidance` — hướng dẫn chuyên ngành (Terraform, SQL...)
 
-- **A.** Put all Terraform guidance in root CLAUDE.md; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Use CI/hook for mandatory policy plus rules for conventions; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Trust passive rules as guaranteed authorization gate; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Copy instructions into every folder; áp dụng trực tiếp dù cơ chế sự cố khác.
+### Bẫy đề thi
 
-**Đáp án: B**
+- ✗ Đưa toàn bộ hướng dẫn Terraform vào CLAUDE.md gốc "cho chắc" ⇒ ✓ Tạo rule Terraform với `paths` chỉ nạp khi làm việc với file hạ tầng
+- ✗ Nghĩ `@import` của CLAUDE.md đã giúp nạp có điều kiện ⇒ ✓ Import chỉ là module hóa; nạp có điều kiện cần `paths`
+- ✗ Tách rule quá vụn, chia cả quy ước chung của toàn repo thành rule theo path ⇒ ✓ Quy ước dùng cho mọi thao tác ở lại CLAUDE.md gốc
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Câu hỏi
 
-- **A:** **Sai.** Phương án thuộc **Context budget optimization**, không giải quyết được yêu cầu cốt lõi "Rules guide generation; invariant checks need hooks/settings/tests" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Rules guide generation; invariant checks need hooks/settings/tests. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Trust passive rules as guaranteed authorization gate" được nêu ở cơ chế Rule versus enforcement. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **paths glob frontmatter**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+#### Q1. CLAUDE.md gốc dài 900 dòng gồm quy ước React, Terraform, SQL và Python. Dev frontend nhận thấy Claude thỉnh thoảng áp quy ước đặt tên của Terraform vào component React. Hướng khắc phục tốt nhất?
+- A. Giữ nguyên và thêm câu "đừng áp quy ước Terraform cho React"
+- B. Tách quy ước theo lĩnh vực thành các rule trong `.claude/rules/` với `paths` tương ứng, giữ CLAUDE.md gốc cho nội dung chung
+- C. Đổi sang model có context window lớn hơn
+- D. Xoá toàn bộ quy ước Terraform khỏi repo
 
-**Exam heuristic:** Nếu đề xuất hiện "All SQL migrations must pass a safety check", ưu tiên phân biệt `Rule versus enforcement` với các lựa chọn mô tả chuyện khác.
+**Đáp án:** B
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Copy instructions into every folder**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+**Giải thích:** Nạp có điều kiện bỏ nhiễu tại gốc: khi sửa React, quy ước Terraform không vào context. A vẫn để nhiễu và dựa vào model tự lọc. C chỉ tăng sức chứa, không giảm nhiễu. D mất tri thức mà team cần cho việc khác.
 
-- **A.** Put all Terraform guidance in root CLAUDE.md; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Depend on one top-level directory CLAUDE.md; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Use paths: ["**/*.test.ts"]; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Copy instructions into every folder; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+#### Q2. Điều nào mô tả đúng sự khác nhau giữa `@path` import trong CLAUDE.md và rule có `paths`?
+- A. Hai cơ chế giống hệt nhau, chỉ khác cú pháp
+- B. Import nạp có điều kiện theo loại file; rule có `paths` luôn nạp
+- C. Import chỉ để module hóa, file vẫn nạp cùng file cha; rule có `paths` nạp khi file đang làm việc khớp glob
+- D. Rule có `paths` chỉ dùng được cho file Markdown
 
-**Đáp án: C**
+**Đáp án:** C
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Giải thích:** Import không thêm điều kiện nạp, trong khi `paths` chính là điều kiện. B đảo ngược hai cơ chế. A bỏ qua khác biệt chức năng. D bịa giới hạn: rule áp cho bất kỳ file nào khớp glob.
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Context budget optimization**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Cross-folder file classes**, không giải quyết được yêu cầu cốt lõi "Rules in .claude/rules/*.md activate for matching paths" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Rules in .claude/rules/*.md activate for matching paths. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Copy instructions into every folder" được nêu ở cơ chế paths glob frontmatter. Không đảm bảo xử lý được case và dễ che mất failure mode.
+## K3. Loại file rải rác khắp repo
 
-**Exam heuristic:** Nếu đề xuất hiện "All *.test.ts across many folders need same convention", ưu tiên phân biệt `paths glob frontmatter` với các lựa chọn mô tả chuyện khác.
+### Trọng tâm
 
-### Q06. Sau khi audit phát hiện **React edits need no Terraform standards**, điều gì là cải tiến có thể kiểm chứng?
+Khi cùng một loại file nằm ở nhiều module (ví dụ `*.controller.ts` dưới năm module), dùng **glob rộng** như `**/*.controller.ts`; không dựa vào CLAUDE.md của một thư mục cấp cao.
 
-- **A.** Put all Terraform guidance in root CLAUDE.md; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Depend on one top-level directory CLAUDE.md; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Trust passive rules as guaranteed authorization gate; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Load Terraform guidance only on matching paths; kèm kiểm thử lại điều kiện và ghi evidence.
+### Giải thích
 
-**Đáp án: D**
+Cấu trúc thư mục thường theo **tính năng** (users/, orders/, billing/), mỗi nơi có controller, service, test... Quy ước lại thường theo **loại file** (mọi controller đều phải validate input, mọi test đều đặt tên theo hành vi). Hai chiều này cắt chéo nhau. CLAUDE.md lồng nhau bám theo chiều thư mục nên không biểu diễn được chiều loại-file mà không nhân bản.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Ví dụ cấu trúc:
 
-- **A:** **Sai.** Đây chính là bẫy "Put all Terraform guidance in root CLAUDE.md" được nêu ở cơ chế Context budget optimization. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Cross-folder file classes**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Rule versus enforcement**, không giải quyết được yêu cầu cốt lõi "Conditional rules avoid loading irrelevant guidelines" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Conditional rules avoid loading irrelevant guidelines. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+```
+src/users/users.controller.ts
+src/orders/orders.controller.ts
+src/billing/billing.controller.ts
+src/search/search.controller.ts
+src/admin/admin.controller.ts
+```
 
-**Exam heuristic:** Nếu đề xuất hiện "React edits need no Terraform standards", ưu tiên phân biệt `Context budget optimization` với các lựa chọn mô tả chuyện khác.
+Một rule duy nhất giải quyết:
 
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Controller files occur under five distinct modules**, nên chọn gì?
+```markdown
+---
+paths:
+  - "**/*.controller.ts"
+---
+- Validate input bằng DTO trước khi gọi service.
+- Không viết logic nghiệp vụ trong controller.
+- Trả lỗi theo schema chuẩn của dự án.
+```
 
-- **A.** Use **/*.controller.ts or relevant patterns; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Depend on one top-level directory CLAUDE.md; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Trust passive rules as guaranteed authorization gate; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Copy instructions into every folder; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+Lợi ích: thêm module mới (`src/reports/reports.controller.ts`) là tự khớp, không phải nhớ tạo thêm file hướng dẫn. Có thể gộp nhiều mẫu trong cùng `paths`, ví dụ `["**/*.controller.ts", "**/*.resolver.ts"]`. Ngược lại, nếu quy ước **chỉ** dành riêng cho một module (ví dụ chỉ `billing/` cần quy tắc làm tròn tiền), CLAUDE.md đặt trong `billing/` hoặc glob `src/billing/**` đều hợp lý.
 
-**Đáp án: A**
+Cách chọn nhanh: câu hỏi "áp cho **vùng nào** của repo?" → thư mục; "áp cho **loại file nào**, ở bất cứ đâu?" → glob.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Keyword
 
-- **A:** **Đúng.** Glob can match dispersed files across entire repository. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Depend on one top-level directory CLAUDE.md" được nêu ở cơ chế Cross-folder file classes. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Rule versus enforcement**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **paths glob frontmatter**, không giải quyết được yêu cầu cốt lõi "Glob can match dispersed files across entire repository" và thiếu điều kiện kiểm chứng.
+- `cross-cutting convention` — quy ước cắt ngang nhiều module theo loại file
+- `recursive glob` — glob có `**` để khớp qua nhiều cấp thư mục
+- `feature-based layout` — tổ chức thư mục theo tính năng
+- `file class` — nhóm file cùng vai trò (controller, test, migration)
+- `brace expansion` — cú pháp `{a,b}` gộp nhiều phần mở rộng trong một glob
+- `directory-scoped vs pattern-scoped` — phạm vi theo thư mục khác phạm vi theo mẫu file
 
-**Exam heuristic:** Nếu đề xuất hiện "Controller files occur under five distinct modules", ưu tiên phân biệt `Cross-folder file classes` với các lựa chọn mô tả chuyện khác.
+### Bẫy đề thi
 
-### Q08. Một reviewer nêu giải pháp **Trust passive rules as guaranteed authorization gate**. Đánh giá chính xác nhất là gì?
+- ✗ Đặt một CLAUDE.md ở thư mục `src/` rồi mong nó chỉ áp cho controller ⇒ ✓ Dùng rule `paths: ["**/*.controller.ts"]`
+- ✗ Tạo file hướng dẫn riêng trong từng module chứa controller ⇒ ✓ Một rule glob phủ cả module hiện tại và module sẽ thêm
+- ✗ Dùng glob khi quy ước thực chất chỉ của một module ⇒ ✓ Với quy ước theo vùng, CLAUDE.md thư mục hoặc glob giới hạn đường dẫn là đủ
 
-- **A.** Put all Terraform guidance in root CLAUDE.md; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Use CI/hook for mandatory policy plus rules for conventions; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Trust passive rules as guaranteed authorization gate; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Copy instructions into every folder; áp dụng trực tiếp dù cơ chế sự cố khác.
+### Câu hỏi
 
-**Đáp án: B**
+#### Q1. Mọi `*.controller.ts` ở năm module cần validate input theo cùng một cách. Tuần sau sẽ có thêm hai module nữa. Giải pháp bền nhất?
+- A. Tạo CLAUDE.md trong từng thư mục module và nhớ copy khi có module mới
+- B. Viết quy ước vào CLAUDE.md gốc, áp cho mọi file
+- C. Dặn từng dev nhắc Claude mỗi lần sửa controller
+- D. Rule trong `.claude/rules/` với `paths: ["**/*.controller.ts"]`
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** D
 
-- **A:** **Sai.** Phương án thuộc **Context budget optimization**, không giải quyết được yêu cầu cốt lõi "Rules guide generation; invariant checks need hooks/settings/tests" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Rules guide generation; invariant checks need hooks/settings/tests. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Trust passive rules as guaranteed authorization gate" được nêu ở cơ chế Rule versus enforcement. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **paths glob frontmatter**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+**Giải thích:** Glob tự phủ cả module mới ngay khi file khớp mẫu. A dễ quên và lệch. B nạp mọi nơi, tốn context. C không bền vững.
 
-**Exam heuristic:** Nếu đề xuất hiện "All SQL migrations must pass a safety check", ưu tiên phân biệt `Rule versus enforcement` với các lựa chọn mô tả chuyện khác.
+#### Q2. Quy tắc làm tròn tiền chỉ dành cho code trong `src/billing/`, các module khác không liên quan. Đâu là lựa chọn hợp lý nhất?
+- A. CLAUDE.md gốc ghi quy tắc cho mọi phiên
+- B. Đặt CLAUDE.md trong `src/billing/` (hoặc rule với `paths: ["src/billing/**"]`)
+- C. Rule với `paths: ["**/*"]` để chắc chắn khớp mọi nơi
+- D. Dùng hook PostToolUse để tự động viết lại mọi file
 
-### Q09. Trong thử nghiệm đối chứng với tình huống **All *.test.ts across many folders need same convention**, tiêu chí pass phù hợp là gì?
+**Đáp án:** B
 
-- **A.** Put all Terraform guidance in root CLAUDE.md; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Depend on one top-level directory CLAUDE.md; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Use paths: ["**/*.test.ts"]; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Copy instructions into every folder; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+**Giải thích:** Phạm vi theo vùng cụ thể được biểu diễn trực tiếp bằng CLAUDE.md thư mục hoặc glob giới hạn đường dẫn. A và C áp quy tắc ra ngoài vùng cần thiết. D quá nặng tay và không liên quan việc truyền quy ước.
 
-**Đáp án: C**
+## K4. Rule là hướng dẫn, không phải cưỡng chế
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Trọng tâm
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Context budget optimization**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Cross-folder file classes**, không giải quyết được yêu cầu cốt lõi "Rules in .claude/rules/*.md activate for matching paths" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Rules in .claude/rules/*.md activate for matching paths. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Copy instructions into every folder" được nêu ở cơ chế paths glob frontmatter. Không đảm bảo xử lý được case và dễ che mất failure mode.
+Rules (và CLAUDE.md) định hướng cách Claude **sinh code**, nhưng không đảm bảo điều gì. Bất biến bắt buộc (mọi SQL migration phải qua kiểm tra an toàn) cần **hook, CI hoặc test**.
 
-**Exam heuristic:** Nếu đề xuất hiện "All *.test.ts across many folders need same convention", ưu tiên phân biệt `paths glob frontmatter` với các lựa chọn mô tả chuyện khác.
+### Giải thích
 
-### Q10. Để giảm lỗi tái diễn với **React edits need no Terraform standards**, biện pháp nào phù hợp với cơ chế đã học?
+Rule được đưa vào context, vì vậy hiệu quả dựa trên việc model đọc, hiểu và làm theo, thường tốt nhưng không bảo đảm 100%. Nó cũng chỉ có tác dụng khi Claude tham gia; một dev sửa tay file SQL rồi push sẽ hoàn toàn không đi qua rule.
 
-- **A.** Put all Terraform guidance in root CLAUDE.md; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Depend on one top-level directory CLAUDE.md; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Trust passive rules as guaranteed authorization gate; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Load Terraform guidance only on matching paths; kèm kiểm thử lại điều kiện và ghi evidence.
+Do đó cần phân biệt hai lớp:
 
-**Đáp án: D**
+| Lớp | Cơ chế | Tính chất |
+|---|---|---|
+| Hướng dẫn | CLAUDE.md, `.claude/rules` | Xác suất, chủ yếu giúp code đúng ngay từ đầu |
+| Bảo đảm | Hook (ví dụ chạy trước/sau khi sửa file), CI check, test, permissions | Tất định, chặn hoặc làm fail khi vi phạm |
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Ví dụ: chính sách "mọi migration phải không chứa `DROP TABLE` mà không có xác nhận". Thực hiện đúng cách gồm hai phần bổ trợ:
 
-- **A:** **Sai.** Đây chính là bẫy "Put all Terraform guidance in root CLAUDE.md" được nêu ở cơ chế Context budget optimization. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Cross-folder file classes**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Rule versus enforcement**, không giải quyết được yêu cầu cốt lõi "Conditional rules avoid loading irrelevant guidelines" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Conditional rules avoid loading irrelevant guidelines. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+1. Rule cho `db/migrations/*.sql` mô tả quy ước (đặt tên, viết migration có thể rollback) để Claude viết đúng ngay.
+2. Một bước CI chạy script lint SQL, làm pipeline fail nếu vi phạm, và/hoặc một hook chặn ghi file khi script báo lỗi.
 
-**Exam heuristic:** Nếu đề xuất hiện "React edits need no Terraform standards", ưu tiên phân biệt `Context budget optimization` với các lựa chọn mô tả chuyện khác.
+Thiết kế tốt dùng **cả hai**: rule giảm lỗi phát sinh, kiểm tra tất định đảm bảo lỗi còn sót không lọt qua. Trong đề thi, nếu câu hỏi có từ như "bắt buộc", "luôn luôn", "không được phép lọt" hoặc "audit" thì chọn phương án có cơ chế cưỡng chế (CI/hook), có thể kèm rule cho quy ước.
 
-## 6. Lab / Bài thực hành tự kiểm tra
+### Keyword
 
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "All *.test.ts across many folders need same convention".
+- `guidance vs enforcement` — hướng dẫn (xác suất) khác cưỡng chế (tất định)
+- `PreToolUse hook` — hook chạy trước khi tool thực hiện, có thể chặn thao tác
+- `PostToolUse hook` — hook chạy sau khi tool thực hiện, hay dùng để lint/format/kiểm tra
+- `CI gate` — bước kiểm tra trong pipeline làm fail build khi vi phạm
+- `invariant` — điều kiện bắt buộc luôn phải đúng
+- `defense in depth` — nhiều lớp bảo vệ bổ trợ nhau
 
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Use paths: ["**/*.test.ts"].
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
+### Bẫy đề thi
 
-## 7. Cheat sheet / Ôn nhanh
+- ✗ Dựa vào rule thụ động như cổng bảo đảm cho chính sách bắt buộc ⇒ ✓ Dùng CI/hook/test cho bất biến, rule cho quy ước
+- ✗ Bỏ rule vì đã có CI ⇒ ✓ Rule giúp Claude viết đúng ngay, giảm vòng sửa; CI là lưới bảo đảm
+- ✗ Nghĩ mọi thay đổi đều đi qua Claude nên rule đủ bao phủ ⇒ ✓ Sửa tay hoặc công cụ khác không đi qua rule; CI bao phủ tất cả
 
-- **paths glob frontmatter:** Rules in .claude/rules/*.md activate for matching paths. ✓ Use paths: ["**/*.test.ts"]. ✗ Copy instructions into every folder.
-- **Context budget optimization:** Conditional rules avoid loading irrelevant guidelines. ✓ Load Terraform guidance only on matching paths. ✗ Put all Terraform guidance in root CLAUDE.md.
-- **Cross-folder file classes:** Glob can match dispersed files across entire repository. ✓ Use **/*.controller.ts or relevant patterns. ✗ Depend on one top-level directory CLAUDE.md.
-- **Rule versus enforcement:** Rules guide generation; invariant checks need hooks/settings/tests. ✓ Use CI/hook for mandatory policy plus rules for conventions. ✗ Trust passive rules as guaranteed authorization gate.
+### Câu hỏi
 
-## 8. Provenance & phạm vi
+#### Q1. Chính sách: mọi migration SQL phải qua kiểm tra an toàn trước khi merge. Team viết một rule `paths: ["db/migrations/**/*.sql"]` mô tả kiểm tra, nhưng vẫn có migration không an toàn lọt vào main. Cải tiến đúng nhất?
+- A. Thêm một rule thứ hai nhắc lại điều tương tự
+- B. Chuyển nội dung rule vào CLAUDE.md gốc để nạp luôn
+- C. Giữ rule cho quy ước và thêm bước CI chạy script kiểm tra SQL, làm fail khi vi phạm (có thể kèm hook)
+- D. Yêu cầu Claude "hãy luôn tự kiểm tra kỹ"
 
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/3-claude-code-config/3-3-path-specific-rules
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Đáp án:** C
+
+**Giải thích:** Điều kiện bắt buộc cần cơ chế tất định ở CI/hook; rule vẫn hữu ích để Claude viết đúng từ đầu. A, B chỉ là thêm văn bản vào context, vẫn xác suất. D là yêu cầu mơ hồ, không kiểm chứng được.
+
+#### Q2. Một thành viên cho rằng: "Đã có rule bảo vệ thư mục `infra/`, nên không cần review hay CI cho thay đổi hạ tầng". Phản biện nào đúng nhất?
+- A. Đúng, rule luôn được tuân thủ tuyệt đối
+- B. Rule chỉ ảnh hưởng thao tác của Claude và mang tính hướng dẫn; thay đổi thủ công hay vi phạm vẫn lọt nếu thiếu CI/review
+- C. Sai, vì rule chỉ hoạt động với file `.md`
+- D. Sai, vì rule làm giảm tốc độ của Claude
+
+**Đáp án:** B
+
+**Giải thích:** Rule là hướng dẫn trong context của Claude, không chặn được người sửa tay và không đảm bảo tuyệt đối. A phóng đại. C bịa giới hạn. D không liên quan đến lý do cần CI.

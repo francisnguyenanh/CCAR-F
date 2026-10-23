@@ -1,326 +1,242 @@
 # 4.2 — Few-Shot Prompting
 
-> Domain 4: Prompt Engineering & Structured Output · Tỷ trọng toàn domain: 20%
-> Source lesson: https://claudecertificationguide.com/learn/4-prompt-engineering/4-2-few-shot-prompting
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+**Few-shot prompting** là kỹ thuật đưa vào prompt vài cặp ví dụ đầu vào → đầu ra mong muốn để model "bắt chước" định dạng và cách ra quyết định. Khi chỉ dẫn bằng lời đã dài mà kết quả vẫn không nhất quán, ví dụ cụ thể thường hiệu quả hơn thêm đoạn mô tả trừu tượng.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Few-Shot Prompting**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Đề thi hay hỏi bốn điều: cần **bao nhiêu và loại ví dụ nào** (2-4 ví dụ nhắm đúng chỗ khó), ví dụ nên là ca **sát ranh giới** chứ không chỉ ca dễ, ví dụ giúp **trích xuất từ nhiều dạng tài liệu** (bảng lẫn văn xuôi), và **giới hạn** của few-shot: nó không thay được schema hay code kiểm tra. Quy tắc nhớ nhanh: **ví dụ dạy cách phán đoán và định dạng; schema và validator đảm bảo cấu trúc và tính đúng.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Few-shot để đạt định dạng và phán đoán nhất quán
 
-### 2.1. Few-shot for consistency
+### Trọng tâm
 
-**Principle (EN):** Use 2–4 targeted input-output examples with decision rationale.
+Khi chỉ dẫn chi tiết vẫn cho ra định dạng không đồng đều, hãy thêm **2-4 ví dụ input-output có chủ đích**, kèm lý do quyết định, thay vì viết thêm nhiều đoạn hướng dẫn trừu tượng.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **use 2–4 targeted input-output examples with decision rationale**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** Detailed instructions still produce inconsistent report formats.
+Model học rất tốt từ **mẫu**. Một đoạn văn mô tả "báo cáo gồm vị trí, vấn đề, mức độ, gợi ý sửa" có thể được hiểu theo nhiều cách (thứ tự khác nhau, độ dài khác nhau, có khi thiếu trường). Một ví dụ cụ thể cho thấy chính xác định dạng đầu ra, độ chi tiết và giọng điệu, nên kết quả đồng đều hơn nhiều.
 
-**Recommended implementation:** Demonstrate target formats and reasoning.
+Nguyên tắc thiết kế ví dụ:
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Add several paragraphs of abstract instruction.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Detailed instructions still produce inconsistent report formats".
-- Decision: áp dụng nguyên tắc **Few-shot for consistency** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Demonstrate target formats and reasoning" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.2. Ambiguous classification examples
-
-**Principle (EN):** Teach distinctions at decision boundaries rather than easy cases.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **teach distinctions at decision boundaries rather than easy cases**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Variable shadowing judged critical or minor inconsistently.
-
-**Recommended implementation:** Provide borderline examples with explanation.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Give only trivial happy-path examples.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Variable shadowing judged critical or minor inconsistently".
-- Decision: áp dụng nguyên tắc **Ambiguous classification examples** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Provide borderline examples with explanation" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.3. Narrative extraction coverage
-
-**Principle (EN):** Show extraction from structured tables and prose.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **show extraction from structured tables and prose**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Invoice has due date only in paragraph.
-
-**Recommended implementation:** Add few-shot narrative extraction exemplar.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Set due_date to null despite explicit evidence.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Invoice has due date only in paragraph".
-- Decision: áp dụng nguyên tắc **Narrative extraction coverage** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Add few-shot narrative extraction exemplar" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.4. Choose different mechanism for different failure
-
-**Principle (EN):** Few-shot not substitute for schema or arithmetic validation.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **few-shot not substitute for schema or arithmetic validation**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Parser produces malformed JSON and incorrect totals.
-
-**Recommended implementation:** Use schema for structure and code validator for totals.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Keep adding examples to fix every issue.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Parser produces malformed JSON and incorrect totals".
-- Decision: áp dụng nguyên tắc **Choose different mechanism for different failure** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Use schema for structure and code validator for totals" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-## 3. Ví dụ thiết kế / Worked engineering example
-
-**Problem:** Detailed instructions still produce inconsistent report formats.
-
-**Bad design:** Add several paragraphs of abstract instruction.
-
-**Better design:** Demonstrate target formats and reasoning.
-
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
-
-### Walkthrough: decision trace / Luồng xử lý
+- **Số lượng vừa đủ**: thường 2-4 ví dụ là đủ. Quá nhiều tốn token và có thể khiến model bám cứng vào chi tiết bề mặt; quá ít không bao phủ được các tình huống.
+- **Có chủ đích**: mỗi ví dụ dạy một điều khác nhau (định dạng, một loại trường hợp, một cách xử lý thiếu dữ liệu).
+- **Kèm lý do**: ghi ngắn "vì sao chọn nhãn/hành động này". Lý do giúp model khái quát sang ca mới thay vì chỉ sao chép.
+- **Đa dạng**: tránh các ví dụ giống hệt nhau về cấu trúc, nếu không model sẽ tưởng đó là mẫu bắt buộc.
 
 ```text
-INPUT  : Detailed instructions still produce inconsistent report formats.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Demonstrate target formats and reasoning.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
+<example>
+Input: def get(u): return db.q("SELECT * FROM t WHERE id=" + u)
+Output:
+  location: get()
+  issue: SQL injection (nối chuỗi từ tham số u)
+  severity: critical
+  fix: dùng parameterized query
+Reasoning: dữ liệu ngoài đi thẳng vào câu SQL.
+</example>
 ```
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+Few-shot không "huấn luyện lại" model; nó chỉ định hướng trong ngữ cảnh hiện tại, nên ví dụ phải nằm trong mỗi request (hoặc phần prompt dùng chung).
 
-## 4. Exam traps / Bẫy dễ nhầm
+### Keyword
 
-1. **Bẫy Few-shot for consistency:** "Add several paragraphs of abstract instruction" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở few-shot for consistency, rồi chọn "Demonstrate target formats and reasoning".
+- `few-shot prompting` — cung cấp vài ví dụ input-output trong prompt để định hướng hành vi
+- `input-output example` — cặp ví dụ đầu vào và đầu ra mong muốn
+- `output format consistency` — tính nhất quán của định dạng đầu ra
+- `decision rationale` — lý do đi kèm ví dụ, giải thích vì sao ra quyết định đó
+- `in-context learning` — học từ ví dụ ngay trong ngữ cảnh, không cập nhật trọng số
+- `abstract instruction` — chỉ dẫn trừu tượng bằng lời, dễ bị hiểu khác nhau
 
-2. **Bẫy Ambiguous classification examples:** "Give only trivial happy-path examples" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở ambiguous classification examples, rồi chọn "Provide borderline examples with explanation".
+### Bẫy đề thi
 
-3. **Bẫy Narrative extraction coverage:** "Set due_date to null despite explicit evidence" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở narrative extraction coverage, rồi chọn "Add few-shot narrative extraction exemplar".
+- ✗ Thêm nhiều đoạn chỉ dẫn trừu tượng để sửa định dạng không nhất quán ⇒ ✓ Thêm vài ví dụ input-output cụ thể
+- ✗ Nhồi thật nhiều ví dụ cho chắc ⇒ ✓ Dùng 2-4 ví dụ có chủ đích, đa dạng
+- ✗ Ví dụ chỉ có đầu ra, không nêu lý do ⇒ ✓ Kèm lý do quyết định để model khái quát
 
-4. **Bẫy Choose different mechanism for different failure:** "Keep adding examples to fix every issue" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở choose different mechanism for different failure, rồi chọn "Use schema for structure and code validator for totals".
+### Câu hỏi
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+#### Q1. Prompt dài hàng chục dòng mô tả định dạng báo cáo review, nhưng mỗi lần model xuất thứ tự trường và độ chi tiết khác nhau. Cách cải thiện hiệu quả nhất?
+- A. Viết thêm vài đoạn mô tả định dạng, nhấn mạnh bằng chữ in hoa
+- B. Tăng `max_tokens`
+- C. Thêm 2-3 ví dụ input-output thể hiện đúng định dạng và lý do quyết định
+- D. Chuyển sang model khác ở mỗi lần gọi
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+**Đáp án:** C
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **Detailed instructions still produce inconsistent report formats**. Phương án nào phù hợp nhất?
+**Giải thích:** Ví dụ cụ thể cho thấy chính xác mẫu cần bắt chước. A tiếp tục dùng chỉ dẫn trừu tượng vốn đã không hiệu quả. B không liên quan định dạng. D làm hành vi thêm bất ổn.
 
-- **A.** Set due_date to null despite explicit evidence; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Demonstrate target formats and reasoning; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Add several paragraphs of abstract instruction; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Give only trivial happy-path examples; áp dụng trực tiếp dù cơ chế sự cố khác.
+#### Q2. Khi thiết kế few-shot cho tác vụ phân loại ticket, lựa chọn nào hợp lý nhất?
+- A. 20 ví dụ gần giống nhau về cấu trúc để model thuộc lòng
+- B. Một ví dụ duy nhất vì ngắn gọn
+- C. Chỉ ví dụ đầu ra, bỏ phần input
+- D. Khoảng 3 ví dụ đa dạng, mỗi ví dụ nhắm một kiểu trường hợp và có lý do ngắn
 
-**Đáp án: B**
+**Đáp án:** D
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Giải thích:** Số lượng vừa phải, đa dạng và có lý do giúp khái quát tốt. A dễ khiến model bám bề mặt và tốn token. B không đủ bao phủ. C làm mất mối liên hệ input-output.
 
-- **A:** **Sai.** Phương án thuộc **Narrative extraction coverage**, không giải quyết được yêu cầu cốt lõi "Use 2–4 targeted input-output examples with decision rationale" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Use 2–4 targeted input-output examples with decision rationale. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Add several paragraphs of abstract instruction" được nêu ở cơ chế Few-shot for consistency. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Ambiguous classification examples**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+## K2. Ví dụ ở ranh giới quyết định (ambiguous cases)
 
-**Exam heuristic:** Nếu đề xuất hiện "Detailed instructions still produce inconsistent report formats", ưu tiên phân biệt `Few-shot for consistency` với các lựa chọn mô tả chuyện khác.
+### Trọng tâm
 
-### Q02. Một kỹ sư đề xuất **Give only trivial happy-path examples** cho tình huống: Variable shadowing judged critical or minor inconsistently. Cần phản biện thế nào?
+Hãy chọn ví dụ ở **vùng mơ hồ giữa hai nhãn**, kèm giải thích vì sao chọn nhãn đó, vì ca dễ thì model đã làm đúng sẵn.
 
-- **A.** Set due_date to null despite explicit evidence; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Keep adding examples to fix every issue; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Provide borderline examples with explanation; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Give only trivial happy-path examples; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+### Giải thích
 
-**Đáp án: C**
+Ca "rõ như ban ngày" (SQL injection là critical, đổi tên biến là minor) không cần ví dụ: model vốn đã phân loại đúng. Chỗ phán đoán dao động là ca ở **biên**, chẳng hạn *variable shadowing*: đôi khi vô hại, đôi khi che mất bug nghiêm trọng. Nếu prompt chỉ có ví dụ dễ, model vẫn không biết xử lý ca biên theo chuẩn nào, nên cùng một đoạn code lúc bị gắn critical lúc minor.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Cách làm:
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Narrative extraction coverage**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Choose different mechanism for different failure**, không giải quyết được yêu cầu cốt lõi "Teach distinctions at decision boundaries rather than easy cases" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Teach distinctions at decision boundaries rather than easy cases. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Give only trivial happy-path examples" được nêu ở cơ chế Ambiguous classification examples. Không đảm bảo xử lý được case và dễ che mất failure mode.
+1. Thu thập các ca mà reviewer người hoặc các lần chạy trước bất đồng.
+2. Với mỗi ca, viết ví dụ gồm input, nhãn đúng và **một câu giải thích vì sao thuộc nhãn đó chứ không phải nhãn kề bên**.
+3. Ghép các ví dụ thành cặp đối lập: hai đoạn code gần giống nhau nhưng nhãn khác nhau, kèm điểm phân biệt (ví dụ shadowing trong scope ngắn không ảnh hưởng logic → minor; shadowing làm biến ngoài không được cập nhật → major).
 
-**Exam heuristic:** Nếu đề xuất hiện "Variable shadowing judged critical or minor inconsistently", ưu tiên phân biệt `Ambiguous classification examples` với các lựa chọn mô tả chuyện khác.
+Giải thích đi kèm là phần giá trị nhất: nó dạy **tiêu chí phân biệt**, từ đó model áp dụng được cho ca chưa thấy. Ví dụ "happy path" chỉ củng cố điều đã biết, và còn có thể làm model nghĩ mọi thứ đều dễ.
 
-### Q03. Nếu sự cố **Invoice has due date only in paragraph** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+### Keyword
 
-- **A.** Set due_date to null despite explicit evidence; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Keep adding examples to fix every issue; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Add several paragraphs of abstract instruction; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Add few-shot narrative extraction exemplar; kèm kiểm thử lại điều kiện và ghi evidence.
+- `borderline case` — ca sát ranh giới giữa hai nhãn
+- `decision boundary` — ranh giới quyết định giữa các lớp phân loại
+- `contrastive pair` — cặp ví dụ gần giống nhau nhưng khác nhãn để làm rõ điểm phân biệt
+- `happy-path example` — ví dụ dễ, tình huống bình thường
+- `variable shadowing` — biến cục bộ trùng tên làm che biến ở scope ngoài
+- `disambiguation` — làm rõ, phân biệt các trường hợp mơ hồ
 
-**Đáp án: D**
+### Bẫy đề thi
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- ✗ Chọn toàn ví dụ dễ, điển hình ⇒ ✓ Ưu tiên ca sát ranh giới mà model hay phán đoán dao động
+- ✗ Đưa nhãn mà không giải thích ⇒ ✓ Kèm lý do vì sao nhãn này chứ không phải nhãn kề
+- ✗ Dùng thêm chỉ dẫn "hãy phân biệt cẩn thận" ⇒ ✓ Dạy điểm phân biệt bằng cặp ví dụ đối lập
 
-- **A:** **Sai.** Đây chính là bẫy "Set due_date to null despite explicit evidence" được nêu ở cơ chế Narrative extraction coverage. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Choose different mechanism for different failure**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Few-shot for consistency**, không giải quyết được yêu cầu cốt lõi "Show extraction from structured tables and prose" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Show extraction from structured tables and prose. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+### Câu hỏi
 
-**Exam heuristic:** Nếu đề xuất hiện "Invoice has due date only in paragraph", ưu tiên phân biệt `Narrative extraction coverage` với các lựa chọn mô tả chuyện khác.
+#### Q1. Khi review, model lúc gắn "critical" lúc gắn "minor" cho các trường hợp variable shadowing. Bạn nên bổ sung gì vào prompt?
+- A. Các ví dụ shadowing ở biên: một ca vô hại và một ca gây bug, mỗi ca có giải thích vì sao thuộc nhãn đó
+- B. Thêm ví dụ về lỗi SQL injection rõ ràng
+- C. Câu "hãy thật cẩn thận với shadowing"
+- D. Giảm số mức severity xuống còn một
 
-### Q04. Để viết acceptance criteria cho tình huống **Parser produces malformed JSON and incorrect totals**, lựa chọn nào thể hiện ranh giới đúng?
+**Đáp án:** A
 
-- **A.** Use schema for structure and code validator for totals; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Keep adding examples to fix every issue; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Add several paragraphs of abstract instruction; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Give only trivial happy-path examples; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+**Giải thích:** A dạy đúng ranh giới đang dao động. B là ca dễ, không giúp phân biệt shadowing. C là chỉ dẫn mơ hồ. D mất thông tin ưu tiên thay vì giải quyết sự nhất quán.
 
-**Đáp án: A**
+#### Q2. Trong tập ví dụ few-shot hiện có, mọi ví dụ đều là ca điển hình, vậy mà ca khó vẫn bị phân loại lung tung. Nhận định nào đúng?
+- A. Cần thêm nhiều ca điển hình nữa
+- B. Vấn đề do `temperature` nên không liên quan ví dụ
+- C. Few-shot không thể giúp phân loại
+- D. Ví dụ chưa phủ vùng biên; cần thêm ca mơ hồ kèm lý do chọn nhãn
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** D
 
-- **A:** **Đúng.** Few-shot not substitute for schema or arithmetic validation. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Keep adding examples to fix every issue" được nêu ở cơ chế Choose different mechanism for different failure. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Few-shot for consistency**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Ambiguous classification examples**, không giải quyết được yêu cầu cốt lõi "Few-shot not substitute for schema or arithmetic validation" và thiếu điều kiện kiểm chứng.
+**Giải thích:** Ví dụ chỉ có ca dễ thì không dạy được tiêu chí ở biên. A chỉ lặp thêm cái đã biết. B quy cho nguyên nhân không đúng. C sai vì few-shot đúng là công cụ phù hợp cho việc này.
 
-**Exam heuristic:** Nếu đề xuất hiện "Parser produces malformed JSON and incorrect totals", ưu tiên phân biệt `Choose different mechanism for different failure` với các lựa chọn mô tả chuyện khác.
+## K3. Ví dụ cho trích xuất từ nhiều dạng tài liệu (narrative extraction)
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Add several paragraphs of abstract instruction**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+### Trọng tâm
 
-- **A.** Set due_date to null despite explicit evidence; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Demonstrate target formats and reasoning; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Add several paragraphs of abstract instruction; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Give only trivial happy-path examples; áp dụng trực tiếp dù cơ chế sự cố khác.
+Nếu thông tin có thể nằm trong **bảng** hoặc trong **đoạn văn xuôi**, hãy đưa ví dụ cho cả hai dạng, để model không để `null` khi dữ kiện thực ra có trong văn bản.
 
-**Đáp án: B**
+### Giải thích
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Khi trích xuất dữ liệu có cấu trúc (hoá đơn, hợp đồng, hồ sơ), cùng một trường có thể xuất hiện ở nhiều dạng: ô trong bảng "Due date: 2026-03-01", hoặc chìm trong câu "Thanh toán được yêu cầu trong vòng 30 ngày kể từ ngày xuất hoá đơn 1/2". Nếu ví dụ trong prompt chỉ cho thấy trường lấy từ bảng, model có xu hướng nghĩ trường chỉ tồn tại ở đó và điền `null` khi tài liệu mới viết dạng văn xuôi, mặc dù **bằng chứng có thật trong tài liệu**.
 
-- **A:** **Sai.** Phương án thuộc **Narrative extraction coverage**, không giải quyết được yêu cầu cốt lõi "Use 2–4 targeted input-output examples with decision rationale" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Use 2–4 targeted input-output examples with decision rationale. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Add several paragraphs of abstract instruction" được nêu ở cơ chế Few-shot for consistency. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Ambiguous classification examples**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+Cách xử lý: thêm một ví dụ trích xuất từ văn bản tường thuật, trong đó dữ kiện được diễn đạt gián tiếp và đầu ra cho thấy cách đọc ra giá trị (kể cả khi cần suy từ "30 ngày kể từ..."). Phân biệt rõ:
 
-**Exam heuristic:** Nếu đề xuất hiện "Detailed instructions still produce inconsistent report formats", ưu tiên phân biệt `Few-shot for consistency` với các lựa chọn mô tả chuyện khác.
+- **Có bằng chứng trong tài liệu** (kể cả dạng văn xuôi) → phải trích xuất.
+- **Không có bằng chứng** → để `null`, không bịa (xem 4.3).
 
-### Q06. Sau khi audit phát hiện **Variable shadowing judged critical or minor inconsistently**, điều gì là cải tiến có thể kiểm chứng?
+Few-shot ở đây dạy model **phạm vi tìm kiếm** (đọc cả đoạn văn, không chỉ bảng) chứ không dạy nó bịa. Đừng nhầm "bắt buộc tìm trong văn xuôi" với "bắt buộc phải có giá trị".
 
-- **A.** Set due_date to null despite explicit evidence; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Keep adding examples to fix every issue; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Provide borderline examples with explanation; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Give only trivial happy-path examples; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+### Keyword
 
-**Đáp án: C**
+- `narrative extraction` — trích xuất thông tin từ văn bản tường thuật, không phải bảng
+- `structured extraction` — trích xuất dữ liệu thành bản ghi có cấu trúc
+- `null` — giá trị rỗng cho trường không có dữ liệu trong tài liệu
+- `document format variation` — sự đa dạng về cách trình bày giữa các tài liệu
+- `implicit evidence` — bằng chứng diễn đạt gián tiếp trong văn bản
+- `extraction exemplar` — ví dụ mẫu cho việc trích xuất
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Bẫy đề thi
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Narrative extraction coverage**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Choose different mechanism for different failure**, không giải quyết được yêu cầu cốt lõi "Teach distinctions at decision boundaries rather than easy cases" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Teach distinctions at decision boundaries rather than easy cases. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Give only trivial happy-path examples" được nêu ở cơ chế Ambiguous classification examples. Không đảm bảo xử lý được case và dễ che mất failure mode.
+- ✗ Model trả `due_date: null` dù có câu nêu hạn thanh toán, và bạn chấp nhận đó là "đúng" ⇒ ✓ Thêm ví dụ trích xuất từ văn xuôi để model đọc ra giá trị
+- ✗ Chỉ có ví dụ trích xuất từ bảng ⇒ ✓ Ví dụ nên bao phủ các dạng trình bày khác nhau
+- ✗ Bắt model luôn điền giá trị cho mọi trường ⇒ ✓ Có bằng chứng thì trích, không có thì `null`
 
-**Exam heuristic:** Nếu đề xuất hiện "Variable shadowing judged critical or minor inconsistently", ưu tiên phân biệt `Ambiguous classification examples` với các lựa chọn mô tả chuyện khác.
+### Câu hỏi
 
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Invoice has due date only in paragraph**, nên chọn gì?
+#### Q1. Pipeline trích xuất hoá đơn trả `due_date: null` cho các hoá đơn mà hạn thanh toán chỉ xuất hiện trong một đoạn văn. Prompt hiện chỉ có ví dụ trích từ bảng. Cách sửa phù hợp nhất?
+- A. Đặt `due_date` thành trường bắt buộc và để model tự đoán
+- B. Thêm ví dụ few-shot trích `due_date` từ đoạn văn xuôi
+- C. Tăng kích thước schema
+- D. Lọc bỏ mọi hoá đơn không có bảng
 
-- **A.** Set due_date to null despite explicit evidence; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Keep adding examples to fix every issue; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Add several paragraphs of abstract instruction; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Add few-shot narrative extraction exemplar; kèm kiểm thử lại điều kiện và ghi evidence.
+**Đáp án:** B
 
-**Đáp án: D**
+**Giải thích:** B mở rộng phạm vi mà model biết cần tìm. A ép đoán, dễ bịa. C không liên quan tới việc nhận ra bằng chứng. D loại bỏ dữ liệu hợp lệ.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+#### Q2. Với một hợp đồng thật sự không hề nhắc tới ngày giao hàng, đầu ra đúng là gì?
+- A. Suy ra ngày giao từ ngày ký cộng 30 ngày
+- B. `delivery_date: null`
+- C. Lấy ngày hôm nay
+- D. Trả lỗi và dừng toàn bộ pipeline
 
-- **A:** **Sai.** Đây chính là bẫy "Set due_date to null despite explicit evidence" được nêu ở cơ chế Narrative extraction coverage. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Choose different mechanism for different failure**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Few-shot for consistency**, không giải quyết được yêu cầu cốt lõi "Show extraction from structured tables and prose" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Show extraction from structured tables and prose. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+**Đáp án:** B
 
-**Exam heuristic:** Nếu đề xuất hiện "Invoice has due date only in paragraph", ưu tiên phân biệt `Narrative extraction coverage` với các lựa chọn mô tả chuyện khác.
+**Giải thích:** Không có bằng chứng thì `null`; few-shot về văn xuôi chỉ áp dụng khi dữ kiện có trong tài liệu. A và C là bịa giá trị. D quá mức vì thiếu một trường không làm hỏng cả tài liệu.
 
-### Q08. Một reviewer nêu giải pháp **Keep adding examples to fix every issue**. Đánh giá chính xác nhất là gì?
+## K4. Few-shot không thay được schema và validator
 
-- **A.** Use schema for structure and code validator for totals; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Keep adding examples to fix every issue; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Add several paragraphs of abstract instruction; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Give only trivial happy-path examples; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+### Trọng tâm
 
-**Đáp án: A**
+Mỗi loại lỗi cần cơ chế riêng: **few-shot** cho phán đoán và định dạng, **schema** cho cấu trúc JSON, **code validator** cho tính toán và quy tắc nghiệp vụ. Đừng thêm ví dụ để chữa mọi vấn đề.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Giải thích
 
-- **A:** **Đúng.** Few-shot not substitute for schema or arithmetic validation. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Keep adding examples to fix every issue" được nêu ở cơ chế Choose different mechanism for different failure. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Few-shot for consistency**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Ambiguous classification examples**, không giải quyết được yêu cầu cốt lõi "Few-shot not substitute for schema or arithmetic validation" và thiếu điều kiện kiểm chứng.
+Few-shot tác động lên **xác suất** hành vi của model, không phải bảo đảm. Do đó:
 
-**Exam heuristic:** Nếu đề xuất hiện "Parser produces malformed JSON and incorrect totals", ưu tiên phân biệt `Choose different mechanism for different failure` với các lựa chọn mô tả chuyện khác.
+| Vấn đề | Cơ chế phù hợp | Vì sao |
+|---|---|---|
+| Phân loại biên không nhất quán | Few-shot ca biên | Là vấn đề phán đoán |
+| JSON sai cấu trúc, thiếu field, sai kiểu | Tool use với JSON schema (4.3) | Schema ép cấu trúc |
+| Tổng tiền sai, ngày kết thúc trước ngày bắt đầu | Validator bằng code | Cần phép tính xác định |
+| Dữ kiện không tồn tại trong tài liệu | Cho phép `null`/escalate | Không phải lỗi do thiếu ví dụ |
 
-### Q09. Trong thử nghiệm đối chứng với tình huống **Detailed instructions still produce inconsistent report formats**, tiêu chí pass phù hợp là gì?
+Ví dụ: parser trả JSON hỏng và tổng hoá đơn lệch. Nếu bạn cứ thêm ví dụ, có thể giảm tần suất nhưng **không bao giờ về 0**, và mỗi ví dụ mới tốn token ở mọi request. Dùng schema để định dạng luôn hợp lệ, rồi code cộng các dòng và so với total, nếu lệch thì kích hoạt vòng sửa (4.4).
 
-- **A.** Set due_date to null despite explicit evidence; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Demonstrate target formats and reasoning; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Add several paragraphs of abstract instruction; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Give only trivial happy-path examples; áp dụng trực tiếp dù cơ chế sự cố khác.
+Nguyên tắc chọn: nếu có thể kiểm tra **bằng thuật toán** thì để code kiểm tra; chỉ dùng few-shot cho phần cần "đánh giá".
 
-**Đáp án: B**
+### Keyword
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- `JSON schema` — mô tả cấu trúc, kiểu dữ liệu bắt buộc của đầu ra
+- `deterministic validator` — bộ kiểm tra bằng code cho kết quả xác định
+- `probabilistic behavior` — hành vi mang tính xác suất, không đảm bảo tuyệt đối
+- `arithmetic validation` — kiểm tra phép tính (tổng, thuế...) bằng code
+- `malformed JSON` — JSON sai cú pháp hoặc sai cấu trúc
+- `mechanism selection` — chọn đúng cơ chế cho từng loại lỗi
 
-- **A:** **Sai.** Phương án thuộc **Narrative extraction coverage**, không giải quyết được yêu cầu cốt lõi "Use 2–4 targeted input-output examples with decision rationale" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Use 2–4 targeted input-output examples with decision rationale. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Add several paragraphs of abstract instruction" được nêu ở cơ chế Few-shot for consistency. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Ambiguous classification examples**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+### Bẫy đề thi
 
-**Exam heuristic:** Nếu đề xuất hiện "Detailed instructions still produce inconsistent report formats", ưu tiên phân biệt `Few-shot for consistency` với các lựa chọn mô tả chuyện khác.
+- ✗ Thêm ví dụ để sửa JSON hỏng và tổng sai ⇒ ✓ Dùng schema cho cấu trúc và code validator cho phép tính
+- ✗ Cho rằng nhiều ví dụ sẽ đảm bảo 100% đúng ⇒ ✓ Few-shot chỉ cải thiện xác suất, không phải bảo đảm
+- ✗ Dùng validator để dạy phán đoán nghiệp vụ mơ hồ ⇒ ✓ Phán đoán biên dùng few-shot, kiểm tra xác định dùng code
 
-### Q10. Để giảm lỗi tái diễn với **Variable shadowing judged critical or minor inconsistently**, biện pháp nào phù hợp với cơ chế đã học?
+### Câu hỏi
 
-- **A.** Set due_date to null despite explicit evidence; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Keep adding examples to fix every issue; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Provide borderline examples with explanation; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Give only trivial happy-path examples; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+#### Q1. Hệ thống trích xuất hoá đơn thỉnh thoảng trả JSON sai cấu trúc và tổng tiền không bằng tổng các dòng. Đội đề xuất thêm 10 ví dụ vào prompt. Nhận xét đúng?
+- A. Hợp lý, ví dụ luôn sửa được mọi loại lỗi
+- B. Nên xoá hết ví dụ cũ
+- C. Nên dùng JSON schema để ép cấu trúc và code kiểm tra tổng; few-shot không đảm bảo hai điều này
+- D. Nên chuyển prompt sang tiếng Anh
 
-**Đáp án: C**
+**Đáp án:** C
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Giải thích:** Cấu trúc là việc của schema, phép cộng là việc của code, đều xác định được. A sai vì few-shot chỉ cải thiện xác suất. B và D không liên quan nguyên nhân.
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Narrative extraction coverage**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Choose different mechanism for different failure**, không giải quyết được yêu cầu cốt lõi "Teach distinctions at decision boundaries rather than easy cases" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Teach distinctions at decision boundaries rather than easy cases. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Give only trivial happy-path examples" được nêu ở cơ chế Ambiguous classification examples. Không đảm bảo xử lý được case và dễ che mất failure mode.
+#### Q2. Trường hợp nào sau đây phù hợp nhất để giải quyết bằng few-shot?
+- A. Model ghi sai định dạng ngày so với schema
+- B. Tổng thuế tính sai so với dữ liệu đầu vào
+- C. Model không thống nhất khi phân loại ticket "yêu cầu tính năng" hay "báo lỗi" ở các ca mơ hồ
+- D. Output thiếu trường bắt buộc
 
-**Exam heuristic:** Nếu đề xuất hiện "Variable shadowing judged critical or minor inconsistently", ưu tiên phân biệt `Ambiguous classification examples` với các lựa chọn mô tả chuyện khác.
+**Đáp án:** C
 
-## 6. Lab / Bài thực hành tự kiểm tra
-
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "Detailed instructions still produce inconsistent report formats".
-
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Demonstrate target formats and reasoning.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
-
-## 7. Cheat sheet / Ôn nhanh
-
-- **Few-shot for consistency:** Use 2–4 targeted input-output examples with decision rationale. ✓ Demonstrate target formats and reasoning. ✗ Add several paragraphs of abstract instruction.
-- **Ambiguous classification examples:** Teach distinctions at decision boundaries rather than easy cases. ✓ Provide borderline examples with explanation. ✗ Give only trivial happy-path examples.
-- **Narrative extraction coverage:** Show extraction from structured tables and prose. ✓ Add few-shot narrative extraction exemplar. ✗ Set due_date to null despite explicit evidence.
-- **Choose different mechanism for different failure:** Few-shot not substitute for schema or arithmetic validation. ✓ Use schema for structure and code validator for totals. ✗ Keep adding examples to fix every issue.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/4-prompt-engineering/4-2-few-shot-prompting
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Đây là phán đoán ở ranh giới nên few-shot với ca biên phù hợp. A và D do schema xử lý. B do validator bằng code xử lý.

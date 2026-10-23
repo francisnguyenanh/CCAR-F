@@ -1,326 +1,230 @@
 # 2.1 — Tool Interface Design
 
-> Domain 2: Tool Design & MCP Integration · Tỷ trọng toàn domain: 18%
-> Source lesson: https://claudecertificationguide.com/learn/2-tool-design-mcp/2-1-tool-schema-design
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+Khi bạn đưa một danh sách tool cho Claude, **model chọn tool chủ yếu dựa vào `name`, `description` và `input_schema`**. Không có "bộ định tuyến" nào khác bên trong: nếu mô tả mơ hồ hoặc hai tool giống nhau, model sẽ chọn sai hoặc dao động. Vì vậy thiết kế giao diện tool (tool interface) là kỹ năng cốt lõi của một architect.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Tool Interface Design**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Đề thi thường mô tả một lỗi định tuyến (gọi nhầm tool) rồi hỏi cách sửa **rẻ nhất, đúng gốc nhất**. Quy tắc nhớ nhanh: **sửa description trước, rồi mới nghĩ đến few-shot, classifier ngoài hay thiết kế lại hệ thống**; và nhớ rằng system prompt cũng có thể làm hỏng việc chọn tool.
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Description là "hợp đồng" của tool
 
-### 2.1. Tool description contract
+### Trọng tâm
 
-**Principle (EN):** Describe purpose, inputs, examples, edge cases, and competing-tool boundaries.
+Description phải nói rõ tool **làm gì, nhận input gì (định dạng), khi nào dùng và khi nào không dùng**, kèm ví dụ và edge case. Đây là cơ chế chính để model chọn đúng tool.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **describe purpose, inputs, examples, edge cases, and competing-tool boundaries**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** Order query incorrectly routes to customer profile lookup.
+Model không nhìn thấy code của tool. Nó chỉ thấy tên, mô tả và schema. Do đó description chính là **hợp đồng** giữa bạn và model. Một description tốt thường gồm:
 
-**Recommended implementation:** Clarify input identifiers and use / do-not-use instructions.
+- **Mục đích**: tool trả về/thay đổi cái gì.
+- **Input**: định danh nào được chấp nhận (ví dụ `order_id` dạng `#12345`, khác với `customer_id` dạng `C-889`), định dạng, đơn vị.
+- **Ví dụ** truy vấn nên dùng tool này.
+- **Edge case**: tool không làm gì, giới hạn, hành vi khi không có dữ liệu.
+- **Ranh giới với tool gần giống**: "Dùng `get_order_status` khi có mã đơn; nếu chỉ có email khách thì dùng `get_customer` trước. KHÔNG dùng tool này để xem hồ sơ khách."
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Immediately build external keyword classifier.
+Ví dụ lỗi: câu "Where is my order #4412?" bị định tuyến sang `get_customer` vì description của `get_customer` chỉ ghi "Retrieves customer information" còn `get_order` ghi "Retrieves order details" — hai câu quá chung, đều có thể áp dụng. Cách sửa gọn: viết lại hai description nêu rõ **định danh đầu vào** và **khi nào dùng/không dùng**. Đây là thay đổi vài dòng, kiểm chứng được ngay.
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Order query incorrectly routes to customer profile lookup".
-- Decision: áp dụng nguyên tắc **Tool description contract** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Clarify input identifiers and use / do-not-use instructions" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Sai lầm kinh điển là lao ngay vào xây một **keyword classifier** bên ngoài để tiền xử lý: tốn công, giòn (brittle), phải bảo trì, và không giải quyết nguyên nhân là mô tả mơ hồ. Chỉ cân nhắc giải pháp nặng hơn khi đã làm description tốt mà vẫn sai.
 
-### 2.2. Overlap diagnosis
+### Keyword
 
-**Principle (EN):** Weak descriptions cause ambiguity when tool count manageable.
+- `tool description` — mô tả tool; nguồn thông tin chính để model chọn tool
+- `input_schema` — JSON Schema khai báo tham số của tool
+- `tool routing` — việc model chọn tool nào cho một yêu cầu
+- `use / do-not-use guidance` — hướng dẫn khi nào dùng và khi nào không dùng tool
+- `edge case` — trường hợp biên mà tool xử lý khác thường
+- `keyword classifier` — bộ phân loại theo từ khóa đặt bên ngoài model; giải pháp nặng, thường không cần
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **weak descriptions cause ambiguity when tool count manageable**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Bẫy đề thi
 
-**Case study / Tình huống:** Five tools with two nearly identical descriptions.
+- ✗ Thấy gọi nhầm tool thì xây ngay classifier từ khóa bên ngoài ⇒ ✓ Làm rõ description: định danh đầu vào, khi nào dùng / không dùng
+- ✗ Description một dòng "Retrieves X information" là đủ ⇒ ✓ Phải nêu input, ví dụ, edge case và ranh giới với tool gần giống
+- ✗ Tin rằng model "tự hiểu" tool qua tên hàm ⇒ ✓ Model chỉ dựa vào name, description, schema
 
-**Recommended implementation:** Rewrite the two boundaries before redesign.
+### Câu hỏi
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Add eight few-shot examples first.
+#### Q1. Agent hỗ trợ khách hàng có hai tool `get_customer` và `get_order`. Khi khách hỏi "Đơn #4412 của tôi đang ở đâu?", agent thường gọi `get_customer`. Cả hai description chỉ là một câu chung chung. Bước đầu tiên hợp lý nhất là gì?
+- A. Xây bộ phân loại từ khóa bên ngoài để quyết định tool trước khi gọi model
+- B. Thêm 8 ví dụ few-shot vào system prompt
+- C. Viết lại description của hai tool: nêu định danh đầu vào (mã đơn so với mã/email khách) và khi nào dùng, khi nào không
+- D. Gộp hai tool thành một tool `lookup` nhận chuỗi tự do
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Five tools with two nearly identical descriptions".
-- Decision: áp dụng nguyên tắc **Overlap diagnosis** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Rewrite the two boundaries before redesign" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+**Đáp án:** C
 
-### 2.3. Specific action granularity
+**Giải thích:** Nguyên nhân gốc là mô tả mơ hồ, nên sửa mô tả là bước rẻ, trực tiếp và kiểm chứng được. A là giải pháp nặng, giòn, chưa cần. B tốn token và không xử lý ranh giới. D làm mơ hồ hơn vì mất tính cụ thể của tool.
 
-**Principle (EN):** Different intents deserve purpose-specific tools.
+#### Q2. Điều nào dưới đây KHÔNG nên có trong một description tool chất lượng cao?
+- A. Định dạng của tham số đầu vào, kèm ví dụ giá trị hợp lệ
+- B. Ranh giới với tool tương tự: khi nào nên dùng tool khác
+- C. Chi tiết cài đặt nội bộ (tên bảng DB, tên hàm) mà model không cần để chọn tool
+- D. Hành vi ở edge case, ví dụ trả về gì khi không tìm thấy
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **different intents deserve purpose-specific tools**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+**Đáp án:** C
 
-**Case study / Tình huống:** Generic analyze_document handles summary, extraction and verification.
+**Giải thích:** Description phục vụ việc model **chọn và gọi đúng**; chi tiết cài đặt nội bộ chỉ thêm nhiễu. A, B, D đều giúp model quyết định và điền tham số đúng.
 
-**Recommended implementation:** Split into narrow explicit operations.
+## K2. Chẩn đoán chồng lấn (overlap) trước khi thiết kế lại
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Keep all actions hidden inside vague analyze_document.
+### Trọng tâm
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Generic analyze_document handles summary, extraction and verification".
-- Decision: áp dụng nguyên tắc **Specific action granularity** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Split into narrow explicit operations" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+Khi số tool còn ít và quản lý được mà chọn sai, thủ phạm thường là **hai description gần giống nhau**. Hãy viết lại ranh giới của hai tool đó trước khi làm bất cứ điều gì lớn hơn.
 
-### 2.4. System prompt interference
+### Giải thích
 
-**Principle (EN):** Global system wording may override tool disambiguation.
+Chẩn đoán có thứ tự, từ rẻ đến đắt:
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **global system wording may override tool disambiguation**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+1. **Đọc các description đã bị nhầm**, đặt cạnh nhau. Hai câu gần như đồng nghĩa là dấu hiệu rõ.
+2. **Viết lại ranh giới**: nêu input khác nhau, kết quả khác nhau, và "đừng dùng khi...".
+3. **Đo lại** trên các case đã sai.
+4. Chỉ khi vẫn sai mới xét: đổi tên tool cho phân biệt, thêm few-shot, tách/gộp tool, hoặc giảm số tool theo vai trò (xem bài 2.3).
 
-**Case study / Tình huống:** System says always fetch customer before any order step.
+Ví dụ: 5 tool, trong đó `search_tickets` ("Searches tickets") và `find_cases` ("Finds support cases") thực chất khác nhau ở nguồn dữ liệu (ticket nội bộ so với case khách hàng). Chỉ cần ghi rõ nguồn, trạng thái được hỗ trợ và ví dụ, hai tool này tách bạch.
 
-**Recommended implementation:** Audit and repair conflicting global instructions.
+Few-shot **không phải sai**, nhưng là bước **sau**: thêm 8 ví dụ khi ranh giới chưa rõ thì tốn context, và model vẫn có thể suy luận lệch. Tương tự, "thiết kế lại cả hệ thống" khi chỉ 2/5 mô tả có vấn đề là phản ứng quá mức. Đề thi hay đặt hai cách đều khả thi, và đáp án đúng là cách **tối thiểu, trực tiếp tác động đúng nguyên nhân**.
 
-**Incorrect shortcut / Sai lầm dễ mắc:** Assume descriptions overrule system prompt automatically.
+### Keyword
 
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "System says always fetch customer before any order step".
-- Decision: áp dụng nguyên tắc **System prompt interference** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Audit and repair conflicting global instructions" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
+- `overlapping descriptions` — mô tả chồng lấn khiến model không phân biệt được hai tool
+- `ambiguity` — sự mơ hồ trong lựa chọn tool
+- `boundary clarification` — làm rõ ranh giới giữa hai tool
+- `minimal fix first` — nguyên tắc sửa nhỏ nhất, rẻ nhất, đúng gốc trước
+- `few-shot examples` — ví dụ mẫu đưa vào prompt; hữu ích nhưng không thay thế mô tả rõ
+- `tool renaming` — đổi tên tool cho dễ phân biệt
 
-## 3. Ví dụ thiết kế / Worked engineering example
+### Bẫy đề thi
 
-**Problem:** Order query incorrectly routes to customer profile lookup.
+- ✗ Có 2 mô tả giống nhau thì thêm ngay hàng loạt few-shot ⇒ ✓ Viết lại ranh giới hai mô tả đó trước
+- ✗ Chọn sai ở 5 tool thì đòi thiết kế lại toàn bộ kiến trúc ⇒ ✓ Với số tool vừa phải, sửa mô tả là đủ
+- ✗ Coi "tăng model lên bản lớn hơn" là cách sửa mô tả mơ hồ ⇒ ✓ Mô tả mơ hồ thì model nào cũng khó chọn
 
-**Bad design:** Immediately build external keyword classifier.
+### Câu hỏi
 
-**Better design:** Clarify input identifiers and use / do-not-use instructions.
+#### Q1. Một agent có 5 tool; `search_tickets` và `find_cases` có description gần như giống hệt và thường bị gọi nhầm. Nhóm đề xuất bốn hướng. Hướng nào nên làm trước?
+- A. Thêm 8 ví dụ few-shot cho cả 5 tool
+- B. Viết lại description của hai tool đó để nêu rõ nguồn dữ liệu, input và ranh giới
+- C. Thiết kế lại hệ thống thành hai agent tách biệt
+- D. Thêm lớp router bằng regex trước khi gọi model
 
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
+**Đáp án:** B
 
-### Walkthrough: decision trace / Luồng xử lý
+**Giải thích:** Vấn đề cục bộ ở hai mô tả, nên sửa đúng chỗ là rẻ và hiệu quả nhất. A tốn context và chưa chắc xử lý ranh giới. C là phản ứng quá mức. D thêm thành phần giòn, cần bảo trì.
 
-```text
-INPUT  : Order query incorrectly routes to customer profile lookup.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Clarify input identifiers and use / do-not-use instructions.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
-```
+#### Q2. Sau khi viết lại hai description rõ ràng, agent vẫn nhầm ở một nhóm nhỏ yêu cầu mơ hồ. Bước kế tiếp hợp lý nhất?
+- A. Bỏ hết tool và để model trả lời bằng kiến thức riêng
+- B. Xoá description và chỉ để tên tool
+- C. Tăng nhiệt độ sampling để model thử đa dạng hơn
+- D. Đo lại trên các case sai, rồi mới cân nhắc few-shot cho đúng nhóm yêu cầu mơ hồ hoặc đổi tên tool
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+**Đáp án:** D
 
-## 4. Exam traps / Bẫy dễ nhầm
+**Giải thích:** Quy trình leo thang dần: đo, rồi dùng công cụ nặng hơn có mục tiêu. A và B làm mất thông tin. C làm hành vi kém ổn định hơn, không giúp chọn tool đúng.
 
-1. **Bẫy Tool description contract:** "Immediately build external keyword classifier" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở tool description contract, rồi chọn "Clarify input identifiers and use / do-not-use instructions".
+## K3. Độ chi tiết của tool: tool đặc thù thay vì "tool đa năng mơ hồ"
 
-2. **Bẫy Overlap diagnosis:** "Add eight few-shot examples first" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở overlap diagnosis, rồi chọn "Rewrite the two boundaries before redesign".
+### Trọng tâm
 
-3. **Bẫy Specific action granularity:** "Keep all actions hidden inside vague analyze_document" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở specific action granularity, rồi chọn "Split into narrow explicit operations".
+Các ý định (intent) khác nhau nên có **tool cụ thể, tên rõ nghĩa**; đừng nhét nhiều hành động vào một tool chung chung như `analyze_document`.
 
-4. **Bẫy System prompt interference:** "Assume descriptions overrule system prompt automatically" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở system prompt interference, rồi chọn "Audit and repair conflicting global instructions".
+### Giải thích
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+Một tool "đa năng" như `analyze_document` xử lý tóm tắt, trích xuất trường, và xác minh thông tin sẽ gặp ba vấn đề:
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+- **Description không thể cụ thể**: để bao hết các việc, mô tả buộc phải chung chung, nên model khó biết khi nào gọi và truyền tham số gì.
+- **Schema lẫn lộn**: tham số của việc này không liên quan việc kia, hoặc phải có tham số `mode` mơ hồ.
+- **Khó kiểm soát và quan sát**: không thể cấp quyền, giới hạn hay log riêng cho từng loại hành động.
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **Order query incorrectly routes to customer profile lookup**. Phương án nào phù hợp nhất?
+Cách tốt hơn là tách thành `summarize_document`, `extract_fields`, `verify_claim`, mỗi tool có input schema riêng và mô tả sắc nét.
 
-- **A.** Immediately build external keyword classifier; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Add eight few-shot examples first; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Keep all actions hidden inside vague analyze_document; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Clarify input identifiers and use / do-not-use instructions; kèm kiểm thử lại điều kiện và ghi evidence.
+Tuy nhiên có **hướng ngược lại** cần phân biệt (bài 2.3): nhiều thao tác **đồng nhất** chỉ khác tên phép biến đổi (ví dụ 19 phép transform dữ liệu) thì gộp thành một tool với tham số `enum` là hợp lý. Khác biệt then chốt: các phép đồng nhất có **cùng ý định và cùng hình dạng input**; còn tóm tắt/trích xuất/xác minh là **ý định khác nhau**. Nguyên tắc: tách theo **ý định**, gộp theo **tính đồng nhất**.
 
-**Đáp án: D**
+### Keyword
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- `granularity` — mức độ chi tiết/cụ thể của tool
+- `purpose-specific tool` — tool phục vụ một mục đích rõ ràng
+- `generic tool` — tool chung chung gánh nhiều việc; làm mơ hồ việc chọn
+- `intent` — ý định mà yêu cầu người dùng thể hiện
+- `schema per action` — mỗi hành động có input schema riêng
+- `single responsibility` — mỗi tool chỉ đảm nhiệm một việc
 
-- **A:** **Sai.** Đây chính là bẫy "Immediately build external keyword classifier" được nêu ở cơ chế Tool description contract. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Overlap diagnosis**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Specific action granularity**, không giải quyết được yêu cầu cốt lõi "Describe purpose, inputs, examples, edge cases, and competing-tool boundaries" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Describe purpose, inputs, examples, edge cases, and competing-tool boundaries. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+### Bẫy đề thi
 
-**Exam heuristic:** Nếu đề xuất hiện "Order query incorrectly routes to customer profile lookup", ưu tiên phân biệt `Tool description contract` với các lựa chọn mô tả chuyện khác.
+- ✗ Giữ `analyze_document` làm mọi việc và "dặn trong prompt" cách dùng ⇒ ✓ Tách thành các tool có mục đích rõ ràng
+- ✗ Cứ nhiều tool là tốt, chia nhỏ tối đa ⇒ ✓ Tách theo ý định khác nhau, gộp các thao tác đồng nhất bằng enum
+- ✗ Dùng một tham số `mode: string` tự do để phân loại hành động ⇒ ✓ Dùng tool riêng hoặc enum có giá trị rõ ràng
 
-### Q02. Một kỹ sư đề xuất **Add eight few-shot examples first** cho tình huống: Five tools with two nearly identical descriptions. Cần phản biện thế nào?
+### Câu hỏi
 
-- **A.** Rewrite the two boundaries before redesign; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Add eight few-shot examples first; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Keep all actions hidden inside vague analyze_document; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Assume descriptions overrule system prompt automatically; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+#### Q1. Một tool `analyze_document` được dùng để tóm tắt, trích xuất số hợp đồng và kiểm tra tính nhất quán, nhưng model hay gọi nó với tham số sai. Cách thiết kế tốt nhất?
+- A. Thêm đoạn dài vào system prompt giải thích cách dùng
+- B. Giữ nguyên tool và thêm tham số `options` kiểu chuỗi tự do
+- C. Gộp thêm các tool khác vào `analyze_document` cho đủ năng lực
+- D. Tách thành các tool riêng (`summarize_document`, `extract_fields`, `verify_consistency`) với schema và mô tả riêng
 
-**Đáp án: A**
+**Đáp án:** D
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Giải thích:** Mỗi ý định khác nhau cần mô tả và schema sắc nét. A đẩy gánh nặng sang prompt. B làm tool mơ hồ hơn. C đi ngược hướng.
 
-- **A:** **Đúng.** Weak descriptions cause ambiguity when tool count manageable. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Add eight few-shot examples first" được nêu ở cơ chế Overlap diagnosis. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Specific action granularity**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **System prompt interference**, không giải quyết được yêu cầu cốt lõi "Weak descriptions cause ambiguity when tool count manageable" và thiếu điều kiện kiểm chứng.
+#### Q2. Hệ thống có 19 phép biến đổi dữ liệu, chỉ khác nhau ở tên phép (cùng nhận một bảng, trả một bảng). Điều nào hợp lý nhất?
+- A. Tạo 19 tool, mỗi tool một phép
+- B. Một tool `transform_data` với tham số `transform_type` kiểu enum
+- C. Tạo 19 agent riêng, mỗi agent một phép
+- D. Cho model tự viết mã biến đổi mỗi lần
 
-**Exam heuristic:** Nếu đề xuất hiện "Five tools with two nearly identical descriptions", ưu tiên phân biệt `Overlap diagnosis` với các lựa chọn mô tả chuyện khác.
+**Đáp án:** B
 
-### Q03. Nếu sự cố **Generic analyze_document handles summary, extraction and verification** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+**Giải thích:** Các thao tác đồng nhất về hình dạng và ý định nên gộp bằng enum để giảm số tool hiển thị. A làm quá tải lựa chọn. C quá nặng. D mất tính xác định và an toàn.
 
-- **A.** Immediately build external keyword classifier; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Split into narrow explicit operations; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Keep all actions hidden inside vague analyze_document; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Assume descriptions overrule system prompt automatically; áp dụng trực tiếp dù cơ chế sự cố khác.
+## K4. System prompt có thể ghi đè hành vi chọn tool
 
-**Đáp án: B**
+### Trọng tâm
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Chỉ dẫn toàn cục trong system prompt **có thể xung đột** với description tool và làm model chọn tool sai. Khi định tuyến sai kỳ lạ, hãy **audit system prompt**, đừng mặc định rằng description luôn thắng.
 
-- **A:** **Sai.** Phương án thuộc **Tool description contract**, không giải quyết được yêu cầu cốt lõi "Different intents deserve purpose-specific tools" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Different intents deserve purpose-specific tools. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Keep all actions hidden inside vague analyze_document" được nêu ở cơ chế Specific action granularity. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **System prompt interference**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+### Giải thích
 
-**Exam heuristic:** Nếu đề xuất hiện "Generic analyze_document handles summary, extraction and verification", ưu tiên phân biệt `Specific action granularity` với các lựa chọn mô tả chuyện khác.
+Model đọc đồng thời system prompt, description của tool và hội thoại. Nếu system prompt có câu như "Luôn luôn gọi `get_customer` trước mọi bước xử lý đơn hàng", model sẽ làm theo câu này **kể cả khi** description của `get_order` ghi rõ "chỉ cần mã đơn". Kết quả: yêu cầu về đơn hàng bị đẩy qua tra cứu khách, trông như lỗi description nhưng thực ra là **xung đột chỉ dẫn**.
 
-### Q04. Để viết acceptance criteria cho tình huống **System says always fetch customer before any order step**, lựa chọn nào thể hiện ranh giới đúng?
+Cách chẩn đoán:
 
-- **A.** Immediately build external keyword classifier; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Add eight few-shot examples first; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Audit and repair conflicting global instructions; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Assume descriptions overrule system prompt automatically; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+1. Đọc toàn bộ system prompt, tìm các từ tuyệt đối: "always", "never", "before any", "for every request".
+2. So với description của các tool bị nhầm: có mâu thuẫn không?
+3. Sửa bằng cách **làm hẹp điều kiện** ("chỉ gọi `get_customer` khi cần xác minh danh tính") hoặc xoá câu thừa, rồi kiểm tra lại.
 
-**Đáp án: C**
+Bài học kiến trúc: system prompt, description và schema là **một hệ thống chỉ dẫn thống nhất**; thay đổi ở một nơi có thể vô hiệu hóa nơi khác. Đừng giả định thứ tự ưu tiên "tự nhiên" nào đó, mà hãy kiểm thử. Đề thi hay dựng tình huống mà mô tả tool đã rõ nhưng hành vi vẫn sai, đáp án nằm ở system prompt có quy tắc quá rộng.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+### Keyword
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Tool description contract**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Overlap diagnosis**, không giải quyết được yêu cầu cốt lõi "Global system wording may override tool disambiguation" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Global system wording may override tool disambiguation. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Assume descriptions overrule system prompt automatically" được nêu ở cơ chế System prompt interference. Không đảm bảo xử lý được case và dễ che mất failure mode.
+- `system prompt` — chỉ dẫn cấp cao cho model, ảnh hưởng toàn bộ hội thoại
+- `instruction conflict` — xung đột giữa các chỉ dẫn (system prompt so với description)
+- `absolute wording` — từ ngữ tuyệt đối (always/never) dễ gây hành vi ngoài ý muốn
+- `prompt audit` — rà soát prompt để tìm chỉ dẫn gây lỗi
+- `scoped instruction` — chỉ dẫn có điều kiện áp dụng rõ ràng
+- `regression test` — kiểm thử lại sau khi sửa để chắc không hỏng chỗ khác
 
-**Exam heuristic:** Nếu đề xuất hiện "System says always fetch customer before any order step", ưu tiên phân biệt `System prompt interference` với các lựa chọn mô tả chuyện khác.
+### Bẫy đề thi
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Immediately build external keyword classifier**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+- ✗ Cho rằng description tool luôn ghi đè system prompt ⇒ ✓ Hai nơi có thể xung đột; phải rà soát và sửa chỉ dẫn toàn cục
+- ✗ Mô tả đã rõ mà vẫn sai thì đổ lỗi cho model ⇒ ✓ Kiểm tra system prompt có quy tắc quá rộng không
+- ✗ Sửa bằng cách thêm nhiều chữ HOA/nhấn mạnh vào description ⇒ ✓ Gỡ xung đột tại nguồn
 
-- **A.** Immediately build external keyword classifier; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Add eight few-shot examples first; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Keep all actions hidden inside vague analyze_document; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Clarify input identifiers and use / do-not-use instructions; kèm kiểm thử lại điều kiện và ghi evidence.
+### Câu hỏi
 
-**Đáp án: D**
+#### Q1. Description của `get_order` rất rõ ràng, nhưng agent vẫn luôn gọi `get_customer` trước khi tra đơn hàng, làm chậm hệ thống. System prompt có câu "Always fetch the customer record before any order operation." Cách xử lý đúng?
+- A. Viết lại description của `get_order` dài hơn
+- B. Thêm few-shot về `get_order`
+- C. Xây router bên ngoài bỏ qua model
+- D. Sửa câu trong system prompt để chỉ áp dụng khi cần xác minh danh tính, rồi kiểm tra lại
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** D
 
-- **A:** **Sai.** Đây chính là bẫy "Immediately build external keyword classifier" được nêu ở cơ chế Tool description contract. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Overlap diagnosis**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Specific action granularity**, không giải quyết được yêu cầu cốt lõi "Describe purpose, inputs, examples, edge cases, and competing-tool boundaries" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Describe purpose, inputs, examples, edge cases, and competing-tool boundaries. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+**Giải thích:** Hành vi bắt nguồn từ chỉ dẫn toàn cục quá rộng. A và B không gỡ xung đột. C là giải pháp nặng không cần thiết.
 
-**Exam heuristic:** Nếu đề xuất hiện "Order query incorrectly routes to customer profile lookup", ưu tiên phân biệt `Tool description contract` với các lựa chọn mô tả chuyện khác.
+#### Q2. Nhận định nào đúng về quan hệ giữa system prompt và description tool?
+- A. Description luôn thắng nên system prompt không thể ảnh hưởng chọn tool
+- B. Cả hai ảnh hưởng quyết định của model và có thể mâu thuẫn, nên cần kiểm tra cùng nhau
+- C. System prompt chỉ ảnh hưởng giọng văn, không ảnh hưởng tool
+- D. Chỉ tool đầu tiên trong danh sách chịu ảnh hưởng của system prompt
 
-### Q06. Sau khi audit phát hiện **Five tools with two nearly identical descriptions**, điều gì là cải tiến có thể kiểm chứng?
+**Đáp án:** B
 
-- **A.** Rewrite the two boundaries before redesign; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Add eight few-shot examples first; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Keep all actions hidden inside vague analyze_document; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Assume descriptions overrule system prompt automatically; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-
-**Đáp án: A**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Đúng.** Weak descriptions cause ambiguity when tool count manageable. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Add eight few-shot examples first" được nêu ở cơ chế Overlap diagnosis. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Specific action granularity**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **System prompt interference**, không giải quyết được yêu cầu cốt lõi "Weak descriptions cause ambiguity when tool count manageable" và thiếu điều kiện kiểm chứng.
-
-**Exam heuristic:** Nếu đề xuất hiện "Five tools with two nearly identical descriptions", ưu tiên phân biệt `Overlap diagnosis` với các lựa chọn mô tả chuyện khác.
-
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Generic analyze_document handles summary, extraction and verification**, nên chọn gì?
-
-- **A.** Immediately build external keyword classifier; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Split into narrow explicit operations; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Keep all actions hidden inside vague analyze_document; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Assume descriptions overrule system prompt automatically; áp dụng trực tiếp dù cơ chế sự cố khác.
-
-**Đáp án: B**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc **Tool description contract**, không giải quyết được yêu cầu cốt lõi "Different intents deserve purpose-specific tools" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Different intents deserve purpose-specific tools. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Keep all actions hidden inside vague analyze_document" được nêu ở cơ chế Specific action granularity. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **System prompt interference**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-
-**Exam heuristic:** Nếu đề xuất hiện "Generic analyze_document handles summary, extraction and verification", ưu tiên phân biệt `Specific action granularity` với các lựa chọn mô tả chuyện khác.
-
-### Q08. Một reviewer nêu giải pháp **Assume descriptions overrule system prompt automatically**. Đánh giá chính xác nhất là gì?
-
-- **A.** Immediately build external keyword classifier; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Add eight few-shot examples first; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Audit and repair conflicting global instructions; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Assume descriptions overrule system prompt automatically; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-
-**Đáp án: C**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Phương án thuộc cơ chế **Tool description contract**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Overlap diagnosis**, không giải quyết được yêu cầu cốt lõi "Global system wording may override tool disambiguation" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Global system wording may override tool disambiguation. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Assume descriptions overrule system prompt automatically" được nêu ở cơ chế System prompt interference. Không đảm bảo xử lý được case và dễ che mất failure mode.
-
-**Exam heuristic:** Nếu đề xuất hiện "System says always fetch customer before any order step", ưu tiên phân biệt `System prompt interference` với các lựa chọn mô tả chuyện khác.
-
-### Q09. Trong thử nghiệm đối chứng với tình huống **Order query incorrectly routes to customer profile lookup**, tiêu chí pass phù hợp là gì?
-
-- **A.** Immediately build external keyword classifier; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Add eight few-shot examples first; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Keep all actions hidden inside vague analyze_document; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Clarify input identifiers and use / do-not-use instructions; kèm kiểm thử lại điều kiện và ghi evidence.
-
-**Đáp án: D**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Sai.** Đây chính là bẫy "Immediately build external keyword classifier" được nêu ở cơ chế Tool description contract. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Overlap diagnosis**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Specific action granularity**, không giải quyết được yêu cầu cốt lõi "Describe purpose, inputs, examples, edge cases, and competing-tool boundaries" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Describe purpose, inputs, examples, edge cases, and competing-tool boundaries. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-
-**Exam heuristic:** Nếu đề xuất hiện "Order query incorrectly routes to customer profile lookup", ưu tiên phân biệt `Tool description contract` với các lựa chọn mô tả chuyện khác.
-
-### Q10. Để giảm lỗi tái diễn với **Five tools with two nearly identical descriptions**, biện pháp nào phù hợp với cơ chế đã học?
-
-- **A.** Rewrite the two boundaries before redesign; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Add eight few-shot examples first; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Keep all actions hidden inside vague analyze_document; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Assume descriptions overrule system prompt automatically; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-
-**Đáp án: A**
-
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
-
-- **A:** **Đúng.** Weak descriptions cause ambiguity when tool count manageable. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Add eight few-shot examples first" được nêu ở cơ chế Overlap diagnosis. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Specific action granularity**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **System prompt interference**, không giải quyết được yêu cầu cốt lõi "Weak descriptions cause ambiguity when tool count manageable" và thiếu điều kiện kiểm chứng.
-
-**Exam heuristic:** Nếu đề xuất hiện "Five tools with two nearly identical descriptions", ưu tiên phân biệt `Overlap diagnosis` với các lựa chọn mô tả chuyện khác.
-
-## 6. Lab / Bài thực hành tự kiểm tra
-
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "Order query incorrectly routes to customer profile lookup".
-
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Clarify input identifiers and use / do-not-use instructions.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
-
-## 7. Cheat sheet / Ôn nhanh
-
-- **Tool description contract:** Describe purpose, inputs, examples, edge cases, and competing-tool boundaries. ✓ Clarify input identifiers and use / do-not-use instructions. ✗ Immediately build external keyword classifier.
-- **Overlap diagnosis:** Weak descriptions cause ambiguity when tool count manageable. ✓ Rewrite the two boundaries before redesign. ✗ Add eight few-shot examples first.
-- **Specific action granularity:** Different intents deserve purpose-specific tools. ✓ Split into narrow explicit operations. ✗ Keep all actions hidden inside vague analyze_document.
-- **System prompt interference:** Global system wording may override tool disambiguation. ✓ Audit and repair conflicting global instructions. ✗ Assume descriptions overrule system prompt automatically.
-
-## 8. Provenance & phạm vi
-
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/2-tool-design-mcp/2-1-tool-schema-design
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Model xử lý cả hai như ngữ cảnh chỉ dẫn; xung đột sẽ gây hành vi khó đoán. A, C, D mô tả cơ chế không có thật.

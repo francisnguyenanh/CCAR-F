@@ -1,326 +1,265 @@
 # 3.5 — Iterative Refinement Techniques
 
-> Domain 3: Claude Code Configuration & Workflows · Tỷ trọng toàn domain: 20%
-> Source lesson: https://claudecertificationguide.com/learn/3-claude-code-config/3-5-iterative-refinement
-> Ngôn ngữ: giải thích tiếng Việt, thuật ngữ và mini-case tiếng Anh.
-> Tài liệu học tập diễn giải độc lập; không phải bản sao nguyên văn và không chứa câu hỏi thi thật.
+## Tổng quan
 
-## 1. Learning outcomes / Mục tiêu
+Lần đầu Claude làm chưa đúng ý là chuyện bình thường. Kỹ năng quan trọng là **cách đưa phản hồi** để vòng lặp hội tụ nhanh: thay vì nói "làm tốt hơn đi" hay "cẩn thận hơn", hãy cho model một **mục tiêu cụ thể và kiểm chứng được**. Bài này gồm bốn kỹ thuật: ví dụ input→output, phản hồi bằng test, để Claude phỏng vấn khi bạn chưa rõ domain, và gom các phản hồi liên quan vào một lượt.
 
-Sau bài này bạn phải phân biệt được các cơ chế cốt lõi của **Iterative Refinement Techniques**, chọn đúng thiết kế trước tình huống thực tế, và giải thích được tại sao các đáp án gây nhiễu sai.
+Quy tắc nhớ nhanh: **mô tả bằng lời mơ hồ → thay bằng ví dụ cụ thể (2 đến 3 cặp before/after); hành vi sai lặp lại → đưa failing test kèm expected/actual; domain lạ, yêu cầu mơ hồ → để Claude hỏi trước khi code; phản hồi phụ thuộc lẫn nhau → đưa chung một lượt, còn độc lập thì có thể xử lý tuần tự.**
 
-## 2. Lý thuyết kỹ thuật từ bài học nguồn
+## K1. Minh hoạ bằng ví dụ input→output
 
-### 2.1. Input-output demonstrations
+### Trọng tâm
 
-**Principle (EN):** Concrete transformations clarify inconsistent prose interpretation.
+Khi mô tả bằng lời bị hiểu không nhất quán, hãy đưa **2 đến 3 cặp ví dụ trước/sau** cụ thể. Ví dụ truyền đạt chính xác điều mà tính từ mơ hồ không làm được.
 
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **concrete transformations clarify inconsistent prose interpretation**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
+### Giải thích
 
-**Case study / Tình huống:** LLM transforms API return types inconsistently.
+Ngôn ngữ tự nhiên có độ mơ hồ cao. Yêu cầu "chuyển kiểu trả về của các hàm API cho hiện đại và gọn hơn" có thể được hiểu thành vài cách khác nhau; mỗi lần chạy model chọn một cách, nên kết quả **không nhất quán** giữa các file. Thêm tính từ ("gọn hơn nữa", "sạch hơn") chỉ khiến mơ hồ hơn.
 
-**Recommended implementation:** Show 2–3 before/after examples.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Add more vague adjectives to prompt.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "LLM transforms API return types inconsistently".
-- Decision: áp dụng nguyên tắc **Input-output demonstrations** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Show 2–3 before/after examples" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.2. Test-driven feedback
-
-**Principle (EN):** Failable tests give precise target behavior.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **failable tests give precise target behavior**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Migration silently replaces null with empty string.
-
-**Recommended implementation:** Give failing test and expected actual outputs.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Ask model to be more careful.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Migration silently replaces null with empty string".
-- Decision: áp dụng nguyên tắc **Test-driven feedback** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Give failing test and expected actual outputs" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.3. Interview unfamiliar domain
-
-**Principle (EN):** Ask clarifying domain questions before implementation.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **ask clarifying domain questions before implementation**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** Developer lacks cache invalidation expertise.
-
-**Recommended implementation:** Have agent interview TTL and consistency requirements.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Start coding with invented requirements.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "Developer lacks cache invalidation expertise".
-- Decision: áp dụng nguyên tắc **Interview unfamiliar domain** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Have agent interview TTL and consistency requirements" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-### 2.4. Batch interacting feedback
-
-**Principle (EN):** Interdependent changes should be reviewed together.
-
-**Giải thích (VI):** Điểm quan trọng là xác định đúng *lớp chịu trách nhiệm* và *ranh giới bảo đảm*. Trong tình huống này, **interdependent changes should be reviewed together**. Vì thế không nên giải quyết bằng cách phỏng đoán hành vi của mô hình hoặc tăng prompt một cách chung chung. Cần thiết kế hợp đồng dữ liệu, điều kiện đầu vào/đầu ra và điểm kiểm tra có thể quan sát được.
-
-**Case study / Tình huống:** New API error field also changes logging and SDK types.
-
-**Recommended implementation:** Provide combined constraints in one review.
-
-**Incorrect shortcut / Sai lầm dễ mắc:** Make isolated edits unaware of dependencies.
-
-**Technical checklist:**
-- Input: xác định nguồn thông tin và điều kiện tiền đề của tình huống "New API error field also changes logging and SDK types".
-- Decision: áp dụng nguyên tắc **Batch interacting feedback** thay vì chỉ dựa vào câu trả lời tự nhiên của model.
-- Output: kiểm tra đã thực hiện được hành động "Provide combined constraints in one review" với evidence hoặc log phù hợp.
-- Failure path: nếu điều kiện chưa đạt, báo trạng thái chưa hoàn thành, không âm thầm coi là thành công.
-
-## 3. Ví dụ thiết kế / Worked engineering example
-
-**Problem:** LLM transforms API return types inconsistently.
-
-**Bad design:** Add more vague adjectives to prompt.
-
-**Better design:** Show 2–3 before/after examples.
-
-**Implementation steps:**
-1. Định nghĩa trước trạng thái đầu vào và dữ liệu tin cậy.
-2. Đặt ranh giới giữa quyết định của LLM và validation/business logic của code.
-3. Ghi rõ action, result, evidence và các nhánh lỗi.
-4. Kiểm thử cả happy path, sai định dạng, thiếu dữ liệu và trường hợp sai quyền.
-
-### Walkthrough: decision trace / Luồng xử lý
+Ví dụ cụ thể thì khác: nó là một **đặc tả chạy được bằng mắt**. Model thấy phép biến đổi và khái quát hoá mẫu đó cho các trường hợp tương tự.
 
 ```text
-INPUT  : LLM transforms API return types inconsistently.
-CHECK  : Xác định nguyên nhân gốc và dữ liệu cần thiết
-DESIGN : Show 2–3 before/after examples.
-VERIFY : Tạo một kiểm thử thể hiện lỗi cũ không còn xảy ra
-RECORD : Lưu quyết định, kết quả và trạng thái còn bất định
+Chuyển kiểu trả về theo mẫu sau.
+
+Trước:
+function getUser(id: string): Promise<User | null>
+Sau:
+function getUser(id: string): Promise<Result<User, NotFoundError>>
+
+Trước:
+function listOrders(): Promise<Order[] | undefined>
+Sau:
+function listOrders(): Promise<Result<Order[], ServiceError>>
+
+Áp dụng cho mọi hàm trong src/api/.
 ```
 
-**Tại sao cách này đúng:** Phương án thiết kế phải tác động vào cơ chế gây lỗi, chứ không chỉ đổi cách model diễn đạt. Hãy viết một acceptance test có thể phân biệt rõ kết quả khi dùng phương án sai và phương án được khuyến nghị.
+Nguyên tắc chọn ví dụ:
 
-## 4. Exam traps / Bẫy dễ nhầm
+- **2 đến 3 ví dụ** thường đủ; chọn các ví dụ **đa dạng** để phủ các trường hợp khác nhau, bao gồm cả ca biên.
+- Ví dụ phải **nhất quán** với nhau, vì ví dụ mâu thuẫn tạo ra kết quả mâu thuẫn.
+- Nêu luôn ca **không** biến đổi nếu có (ví dụ hàm đã đúng kiểu thì giữ nguyên).
+- Đây cũng chính là few-shot prompting (bài 4.2) áp dụng cho phiên làm việc với Claude Code.
 
-1. **Bẫy Input-output demonstrations:** "Add more vague adjectives to prompt" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở input-output demonstrations, rồi chọn "Show 2–3 before/after examples".
+### Keyword
 
-2. **Bẫy Test-driven feedback:** "Ask model to be more careful" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở test-driven feedback, rồi chọn "Give failing test and expected actual outputs".
+- `input-output examples` — cặp ví dụ đầu vào và đầu ra mong muốn
+- `before/after` — ví dụ trước và sau khi biến đổi
+- `few-shot` — đưa vài ví dụ trong prompt để model bắt chước mẫu
+- `inconsistent interpretation` — mỗi lần hiểu một kiểu do mô tả mơ hồ
+- `edge case` — ca biên, trường hợp đặc biệt cần minh hoạ
+- `executable specification` — đặc tả cụ thể đến mức có thể kiểm tra
 
-3. **Bẫy Interview unfamiliar domain:** "Start coding with invented requirements" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở interview unfamiliar domain, rồi chọn "Have agent interview TTL and consistency requirements".
+### Bẫy đề thi
 
-4. **Bẫy Batch interacting feedback:** "Make isolated edits unaware of dependencies" nghe có vẻ nhanh nhưng không xử lý đúng điều kiện của bài. Khi đọc đề, xác định thông tin nào chứng minh nguyên nhân nằm ở batch interacting feedback, rồi chọn "Provide combined constraints in one review".
+- ✗ Thêm nhiều tính từ như "gọn hơn", "hiện đại hơn" vào prompt ⇒ ✓ Đưa 2 đến 3 cặp trước/sau cụ thể
+- ✗ Cho ví dụ chỉ toàn ca dễ giống nhau ⇒ ✓ Chọn ví dụ đa dạng, có cả ca biên
+- ✗ Đưa các ví dụ mâu thuẫn nhau ⇒ ✓ Ví dụ phải nhất quán, vì chúng được coi là đặc tả
 
-## 5. Practice exam — 10 câu tình huống tự biên soạn
+### Câu hỏi
 
-Mỗi câu chọn **một** đáp án tốt nhất. Câu hỏi và giải thích là nội dung luyện tập được soạn mới từ khái niệm bài học, không sao chép câu hỏi trên website.
+#### Q1. Claude chuyển kiểu trả về các hàm API theo cách khác nhau ở từng file dù prompt đã nói "hiện đại và gọn hơn". Cách cải thiện hiệu quả nhất?
+- A. Thêm vào prompt các từ như "rất", "thật sự", "cực kỳ gọn"
+- B. Đưa 2 đến 3 cặp ví dụ trước/sau cụ thể về phép chuyển đổi mong muốn
+- C. Chạy lại cùng prompt nhiều lần và chọn kết quả tốt nhất cho từng file
+- D. Yêu cầu Claude tự quyết định phong cách
 
-### Q01. Nhóm triển khai cần chọn cách khắc phục đáng tin cậy nhất cho sự cố sau: **LLM transforms API return types inconsistently**. Phương án nào phù hợp nhất?
+**Đáp án:** B
 
-- **A.** Ask model to be more careful; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Start coding with invented requirements; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Show 2–3 before/after examples; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Add more vague adjectives to prompt; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+**Giải thích:** Nguyên nhân là mô tả mơ hồ dẫn đến cách hiểu không nhất quán; ví dụ cụ thể làm rõ chính xác phép biến đổi. A chỉ tăng độ nhấn mạnh, không thêm thông tin. C tốn công và vẫn không nhất quán. D chính là điều gây ra vấn đề.
 
-**Đáp án: C**
+#### Q2. Bạn đưa ba ví dụ cho Claude, nhưng hai trong số đó dùng quy ước đặt tên khác nhau. Kết quả trộn lẫn hai kiểu. Điều gì giải thích hiện tượng này?
+- A. Model không thể học từ ví dụ
+- B. Ví dụ được coi như đặc tả nên chỉ dẫn mâu thuẫn tạo ra kết quả mâu thuẫn
+- C. Số lượng ví dụ phải luôn là 10 mới đủ
+- D. Ví dụ chỉ có tác dụng với tên hàm ngắn
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** B
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Test-driven feedback**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Interview unfamiliar domain**, không giải quyết được yêu cầu cốt lõi "Concrete transformations clarify inconsistent prose interpretation" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Concrete transformations clarify inconsistent prose interpretation. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Add more vague adjectives to prompt" được nêu ở cơ chế Input-output demonstrations. Không đảm bảo xử lý được case và dễ che mất failure mode.
+**Giải thích:** Model khái quát từ các mẫu bạn đưa; mẫu mâu thuẫn thì kết quả cũng mâu thuẫn, nên cần làm cho ví dụ nhất quán. A sai vì học từ ví dụ là cơ chế chính. C, D bịa ràng buộc.
 
-**Exam heuristic:** Nếu đề xuất hiện "LLM transforms API return types inconsistently", ưu tiên phân biệt `Input-output demonstrations` với các lựa chọn mô tả chuyện khác.
+## K2. Phản hồi bằng test thất bại (test-driven)
 
-### Q02. Một kỹ sư đề xuất **Ask model to be more careful** cho tình huống: Migration silently replaces null with empty string. Cần phản biện thế nào?
+### Trọng tâm
 
-- **A.** Ask model to be more careful; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Start coding with invented requirements; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Make isolated edits unaware of dependencies; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Give failing test and expected actual outputs; kèm kiểm thử lại điều kiện và ghi evidence.
+Đưa **failing test** kèm kết quả mong đợi và thực tế (expected vs actual) cho Claude, rồi yêu cầu sửa đến khi test pass. Test là mục tiêu cụ thể, kiểm chứng được; "cẩn thận hơn" thì không.
 
-**Đáp án: D**
+### Giải thích
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Phản hồi như "migration của bạn có vẻ thay `null` bằng chuỗi rỗng, hãy cẩn thận hơn" gần như không chứa thông tin hành động. Claude không biết "cẩn thận" nghĩa là gì, và không có cách nào tự xác nhận mình đã đạt.
 
-- **A:** **Sai.** Đây chính là bẫy "Ask model to be more careful" được nêu ở cơ chế Test-driven feedback. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Interview unfamiliar domain**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Batch interacting feedback**, không giải quyết được yêu cầu cốt lõi "Failable tests give precise target behavior" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Failable tests give precise target behavior. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+Failing test thì khác:
 
-**Exam heuristic:** Nếu đề xuất hiện "Migration silently replaces null with empty string", ưu tiên phân biệt `Test-driven feedback` với các lựa chọn mô tả chuyện khác.
+```ts
+test("giữ nguyên null khi migrate trường middleName", () => {
+  const out = migrate({ firstName: "An", middleName: null });
+  expect(out.middleName).toBeNull();      // expected: null
+});                                        // actual:   ""
+```
 
-### Q03. Nếu sự cố **Developer lacks cache invalidation expertise** xảy ra ngay trước khi release, quyết định kỹ thuật nào nên ưu tiên?
+Test này:
 
-- **A.** Have agent interview TTL and consistency requirements; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Start coding with invented requirements; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Make isolated edits unaware of dependencies; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Add more vague adjectives to prompt; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+1. **Chỉ rõ hành vi đúng** (expected) và **hành vi sai hiện tại** (actual).
+2. **Kiểm chứng được**: Claude chạy test, thấy đỏ, sửa, chạy lại đến xanh; không cần bạn phán xét từng vòng.
+3. **Chống hồi quy**: test ở lại trong repo, lỗi này không quay lại.
 
-**Đáp án: A**
+Quy trình đề xuất: viết test mô tả hành vi mong muốn (hoặc tái hiện bug) → xác nhận test đang fail → yêu cầu Claude sửa implementation (không sửa test để cho qua) → chạy toàn bộ test suite để chắc không hỏng chỗ khác. Lưu ý quan trọng: nói rõ **không được sửa test để làm nó pass**, vì model có thể đi đường tắt.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Khi bạn không thể viết test ngay, vẫn nên đưa **input cụ thể, output thực tế, output mong đợi**; đó là dạng "test bằng lời" tốt hơn mọi mô tả trừu tượng.
 
-- **A:** **Đúng.** Ask clarifying domain questions before implementation. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Start coding with invented requirements" được nêu ở cơ chế Interview unfamiliar domain. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Batch interacting feedback**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Input-output demonstrations**, không giải quyết được yêu cầu cốt lõi "Ask clarifying domain questions before implementation" và thiếu điều kiện kiểm chứng.
+### Keyword
 
-**Exam heuristic:** Nếu đề xuất hiện "Developer lacks cache invalidation expertise", ưu tiên phân biệt `Interview unfamiliar domain` với các lựa chọn mô tả chuyện khác.
+- `failing test` — test đang thất bại, mô tả hành vi mong muốn
+- `expected vs actual` — kết quả mong đợi so với kết quả thực tế
+- `test-driven development (TDD)` — viết test trước, rồi viết code cho test pass
+- `regression` — lỗi cũ quay lại sau khi sửa chỗ khác
+- `verifiable feedback` — phản hồi có thể kiểm chứng tự động
+- `green/red` — test pass (xanh) và fail (đỏ)
 
-### Q04. Để viết acceptance criteria cho tình huống **New API error field also changes logging and SDK types**, lựa chọn nào thể hiện ranh giới đúng?
+### Bẫy đề thi
 
-- **A.** Ask model to be more careful; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Provide combined constraints in one review; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Make isolated edits unaware of dependencies; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Add more vague adjectives to prompt; áp dụng trực tiếp dù cơ chế sự cố khác.
+- ✗ Nói "hãy cẩn thận hơn" khi hành vi sai lặp lại ⇒ ✓ Đưa failing test với expected/actual cụ thể
+- ✗ Để Claude sửa test cho khớp code sai ⇒ ✓ Nói rõ sửa implementation, không sửa test
+- ✗ Chỉ chạy đúng test vừa viết, không chạy cả test suite ⇒ ✓ Chạy toàn bộ suite để bắt hồi quy
 
-**Đáp án: B**
+### Câu hỏi
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+#### Q1. Script migration của Claude thay `null` bằng chuỗi rỗng ở một số cột. Bạn đã nhắc "chú ý hơn" hai lần nhưng lỗi vẫn lặp lại. Cách tiếp theo hiệu quả nhất?
+- A. Nhắc lần thứ ba bằng chữ in hoa
+- B. Đổi sang model khác ngay lập tức
+- C. Viết một test thất bại có đầu vào cụ thể, giá trị expected là `null`, actual là `""`, rồi yêu cầu Claude sửa đến khi test pass
+- D. Tự sửa tay toàn bộ và không dùng Claude nữa
 
-- **A:** **Sai.** Phương án thuộc **Test-driven feedback**, không giải quyết được yêu cầu cốt lõi "Interdependent changes should be reviewed together" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Interdependent changes should be reviewed together. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Make isolated edits unaware of dependencies" được nêu ở cơ chế Batch interacting feedback. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Input-output demonstrations**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+**Đáp án:** C
 
-**Exam heuristic:** Nếu đề xuất hiện "New API error field also changes logging and SDK types", ưu tiên phân biệt `Batch interacting feedback` với các lựa chọn mô tả chuyện khác.
+**Giải thích:** Failing test cho model mục tiêu cụ thể và vòng lặp tự kiểm chứng; nó cũng bảo vệ khỏi hồi quy. A chỉ là lời nhắc mơ hồ lặp lại. B không đảm bảo giải quyết nguyên nhân (thiếu đặc tả). D bỏ phí khả năng sửa lặp có kiểm chứng.
 
-### Q05. Nhóm đang sửa lỗi bằng cách **Add more vague adjectives to prompt**. Giải pháp thay thế nào xử lý nguyên nhân gốc?
+#### Q2. Khi dùng test thất bại để dẫn dắt Claude, chỉ dẫn nào quan trọng nhất để tránh đường tắt?
+- A. Cho phép Claude chỉnh test cho đến khi nó pass
+- B. Yêu cầu Claude xoá các test đang fail
+- C. Chỉ yêu cầu chạy duy nhất test vừa thêm
+- D. Yêu cầu sửa implementation, không sửa test, rồi chạy cả test suite để kiểm tra hồi quy
 
-- **A.** Ask model to be more careful; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Start coding with invented requirements; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Show 2–3 before/after examples; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Add more vague adjectives to prompt; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+**Đáp án:** D
 
-**Đáp án: C**
+**Giải thích:** Model có thể "lách" bằng cách làm test dễ hơn hoặc xoá test; cần ràng buộc rõ ràng và kiểm tra toàn suite. A, B tạo đường tắt làm mất ý nghĩa mục tiêu. C bỏ lỡ hồi quy ở nơi khác.
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+## K3. Phỏng vấn để làm rõ domain lạ (interview pattern)
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Test-driven feedback**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Interview unfamiliar domain**, không giải quyết được yêu cầu cốt lõi "Concrete transformations clarify inconsistent prose interpretation" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Concrete transformations clarify inconsistent prose interpretation. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Add more vague adjectives to prompt" được nêu ở cơ chế Input-output demonstrations. Không đảm bảo xử lý được case và dễ che mất failure mode.
+### Trọng tâm
 
-**Exam heuristic:** Nếu đề xuất hiện "LLM transforms API return types inconsistently", ưu tiên phân biệt `Input-output demonstrations` với các lựa chọn mô tả chuyện khác.
+Khi bạn **chưa rành domain** và yêu cầu còn mơ hồ, hãy để Claude **hỏi bạn các câu làm rõ trước khi viết code** thay vì bắt đầu với các giả định tự bịa.
 
-### Q06. Sau khi audit phát hiện **Migration silently replaces null with empty string**, điều gì là cải tiến có thể kiểm chứng?
+### Giải thích
 
-- **A.** Ask model to be more careful; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Start coding with invented requirements; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Make isolated edits unaware of dependencies; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Give failing test and expected actual outputs; kèm kiểm thử lại điều kiện và ghi evidence.
+Có những bài toán mà bạn biết "cần cache" nhưng không biết các quyết định cần đưa ra: thời gian sống (TTL), chiến lược vô hiệu hoá khi dữ liệu đổi, chấp nhận dữ liệu cũ bao lâu, hành vi khi cache chết, nhiều instance chia sẻ cache hay không. Nếu bảo Claude "thêm cache cho API sản phẩm", nó sẽ **chọn thay bạn** một loạt giá trị mặc định; kết quả có thể chạy được nhưng sai yêu cầu thực (hiển thị giá cũ gây thiệt hại).
 
-**Đáp án: D**
+Mẫu phỏng vấn:
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+```text
+Tôi cần thêm cache cho API sản phẩm nhưng chưa rành về cache invalidation.
+Trước khi viết code, hãy phỏng vấn tôi từng câu một về các yêu cầu và đánh đổi
+(độ tươi của dữ liệu, tải, hạ tầng...). Sau khi hỏi xong, tóm tắt yêu cầu để tôi xác nhận.
+```
 
-- **A:** **Sai.** Đây chính là bẫy "Ask model to be more careful" được nêu ở cơ chế Test-driven feedback. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Interview unfamiliar domain**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Batch interacting feedback**, không giải quyết được yêu cầu cốt lõi "Failable tests give precise target behavior" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Failable tests give precise target behavior. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+Lợi ích: (1) phát hiện các yêu cầu bạn chưa nghĩ tới; (2) Claude đóng vai chuyên gia dẫn dắt, bạn đóng vai chủ sản phẩm; (3) có bản yêu cầu xác nhận trước khi tốn công sinh code. Phù hợp để kết hợp với Plan mode: phỏng vấn → tóm tắt yêu cầu → lập kế hoạch → thực thi.
 
-**Exam heuristic:** Nếu đề xuất hiện "Migration silently replaces null with empty string", ưu tiên phân biệt `Test-driven feedback` với các lựa chọn mô tả chuyện khác.
+Khi nào **không** cần: yêu cầu đã đầy đủ, bạn rành domain và biết rõ muốn gì; khi đó phỏng vấn chỉ làm chậm. Cũng đừng để Claude hỏi vô tận: yêu cầu nó hỏi các câu quan trọng nhất và dừng khi đủ thông tin.
 
-### Q07. Nếu chỉ được thay đổi một lớp của hệ thống liên quan đến **Developer lacks cache invalidation expertise**, nên chọn gì?
+### Keyword
 
-- **A.** Have agent interview TTL and consistency requirements; kèm kiểm thử lại điều kiện và ghi evidence.
-- **B.** Start coding with invented requirements; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **C.** Make isolated edits unaware of dependencies; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **D.** Add more vague adjectives to prompt; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
+- `interview pattern` — để Claude hỏi bạn các câu làm rõ trước khi làm
+- `clarifying questions` — câu hỏi làm rõ yêu cầu
+- `invented requirements` — yêu cầu do model tự suy ra, không phải của bạn
+- `TTL (time to live)` — thời gian sống của một mục cache
+- `cache invalidation` — vô hiệu hoá cache khi dữ liệu nguồn thay đổi
+- `requirements confirmation` — tóm tắt yêu cầu để người dùng xác nhận
 
-**Đáp án: A**
+### Bẫy đề thi
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- ✗ Bắt đầu viết code ngay với yêu cầu tự suy ra ở domain lạ ⇒ ✓ Cho Claude phỏng vấn để làm rõ TTL, tính nhất quán... trước
+- ✗ Bắt Claude hỏi vô hạn ⇒ ✓ Giới hạn ở các câu quan trọng và kết thúc bằng bản tóm tắt để xác nhận
+- ✗ Dùng phỏng vấn cho cả tác vụ đã rõ ràng hoàn toàn ⇒ ✓ Chỉ dùng khi domain lạ hoặc yêu cầu mơ hồ
 
-- **A:** **Đúng.** Ask clarifying domain questions before implementation. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **B:** **Sai.** Đây chính là bẫy "Start coding with invented requirements" được nêu ở cơ chế Interview unfamiliar domain. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **C:** **Sai.** Phương án thuộc cơ chế **Batch interacting feedback**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **D:** **Sai.** Phương án thuộc **Input-output demonstrations**, không giải quyết được yêu cầu cốt lõi "Ask clarifying domain questions before implementation" và thiếu điều kiện kiểm chứng.
+### Câu hỏi
 
-**Exam heuristic:** Nếu đề xuất hiện "Developer lacks cache invalidation expertise", ưu tiên phân biệt `Interview unfamiliar domain` với các lựa chọn mô tả chuyện khác.
+#### Q1. Bạn cần thêm cache cho dịch vụ giá sản phẩm nhưng không có kinh nghiệm về invalidation và tính nhất quán dữ liệu. Cách tiếp cận tốt nhất với Claude Code?
+- A. Yêu cầu "thêm cache" và chấp nhận mặc định mà Claude chọn
+- B. Tự đoán các giá trị TTL rồi ghi vào prompt
+- C. Yêu cầu Claude phỏng vấn bạn về TTL, độ tươi dữ liệu, chiến lược invalidation, rồi tóm tắt yêu cầu trước khi viết code
+- D. Hoãn dự án cho đến khi tuyển được chuyên gia
 
-### Q08. Một reviewer nêu giải pháp **Make isolated edits unaware of dependencies**. Đánh giá chính xác nhất là gì?
+**Đáp án:** C
 
-- **A.** Ask model to be more careful; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **B.** Provide combined constraints in one review; kèm kiểm thử lại điều kiện và ghi evidence.
-- **C.** Make isolated edits unaware of dependencies; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **D.** Add more vague adjectives to prompt; áp dụng trực tiếp dù cơ chế sự cố khác.
+**Giải thích:** Interview pattern lộ ra các quyết định bạn chưa biết, tránh giả định sai. A để model quyết định thay bạn những tham số ảnh hưởng nghiệp vụ. B là đoán mò. D không cần thiết khi Claude có thể dẫn dắt làm rõ.
 
-**Đáp án: B**
+#### Q2. Điều nào sau đây là dấu hiệu việc dùng interview pattern KHÔNG cần thiết?
+- A. Bạn mô tả được đầy đủ yêu cầu, ràng buộc và tiêu chí chấp nhận cho một thay đổi nhỏ
+- B. Bạn không biết các lựa chọn thiết kế phổ biến của domain
+- C. Yêu cầu có nhiều điểm mơ hồ chưa được quyết định
+- D. Bạn lo lắng về các hệ quả mà bạn chưa nhìn thấy
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+**Đáp án:** A
 
-- **A:** **Sai.** Phương án thuộc **Test-driven feedback**, không giải quyết được yêu cầu cốt lõi "Interdependent changes should be reviewed together" và thiếu điều kiện kiểm chứng.
-- **B:** **Đúng.** Interdependent changes should be reviewed together. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **C:** **Sai.** Đây chính là bẫy "Make isolated edits unaware of dependencies" được nêu ở cơ chế Batch interacting feedback. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **D:** **Sai.** Phương án thuộc cơ chế **Input-output demonstrations**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
+**Giải thích:** Khi yêu cầu đã rõ và đầy đủ thì phỏng vấn chỉ thêm độ trễ. B, C, D đều là tình huống mơ hồ/lạ domain, đúng chỗ dùng phỏng vấn.
 
-**Exam heuristic:** Nếu đề xuất hiện "New API error field also changes logging and SDK types", ưu tiên phân biệt `Batch interacting feedback` với các lựa chọn mô tả chuyện khác.
+## K4. Gom phản hồi phụ thuộc lẫn nhau vào một lượt
 
-### Q09. Trong thử nghiệm đối chứng với tình huống **LLM transforms API return types inconsistently**, tiêu chí pass phù hợp là gì?
+### Trọng tâm
 
-- **A.** Ask model to be more careful; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **B.** Start coding with invented requirements; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **C.** Show 2–3 before/after examples; kèm kiểm thử lại điều kiện và ghi evidence.
-- **D.** Add more vague adjectives to prompt; kỳ vọng mô hình tự hiểu và sửa vấn đề.
+Khi các thay đổi **tương tác với nhau** (cùng ảnh hưởng một thiết kế), hãy đưa chúng **cùng một lượt** để Claude xử lý đồng thời. Các vấn đề **độc lập** thì có thể xử lý tuần tự từng cái.
 
-**Đáp án: C**
+### Giải thích
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+Hãy xét thay đổi: thêm trường `errorCode` vào phản hồi lỗi API. Điều này còn kéo theo cập nhật logging (ghi `errorCode`), cập nhật kiểu trong SDK client, và có thể cả tài liệu OpenAPI. Nếu bạn yêu cầu từng việc riêng lẻ lần lượt, mỗi lượt Claude tối ưu cục bộ, có thể đặt tên hoặc kiểu khác nhau ở từng chỗ, rồi lượt sau phải sửa lại lượt trước.
 
-- **A:** **Sai.** Phương án thuộc cơ chế **Test-driven feedback**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **B:** **Sai.** Phương án thuộc **Interview unfamiliar domain**, không giải quyết được yêu cầu cốt lõi "Concrete transformations clarify inconsistent prose interpretation" và thiếu điều kiện kiểm chứng.
-- **C:** **Đúng.** Concrete transformations clarify inconsistent prose interpretation. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
-- **D:** **Sai.** Đây chính là bẫy "Add more vague adjectives to prompt" được nêu ở cơ chế Input-output demonstrations. Không đảm bảo xử lý được case và dễ che mất failure mode.
+Cách tốt: đưa toàn bộ ràng buộc liên quan trong một lượt:
 
-**Exam heuristic:** Nếu đề xuất hiện "LLM transforms API return types inconsistently", ưu tiên phân biệt `Input-output demonstrations` với các lựa chọn mô tả chuyện khác.
+```text
+Thêm trường errorCode (enum string) vào phản hồi lỗi API. Đồng thời:
+1) logger phải ghi errorCode,
+2) kiểu ErrorResponse trong SDK phải có errorCode,
+3) cập nhật openapi.yaml.
+Giữ tên và kiểu thống nhất ở cả ba nơi.
+```
 
-### Q10. Để giảm lỗi tái diễn với **Migration silently replaces null with empty string**, biện pháp nào phù hợp với cơ chế đã học?
+Nhờ thấy toàn bộ bức tranh, Claude thiết kế **một** quyết định nhất quán. Ngược lại, với các phản hồi **độc lập** (sửa lỗi chính tả trong README và đổi tên một biến trong module không liên quan) thì xử lý tuần tự vẫn tốt hoặc tốt hơn, vì mỗi lượt tập trung, dễ review, dễ revert.
 
-- **A.** Ask model to be more careful; kỳ vọng mô hình tự hiểu và sửa vấn đề.
-- **B.** Start coding with invented requirements; áp dụng trực tiếp dù cơ chế sự cố khác.
-- **C.** Make isolated edits unaware of dependencies; bỏ qua nguyên nhân gốc vì có vẻ nhanh hơn.
-- **D.** Give failing test and expected actual outputs; kèm kiểm thử lại điều kiện và ghi evidence.
+Heuristic: hỏi "nếu làm riêng từng cái, quyết định ở cái này có thể làm cái kia sai không?" Nếu có, đó là phản hồi **tương tác**, hãy gom. Nếu không, tách ra cho sạch. Khi gom nhiều phản hồi, nên đánh số và nêu rõ ràng buộc chung để dễ kiểm tra từng mục đã được xử lý.
 
-**Đáp án: D**
+### Keyword
 
-**Giải thích từng lựa chọn / Option-by-option reasoning:**
+- `interacting feedback` — các phản hồi phụ thuộc vào nhau, ảnh hưởng chung một thiết kế
+- `independent feedback` — phản hồi độc lập, có thể xử lý riêng
+- `batching` — gom nhiều yêu cầu liên quan vào một lượt
+- `cross-cutting change` — thay đổi cắt ngang nhiều thành phần
+- `consistency constraint` — ràng buộc nhất quán giữa các nơi bị ảnh hưởng
+- `local optimisation` — tối ưu cục bộ ở một chỗ, bỏ qua tác động chỗ khác
 
-- **A:** **Sai.** Đây chính là bẫy "Ask model to be more careful" được nêu ở cơ chế Test-driven feedback. Không đảm bảo xử lý được case và dễ che mất failure mode.
-- **B:** **Sai.** Phương án thuộc cơ chế **Interview unfamiliar domain**. Nó có thể hợp lý trong ngữ cảnh khác nhưng chưa xử lý lỗi của case đang hỏi.
-- **C:** **Sai.** Phương án thuộc **Batch interacting feedback**, không giải quyết được yêu cầu cốt lõi "Failable tests give precise target behavior" và thiếu điều kiện kiểm chứng.
-- **D:** **Đúng.** Failable tests give precise target behavior. Đây là hành động tác động trực tiếp lên nguyên nhân trong case, đồng thời tạo điểm kiểm chứng được.
+### Bẫy đề thi
 
-**Exam heuristic:** Nếu đề xuất hiện "Migration silently replaces null with empty string", ưu tiên phân biệt `Test-driven feedback` với các lựa chọn mô tả chuyện khác.
+- ✗ Sửa từng chỗ riêng lẻ không biết các thay đổi phụ thuộc nhau ⇒ ✓ Gom ràng buộc liên quan vào một lượt
+- ✗ Gom tất cả mọi thứ không liên quan vào một prompt khổng lồ ⇒ ✓ Chỉ gom phản hồi tương tác; việc độc lập xử lý tuần tự
+- ✗ Gom nhưng không nêu ràng buộc nhất quán giữa các nơi ⇒ ✓ Nêu rõ tên, kiểu cần thống nhất
 
-## 6. Lab / Bài thực hành tự kiểm tra
+### Câu hỏi
 
-**Bài tập:** Dựng một mô phỏng nhỏ cho tình huống "LLM transforms API return types inconsistently".
+#### Q1. Thêm trường `errorCode` vào phản hồi lỗi API còn đòi hỏi cập nhật logger, kiểu SDK và tài liệu OpenAPI. Lần trước bạn yêu cầu riêng từng việc và kết quả đặt tên không thống nhất. Cách tốt hơn?
+- A. Tiếp tục yêu cầu từng việc riêng lẻ nhưng nhắc "hãy nhất quán"
+- B. Đưa toàn bộ ba thay đổi cùng ràng buộc tên và kiểu thống nhất trong một lượt
+- C. Chỉ làm API và bỏ qua các phần còn lại
+- D. Giao ba việc cho ba phiên Claude khác nhau hoàn toàn
 
-1. Viết test tái hiện thiết kế sai và lưu log trước khi sửa.
-2. Áp dụng: Show 2–3 before/after examples.
-3. Lập 3 test: thành công, thiếu dữ liệu, lỗi quyền/trạng thái.
-4. Ghi ngắn gọn decision record: tại sao giải pháp sai không phù hợp.
+**Đáp án:** B
 
-## 7. Cheat sheet / Ôn nhanh
+**Giải thích:** Các thay đổi tương tác nên được xem xét cùng nhau để có một quyết định nhất quán. A vẫn thiếu bức tranh tổng thể ở từng lượt. C để hệ thống lệch pha. D còn làm nặng hơn vấn đề thiếu nhất quán vì không phiên nào thấy toàn cảnh.
 
-- **Input-output demonstrations:** Concrete transformations clarify inconsistent prose interpretation. ✓ Show 2–3 before/after examples. ✗ Add more vague adjectives to prompt.
-- **Test-driven feedback:** Failable tests give precise target behavior. ✓ Give failing test and expected actual outputs. ✗ Ask model to be more careful.
-- **Interview unfamiliar domain:** Ask clarifying domain questions before implementation. ✓ Have agent interview TTL and consistency requirements. ✗ Start coding with invented requirements.
-- **Batch interacting feedback:** Interdependent changes should be reviewed together. ✓ Provide combined constraints in one review. ✗ Make isolated edits unaware of dependencies.
+#### Q2. Bạn có ba phản hồi: (1) sửa lỗi chính tả trong README, (2) đổi tên biến trong module billing, (3) thêm test cho module search. Chúng không liên quan nhau. Cách xử lý hợp lý?
+- A. Bắt buộc gom vào một prompt dài để tiết kiệm lượt
+- B. Gom với một yêu cầu thay đổi kiến trúc lớn để Claude thấy toàn cảnh
+- C. Xử lý tuần tự từng việc, mỗi việc review và commit riêng
+- D. Bỏ cả ba vì không quan trọng
 
-## 8. Provenance & phạm vi
+**Đáp án:** C
 
-- **Nguồn bài học:** https://claudecertificationguide.com/learn/3-claude-code-config/3-5-iterative-refinement
-- **Đối chiếu:** Các chủ điểm, ví dụ loại sự cố và exam-trap được đối chiếu với bài học nguồn đã truy cập qua web; toàn bộ phần hỏi đáp 10 câu và cách diễn giải là nội dung mới.
-- **Giới hạn:** Trang ôn thi bên thứ ba có thể đơn giản hóa so với sản phẩm hiện hành; khi triển khai production cần kiểm chứng lại API/hook bằng tài liệu chính thức của Anthropic.
+**Giải thích:** Phản hồi độc lập xử lý tuần tự cho kết quả dễ review và revert. A và B gom không cần thiết, tăng rủi ro lẫn lộn. D bỏ qua công việc hợp lệ.
